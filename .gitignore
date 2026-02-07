@@ -1,0 +1,9 @@
+node_modules
+.wwebjs_auth
+.wwebjs_cache
+logs
+temp
+test_output.txt
+*.log
+.DS_Store
+Thumbs.db

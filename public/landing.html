@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>أوتو إنفايت - منصة دعوات الواتساب الذكية</title>
+    <link rel="stylesheet" href="landing.css">
+    <link rel="icon" href="assets/favicon.ico">
+</head>
+
+<body>
+
+    <!-- Navbar -->
+    <nav>
+        <div class="logo">أوتو<span>إنفايت</span></div>
+        <ul class="nav-links">
+            <li><a href="#process">العملية</a></li>
+            <li><a href="#magic">المميزات</a></li>
+            <li><a href="#specs">المواصفات</a></li>
+        </ul>
+        <a href="/login.html" class="cta-btn filled">دخول / تسجيل</a>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content reveal active">
+            <h1>أرسل آلاف الدعوات بضغطة زر..<br><span>وخَلّك مرتاح.</span></h1>
+            <p>نظام ذكي ينظف أرقامك، يعرّب الأسماء الإنجليزية، ويرسل دعواتك واتساب "شخص لكل شخص" بدون ما يعرّض رقمك
+                للحظر.</p>
+            <div style="display: flex; gap: 20px;">
+                <a href="/login.html" class="cta-btn filled">ابدأ حملتك مجاناً</a>
+                <a href="#process" class="cta-btn">كيف يشتغل؟</a>
+            </div>
+        </div>
+
+        <div class="hero-visual reveal active" id="hero-visual">
+            <div class="card-3d" id="card-3d">
+                <!-- Mockup Content -->
+                <div
+                    style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white;">
+                    <div style="font-size: 5rem;">💌</div>
+                    <h3 style="margin-top: 20px;">دعوة خاصة</h3>
+                    <p style="opacity: 0.8;">للسيد: [الاسم]</p>
+                </div>
+            </div>
+
+            <div class="whatsapp-notification">
+                <div
+                    style="background: #25D366; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                    📱</div>
+                <div style="text-align: right;">
+                    <strong style="display: block; font-size: 0.9rem;">رسالة جديدة</strong>
+                    <span style="font-size: 0.8rem; opacity: 0.8;">وصلتني الدعوة باسمي، شكراً! 😍</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Process Section -->
+    <section id="process" class="process">
+        <h2 class="section-title reveal">كيف نحول "الحوسة" إلى نظام؟</h2>
+
+        <div class="steps-container reveal">
+            <div class="process-step">
+                <span class="step-number">1</span>
+                <h3>ارفع ملفك</h3>
+                <p>إكسيل، CSV، أو حتى نسخ ولصق.</p>
+            </div>
+            <div class="process-step">
+                <span class="step-number">2</span>
+                <h3>الذكاء يضبطها</h3>
+                <p>تنظيف الأرقام وترجمة الأسماء تلقائياً.</p>
+            </div>
+            <div class="process-step">
+                <span class="step-number">3</span>
+                <h3>اعتمد واسترح</h3>
+                <p>جدولة ذكية تحاكي البشر عشان تحميك.</p>
+            </div>
+        </div>
+
+        <div class="video-container reveal">
+            <video src="video_excel.mp4" autoplay loop muted playsinline></video>
+        </div>
+    </section>
+
+    <!-- Magic Section -->
+    <section id="magic" class="magic">
+        <h2 class="section-title reveal" style="text-align: center; display: block;">تفاصيل صغيرة.. تبيّض الوجه.</h2>
+
+        <div class="cards-grid">
+            <div class="magic-card reveal">
+                <div style="font-size: 3rem; margin-bottom: 20px;">📊</div>
+                <h3>تنظيم وتحليل البيانات</h3>
+                <p>نظام ذكي يفلتر التكرار، ويضبط كود السعودية (+966) تلقائياً، ويرتب بياناتك عشان تكون جاهزة للإرسال
+                    فوراً.</p>
+                <span class="hover-reveal">داتا نظيفة 100% ✨</span>
+            </div>
+
+            <div class="magic-card reveal">
+                <div style="font-size: 3rem; margin-bottom: 20px;">🎨</div>
+                <h3>التخصيص الدقيق</h3>
+                <p>ما نرسل صورة عامة! اسم ضيفك بيكون محفور جوا التصميم بدقة بكسل.</p>
+                <span class="hover-reveal">اسمك على البطاقة ✨</span>
+            </div>
+
+            <div class="magic-card reveal">
+                <div style="font-size: 3rem; margin-bottom: 20px;">🛡️</div>
+                <h3>حماية ذكية</h3>
+                <p>نرسل بتأني وفواصل زمنية عشوائية كأنك تكتب بيدك، عشان الواتساب ما يشك.</p>
+                <span class="hover-reveal">محاكاة بشرية 100%</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tech Specs Section -->
+    <section id="specs" class="tech-specs">
+        <canvas id="matrix-canvas"
+            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.1;"></canvas>
+
+        <div class="tech-content reveal">
+            <h2 class="section-title">ذكاء اصطناعي يشتغل لك بالخفاء 🧠</h2>
+            <div class="specs-list">
+                <div class="spec-item">✅ فلتر التكرار الذكي</div>
+                <div class="spec-item">✅ تصحيح الأرقام (+966)</div>
+                <div class="spec-item">✅ تقارير استلام فورية</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-cta reveal">
+            <h2>جاهز تودع الإرسال اليدوي؟</h2>
+            <p>جرب النظام بنفسك، وشوف كيف يوفر 90% من وقتك.</p>
+            <a href="/login.html" class="cta-btn filled" style="font-size: 1.2rem; padding: 15px 40px;">ابدأ التجربة -
+                بدون بطاقة
+                اتمانية</a>
+        </div>
+
+        <div class="footer-links">
+            <a href="#">عن المنصة</a> • <a href="#">الشروط والأحكام</a> • <a href="#">سياسة الخصوصية</a>
+        </div>
+
+        <div class="footer-bottom">
+            <p>© 2026 أوتو إنفايت - صُنع بكل حب في السعودية 🇸🇦</p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        // 1. Reveal on Scroll
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+        // 2. 3D Card Parallax
+        const heroVisual = document.getElementById('hero-visual');
+        const card = document.getElementById('card-3d');
+
+        heroVisual.addEventListener('mousemove', (e) => {
+            const rect = heroVisual.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+
+            const rotateX = ((y - centerY) / centerY) * -10; // Max 10deg
+            const rotateY = ((x - centerX) / centerX) * 10;
+
+            card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+        });
+
+        heroVisual.addEventListener('mouseleave', () => {
+            card.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg)`;
+        });
+
+        // 3. Matrix Rain
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const katakana = '01';
+        const alphabet = katakana;
+        const fontSize = 16;
+        const columns = canvas.width / fontSize;
+
+        const drops = [];
+        for (let x = 0; x < columns; x++) {
+            drops[x] = 1;
+        }
+
+        const draw = () => {
+            ctx.fillStyle = 'rgba(10, 25, 47, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#00FFC2'; // Mint
+            ctx.font = fontSize + 'px monospace';
+
+            for (let i = 0; i < drops.length; i++) {
+                const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
+            }
+        };
+
+        setInterval(draw, 30);
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+
+</html>
