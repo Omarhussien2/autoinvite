@@ -12,11 +12,18 @@ if (config.image.fontPath && fs.existsSync(config.image.fontPath)) {
  * Generates an invitation image for a given name.
  * @param {string} name - The name to write on the invitation.
  * @param {string} phone - The phone number (used for unique filename).
+ * @param {string} customTemplatePath - Optional uploaded template path.
+ * @param {object} customCanvasConfig - Optional canvas coordinates and style.
  * @returns {Promise<string>} - The absolute path of the generated image.
  */
-async function generateImage(name, phone) {
+async function generateImage(name, phone, customTemplatePath = null, customCanvasConfig = null) {
     try {
-        const image = await loadImage(config.image.templatePath);
+        const tPath = customTemplatePath ? path.resolve(__dirname, '../../', customTemplatePath) : config.image.templatePath;
+        const cConfig = customCanvasConfig || config.image.textPosition;
+        const fontSize = customCanvasConfig && customCanvasConfig.fontSize ? customCanvasConfig.fontSize : config.image.fontSize;
+        const textColor = customCanvasConfig && customCanvasConfig.color ? customCanvasConfig.color : config.image.textColor;
+
+        const image = await loadImage(tPath);
         const canvas = createCanvas(image.width, image.height);
         const ctx = canvas.getContext('2d');
 
@@ -24,14 +31,13 @@ async function generateImage(name, phone) {
         ctx.drawImage(image, 0, 0, image.width, image.height);
 
         // Configure Text
-        ctx.font = `${config.image.fontSize} "${config.image.fontFamily}"`;
-        ctx.fillStyle = config.image.textColor;
+        ctx.font = `${fontSize} "${config.image.fontFamily}"`;
+        ctx.fillStyle = textColor;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
         // Write Name
-        // Using config coordinates. If x is center, we align center.
-        ctx.fillText(name, config.image.textPosition.x, config.image.textPosition.y);
+        ctx.fillText(name, cConfig.x, cConfig.y);
 
         // Ensure temp dir exists
         await fs.ensureDir(config.paths.outputDir);

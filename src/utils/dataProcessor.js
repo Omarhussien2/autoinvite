@@ -5,20 +5,26 @@
 
 const SAUDI_PREFIX = '966';
 
+const { translate } = require('google-translate-api-x');
+
 /**
- * Basic English-to-Arabic name transliteration with common name mappings.
+ * Enhanced English-to-Arabic name processing with Google Translate fallback.
  * @param {string} name - The input name (could be English or Arabic).
- * @returns {string} - The transliterated name (Arabic preferred).
+ * @returns {Promise<string>} - The processed Arabic name.
  */
-function transliterateName(name) {
+async function processName(name) {
     if (!name || typeof name !== 'string') return 'ضيف';
 
-    // If already Arabic, return as-is
-    if (/[\u0600-\u06FF]/.test(name)) {
-        return name.trim();
+    const trimmedName = name.trim();
+
+    // If already Arabic (contains Arabic characters), return as-is
+    if (/[\u0600-\u06FF]/.test(trimmedName)) {
+        return trimmedName;
     }
 
-    // Common English -> Arabic name mappings
+    const lowerName = trimmedName.toLowerCase();
+
+    // 1. Fast Lookup: Common Names Map (Instant)
     const nameMap = {
         // Men
         'mohammed': 'محمد', 'mohammad': 'محمد', 'mohamed': 'محمد', 'muhammed': 'محمد',
@@ -43,34 +49,40 @@ function transliterateName(name) {
         'waleed': 'وليد', 'walid': 'وليد',
         'bandar': 'بندر',
         'majid': 'ماجد', 'majed': 'ماجد',
+        'moath': 'معاذ', 'moaath': 'معاذ', // Added based on user feedback
         // Women
         'fatima': 'فاطمة', 'fatimah': 'فاطمة',
         'aisha': 'عائشة', 'aysha': 'عائشة',
         'noura': 'نورة', 'nora': 'نورة',
         'sara': 'سارة', 'sarah': 'سارة',
+        'mona': 'منى',
         'maha': 'مها',
+        'nouf': 'نوف',
+        'hind': 'هند',
+        'laila': 'ليلى',
+        'amal': 'أمل',
         'reem': 'ريم',
-        'haya': 'هيا',
-        'lama': 'لمى',
-        'dana': 'دانة',
-        'asma': 'أسماء',
     };
 
-    // Try to find a match (case-insensitive, first name only)
-    const firstName = name.trim().split(/\s+/)[0].toLowerCase();
-
-    if (nameMap[firstName]) {
-        return nameMap[firstName];
+    if (nameMap[lowerName]) {
+        return nameMap[lowerName];
     }
 
-    // Return original name if no match (will display in English)
-    return name.trim();
+    // 2. Fallback: Google Translate (Async)
+    try {
+        const res = await translate(trimmedName, { to: 'ar' });
+        return res.text; // Return the translated text
+    } catch (error) {
+        console.error(`Translation failed for ${trimmedName}:`, error.message);
+        return trimmedName; // Fallback to original if translation fails
+    }
 }
 
 /**
- * Normalizes phone numbers to the Saudi international format (9665...).
+ * Normalizes phone numbers to international format.
+ * Supports Saudi (966) and Egyptian (20) number formats.
  * @param {string} rawPhone - The input phone string.
- * @returns {string|null} - The normalized phone (e.g., '966501234567') or null if invalid.
+ * @returns {string|null} - The normalized phone (e.g., '966501234567', '201012345678') or null if invalid.
  */
 function normalizePhone(rawPhone) {
     if (!rawPhone) return null;
@@ -78,23 +90,35 @@ function normalizePhone(rawPhone) {
     // 1. Remove non-digit characters (spaces, dashes, pluses)
     let phone = rawPhone.toString().replace(/\D/g, '');
 
-    // 2. Handle Saudi Format
-    // Case A: Starts with '05' (e.g., 0501234567) -> Replace '0' with '966'
+    // 2. Saudi Format (prefix 966)
+    // Case SA-A: 0501234567 (10 digits, starts with 05) -> 966501234567
     if (phone.startsWith('05') && phone.length === 10) {
         return SAUDI_PREFIX + phone.substring(1);
     }
-
-    // Case B: Starts with '5' (e.g., 501234567 - missing zero) -> Add '966'
+    // Case SA-B: 501234567 (9 digits, starts with 5) -> 966501234567
     if (phone.startsWith('5') && phone.length === 9) {
         return SAUDI_PREFIX + phone;
     }
-
-    // Case C: Starts with '966' (e.g., 966501234567) -> Keep as is if length is correct (12 digits)
+    // Case SA-C: 966501234567 (12 digits) -> keep as is
     if (phone.startsWith('966') && phone.length === 12) {
         return phone;
     }
 
-    // Case D: International number (fallback) -> Return as is if it looks valid (10-15 digits)
+    // 3. Egyptian Format (prefix 20)
+    // Case EG-A: 01012345678 (11 digits, starts with 01) -> 201012345678
+    if (phone.startsWith('01') && phone.length === 11) {
+        return '20' + phone.substring(1);
+    }
+    // Case EG-B: 1012345678 (10 digits, starts with 1) -> 201012345678
+    if (phone.startsWith('1') && phone.length === 10 && ['10', '11', '12', '15'].some(p => phone.startsWith(p))) {
+        return '20' + phone;
+    }
+    // Case EG-C: 201012345678 (12 digits, starts with 20) -> keep as is
+    if (phone.startsWith('20') && phone.length === 12) {
+        return phone;
+    }
+
+    // 4. International fallback: already has country code (10–15 digits)
     if (phone.length >= 10 && phone.length <= 15) {
         return phone;
     }
@@ -143,4 +167,4 @@ function processContacts(contacts) {
     return result;
 }
 
-module.exports = { normalizePhone, processContacts, transliterateName };
+module.exports = { normalizePhone, processContacts, processName };

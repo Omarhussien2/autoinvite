@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل الدخول - أوتو إنفايت</title>
+    <meta name="description" content="سجّل دخولك إلى منصة أوتو إنفايت للدعوات الذكية عبر الواتساب">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { green: '#00C853', dark: '#0A3D2E', light: '#E8FAF0' }
+                    },
+                    fontFamily: { sans: ['"IBM Plex Sans Arabic"', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'IBM Plex Sans Arabic', sans-serif;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #00C853;
+            box-shadow: 0 0 0 3px rgba(0, 200, 83, 0.1);
+        }
+
+        .btn-primary {
+            background: #0A3D2E;
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+            background: #1B5E20;
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        /* Subtle background decoration */
+        .bg-decoration {
+            background: radial-gradient(ellipse at 70% 20%, rgba(0, 200, 83, 0.06) 0%, transparent 60%), radial-gradient(ellipse at 20% 80%, rgba(0, 200, 83, 0.04) 0%, transparent 50%);
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 bg-decoration min-h-screen flex items-center justify-center px-4">
+
+    <div class="w-full max-w-sm">
+
+        <!-- Logo -->
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center gap-2 mb-6">
+                <div class="w-10 h-10 bg-brand-dark rounded-xl flex items-center justify-center shadow-md">
+                    <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z" />
+                    </svg>
+                </div>
+                <div>
+                    <span class="font-bold text-gray-900 text-xl">أوتو</span><span
+                        class="font-bold text-brand-green text-xl">إنفايت</span>
+                </div>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-900 mb-1">تسجيل الدخول</h1>
+            <p class="text-sm text-gray-500">
+                ليس لديك حساب؟
+                <a href="/register" class="text-brand-green font-medium hover:underline">أنشئ حساباً هنا</a>
+            </p>
+        </div>
+
+        <!-- Card -->
+        <div class="bg-white rounded-2xl border border-gray-200 p-7 shadow-sm">
+            <form id="login-form" class="space-y-4">
+
+                <!-- Username -->
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700 mb-1.5">اسم المستخدم</label>
+                    <input type="text" id="username" name="username" required placeholder="username"
+                        class="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-900 bg-gray-50 transition placeholder:text-gray-400 dir-ltr text-right">
+                </div>
+
+                <!-- Password -->
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-1.5">كلمة المرور</label>
+                    <div class="relative">
+                        <input type="password" id="password" name="password" required placeholder="••••••••"
+                            class="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-900 bg-gray-50 transition placeholder:text-gray-400">
+                        <button type="button" id="toggle-password"
+                            class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                            <svg id="eye-icon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Remember + Forgot -->
+                <div class="flex items-center justify-between text-sm">
+                    <label class="flex items-center gap-2 text-gray-600 cursor-pointer">
+                        <input type="checkbox" id="remember" name="remember"
+                            class="w-4 h-4 rounded border-gray-300 text-brand-green accent-brand-green">
+                        <span>تذكرني</span>
+                    </label>
+                    <a href="#" class="text-gray-500 hover:text-brand-green transition">نسيت كلمة المرور؟</a>
+                </div>
+
+                <!-- Error message -->
+                <div id="error-msg"
+                    class="hidden bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 flex items-center gap-2">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                            clip-rule="evenodd" />
+                    </svg>
+                    <span id="error-text"></span>
+                </div>
+
+                <!-- Submit -->
+                <button type="submit" id="submit-btn"
+                    class="btn-primary w-full py-3.5 rounded-xl text-white font-semibold text-sm shadow-sm mt-1">
+                    <span id="btn-text">تسجيل الدخول</span>
+                    <span id="btn-loading" class="hidden">جاري الدخول...</span>
+                </button>
+
+            </form>
+        </div>
+
+        <!-- Footer note -->
+        <p class="text-center text-xs text-gray-400 mt-6">
+            © 2026 أوتو إنفايت — صُنع بكل حب في السعودية 🇸🇦
+        </p>
+    </div>
+
+    <script>
+        // Toggle password visibility
+        document.getElementById('toggle-password').addEventListener('click', function () {
+            const pwd = document.getElementById('password');
+            pwd.type = pwd.type === 'password' ? 'text' : 'password';
+        });
+
+        // Login form submission
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const errorEl = document.getElementById('error-msg');
+            const errorText = document.getElementById('error-text');
+            const btnText = document.getElementById('btn-text');
+            const btnLoading = document.getElementById('btn-loading');
+            const submitBtn = document.getElementById('submit-btn');
+
+            // UI: loading state
+            errorEl.classList.add('hidden');
+            btnText.classList.add('hidden');
+            btnLoading.classList.remove('hidden');
+            submitBtn.disabled = true;
+
+            try {
+                const res = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    window.location.href = data.redirect || '/dashboard';
+                } else {
+                    errorText.textContent = 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+                    errorEl.classList.remove('hidden');
+                }
+            } catch (err) {
+                errorText.textContent = 'حدث خطأ في الاتصال، تحقق من الإنترنت.';
+                errorEl.classList.remove('hidden');
+            } finally {
+                btnText.classList.remove('hidden');
+                btnLoading.classList.add('hidden');
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>

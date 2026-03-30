@@ -1,11 +1,11 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
-const db = require('../database/db');
+const db = require('../database/pg-client');
 
 const router = express.Router();
 
 // Login Endpoint
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
@@ -13,25 +13,57 @@ router.post('/login', (req, res) => {
     }
 
     try {
-        const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+        const result = await db.query('SELECT * FROM tenants WHERE username = $1', [username]);
+        const tenant = result.rows[0];
 
-        if (!user) {
-            return res.status(401).json({ success: false, message: 'Invalid credentials' });
+        if (!tenant) {
+            return res.status(401).json({ success: false, message: 'بيانات الدخول غير صحيحة' });
         }
 
-        const match = bcrypt.compareSync(password, user.password_hash);
+        const match = await bcrypt.compare(password, tenant.password_hash);
 
         if (match) {
-            req.session.userId = user.id;
-            req.session.username = user.username;
-            req.session.role = user.role;
+            req.session.tenantId = tenant.id;
+            req.session.tenantName = tenant.name;
             return res.json({ success: true, redirect: '/dashboard' });
         } else {
-            return res.status(401).json({ success: false, message: 'Invalid credentials' });
+            return res.status(401).json({ success: false, message: 'بيانات الدخول غير صحيحة' });
         }
     } catch (err) {
         console.error('Login Error:', err);
-        res.status(500).json({ success: false, message: 'Server error' });
+        res.status(500).json({ success: false, message: 'خطأ في السيرفر' });
+    }
+});
+
+// Register Endpoint (for new Tenants)
+router.post('/register', async (req, res) => {
+    const { name, username, password } = req.body;
+
+    if (!name || !username || !password) {
+        return res.status(400).json({ success: false, message: 'جميع الحقول مطلوبة' });
+    }
+
+    try {
+        // Check if username exists
+        const exists = await db.query('SELECT id FROM tenants WHERE username = $1', [username]);
+        if (exists.rows.length > 0) {
+            return res.status(400).json({ success: false, message: 'اسم المستخدم مسجل مسبقاً' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const result = await db.query(
+            'INSERT INTO tenants (name, username, password_hash, settings) VALUES ($1, $2, $3, $4) RETURNING id, name',
+            [name, username, hashedPassword, JSON.stringify({ min_delay: 20, max_delay: 60, safe_mode: true })]
+        );
+
+        const newTenant = result.rows[0];
+        req.session.tenantId = newTenant.id;
+        req.session.tenantName = newTenant.name;
+
+        res.json({ success: true, redirect: '/dashboard' });
+    } catch (err) {
+        console.error('Register Error:', err);
+        res.status(500).json({ success: false, message: 'فشل إنشاء الحساب' });
     }
 });
 
@@ -42,14 +74,14 @@ router.post('/logout', (req, res) => {
             return res.status(500).json({ success: false, message: 'Could not log out' });
         }
         res.clearCookie('connect.sid');
-        res.json({ success: true, redirect: '/login.html' });
+        res.json({ success: true, redirect: '/login' });
     });
 });
 
 // Check Session
 router.get('/me', (req, res) => {
-    if (req.session.userId) {
-        res.json({ loggedIn: true, username: req.session.username });
+    if (req.session.tenantId) {
+        res.json({ loggedIn: true, name: req.session.tenantName });
     } else {
         res.json({ loggedIn: false });
     }

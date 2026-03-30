@@ -1,0 +1,121 @@
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+    <div class="flex items-center justify-between mb-8 pb-4 border-b border-gray-50 flex-wrap gap-4">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900">تقارير الإرسال المفصلة</h2>
+            <p class="text-xs text-gray-400 mt-0.5">سجل تاريخي لكل رسالة تم إرسالها عبر المنصة</p>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <div class="bg-brand-light/30 px-4 py-2 rounded-xl border border-brand-green/10 text-center">
+                <p class="text-[10px] text-gray-400 font-medium">إجمالي الإرسال</p>
+                <p class="text-lg font-bold text-brand-dark">
+                    <%= logs.length %>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Toolbar -->
+    <div class="flex flex-wrap items-center gap-3 mb-8">
+        <div class="relative min-w-[240px]">
+            <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none"
+                stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input type="text" id="report-search" placeholder="بحث بالاسم أو الرقم..."
+                class="w-full pr-10 pl-4 py-2.5 text-xs border border-gray-200 rounded-xl focus:border-brand-green outline-none bg-gray-50">
+        </div>
+
+        <select id="campaign-filter"
+            class="bg-gray-50 border border-gray-200 text-gray-500 text-xs rounded-xl px-4 py-2.5 outline-none focus:border-brand-green">
+            <option value="all">كل الحملات</option>
+            <% const campaignNames=[...new Set(logs.map(l=> l.campaign_name))]; %>
+                <% campaignNames.forEach(name=> { if(name) { %>
+                    <option value="<%= name %>">
+                        <%= name %>
+                    </option>
+                    <% } }); %>
+        </select>
+
+        <button onclick="window.print()"
+            class="mr-auto inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-4 py-2.5 rounded-xl text-xs font-medium hover:bg-gray-50 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                    d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2-2v4a2 2 0 002 2z" />
+            </svg>
+            طباعة التقرير
+        </button>
+    </div>
+
+    <% if (logs && logs.length> 0) { %>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-gray-50 bg-gray-50/50">
+                        <th class="text-right px-5 py-3.5 font-medium text-gray-500 text-xs">الوقت</th>
+                        <th class="text-right px-5 py-3.5 font-medium text-gray-500 text-xs">الحملة</th>
+                        <th class="text-right px-5 py-3.5 font-medium text-gray-500 text-xs">المستلم</th>
+                        <th class="text-right px-5 py-3.5 font-medium text-gray-500 text-xs">الرقم</th>
+                        <th class="text-right px-5 py-3.5 font-medium text-gray-500 text-xs">الحالة</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50" id="reports-tbody">
+                    <% logs.forEach(function(l) { %>
+                        <tr class="hover:bg-gray-50/50 transition report-row"
+                            data-name="<%= l.name ? l.name.toLowerCase() : '' %>" data-phone="<%= l.phone %>"
+                            data-camp="<%= l.campaign_name %>">
+                            <td class="px-5 py-4 text-gray-400 text-xs">
+                                <%= new Date(l.sent_at).toLocaleString('ar-SA') %>
+                            </td>
+                            <td class="px-5 py-4 text-gray-800 font-medium text-xs">
+                                <%= l.campaign_name || 'حملة محذوفة' %>
+                            </td>
+                            <td class="px-5 py-4 text-gray-700 text-sm">
+                                <%= l.name || 'بدون اسم' %>
+                            </td>
+                            <td class="px-5 py-4 text-gray-500 text-xs dir-ltr text-right">
+                                <%= l.phone %>
+                            </td>
+                            <td class="px-5 py-4">
+                                <span
+                                    class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">نجاح
+                                    ✓</span>
+                            </td>
+                        </tr>
+                        <% }); %>
+                </tbody>
+            </table>
+        </div>
+        <% } else { %>
+            <div class="py-24 text-center">
+                <div class="w-16 h-16 mx-auto mb-4 text-gray-200">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                </div>
+                <p class="text-gray-500 font-medium">لا توجد سجلات إرسال حالياً</p>
+                <p class="text-gray-400 text-xs mt-1">بمجرد بدئك لأي حملة، ستظهر التقارير التفصيلية هنا.</p>
+            </div>
+            <% } %>
+</div>
+
+<script>
+    const reportSearch = document.getElementById('report-search');
+    const campaignFilter = document.getElementById('campaign-filter');
+    const reportRows = document.querySelectorAll('.report-row');
+
+    function filterReports() {
+        const query = reportSearch.value.toLowerCase();
+        const camp = campaignFilter.value;
+
+        reportRows.forEach(row => {
+            const textMatch = row.dataset.name.includes(query) || row.dataset.phone.includes(query);
+            const campMatch = camp === 'all' || row.dataset.camp === camp;
+            row.style.display = (textMatch && campMatch) ? '' : 'none';
+        });
+    }
+
+    reportSearch.addEventListener('input', filterReports);
+    campaignFilter.addEventListener('change', filterReports);
+</script>

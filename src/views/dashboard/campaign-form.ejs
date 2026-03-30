@@ -1,0 +1,145 @@
+<div class="max-w-6xl mx-auto">
+    <form id="campaign-form" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Right Col: Settings (7 cols) -->
+        <div class="lg:col-span-7 space-y-6">
+
+            <!-- Basic Info -->
+            <div class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+                <h3 class="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <span
+                        class="w-6 h-6 bg-brand-light rounded flex items-center justify-center text-brand-dark">1</span>
+                    تفاصيل الحملة الأساسية
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1.5">اسم المناسبة / الحملة</label>
+                        <input type="text" id="campName" required value="<%= campaign ? campaign.name : '' %>"
+                            placeholder="مثلاً: دعوة زواج فهد 1447"
+                            class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green focus:ring-2 focus:ring-brand-green/10 transition">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1.5">صورة الدعوة (القالب)</label>
+                            <div class="relative group">
+                                <input type="file" id="imgUpload" accept="image/*"
+                                    class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                                <div
+                                    class="w-full px-4 py-2.5 rounded-xl border border-dashed border-gray-300 text-xs text-center text-gray-500 group-hover:border-brand-green transition">
+                                    <%= campaign ? 'تغيير الصورة 🖼️' : 'اضغط لرفع الصورة 🖼️' %>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1.5">ملف الأرقام
+                                (Excel/CSV)</label>
+                            <div class="relative group">
+                                <input type="file" id="contactsUpload" accept=".csv, .xlsx, .xls" <%=campaign ? ''
+                                    : 'required' %> class="absolute inset-0 w-full h-full opacity-0 cursor-pointer
+                                z-10">
+                                <div
+                                    class="w-full px-4 py-2.5 rounded-xl border border-dashed border-gray-300 text-xs text-center text-gray-500 group-hover:border-brand-green transition text-ellipsis overflow-hidden whitespace-nowrap">
+                                    <%= campaign ? 'تحديث ملف الأرقام 📊' : 'ارفع ملف الأسماء 📊' %>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-gray-400">💡 تأكد إن ملف الأرقام يحتوي على عمود "Name" وعمود "Phone".</p>
+                </div>
+            </div>
+
+            <!-- Messages Variations -->
+            <div class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+                <h3 class="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <span
+                        class="w-6 h-6 bg-brand-light rounded flex items-center justify-center text-brand-dark">2</span>
+                    نصوص الرسائل (Spintax)
+                </h3>
+                <p class="text-xs text-brand-green mb-4">💡 استخدم <code>[الاسم]</code> ليتم استبداله باسم الضيف
+                    تلقائياً.</p>
+
+                <div id="messages-list" class="space-y-4">
+                    <% let msgs=[{ text: '' , weight: '3' }]; if (campaign && campaign.message_templates) { try {
+                        msgs=JSON.parse(campaign.message_templates); } catch(e) {} } %>
+                        <% msgs.forEach(function(m, i) { %>
+                            <div
+                                class="message-box relative group bg-gray-50/50 p-4 rounded-xl border border-gray-100 hover:border-brand-green transition">
+                                <div class="flex items-center justify-between mb-2">
+                                    <select
+                                        class="msg-weight text-[10px] bg-white border border-gray-200 rounded px-2 py-1 outline-none">
+                                        <option value="3" <%=m.weight=='3' ? 'selected' : '' %>>🌟 عالي (50%)</option>
+                                        <option value="2" <%=m.weight=='2' ? 'selected' : '' %>>⚖️ متوسط (30%)</option>
+                                        <option value="1" <%=m.weight=='1' ? 'selected' : '' %>>🔽 منخفض (20%)</option>
+                                    </select>
+                                    <button type="button"
+                                        class="remove-msg text-gray-300 hover:text-red-500 transition">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <textarea name="message[]" rows="2" placeholder="حياك الله يا [الاسم]..."
+                                    class="w-full bg-transparent border-none text-sm focus:ring-0 resize-none outline-none"><%= m.text %></textarea>
+                            </div>
+                            <% }) %>
+                </div>
+
+                <button type="button" id="addMsgBtn"
+                    class="w-full mt-4 py-2 border border-dashed border-gray-200 rounded-xl text-xs text-gray-400 hover:text-brand-green hover:border-brand-green transition">
+                    + إضافة تنويع جديد
+                </button>
+            </div>
+
+            <!-- Action Footer -->
+            <div class="flex items-center justify-between pt-4">
+                <button type="button" onclick="window.history.back()"
+                    class="text-gray-400 text-sm hover:text-gray-600">إلغاء</button>
+                <button type="submit" id="save-btn"
+                    class="bg-brand-dark text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:opacity-90 transition">
+                    <%= campaign ? 'حفظ التعديلات' : 'إنشاء الحملة 🚀' %>
+                </button>
+            </div>
+        </div>
+
+        <!-- Left Col: Editor (5 cols) -->
+        <div class="lg:col-span-5 space-y-6">
+            <div class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm sticky top-24">
+                <h3 class="text-sm font-semibold text-gray-800 mb-4">المصمم الذكي 🎨</h3>
+                <p class="text-[11px] text-gray-400 mb-4 text-center">ارفع الصورة ثم اسحب "الاسم" للمكان المناسب</p>
+
+                <div id="canvas-container"
+                    class="aspect-[4/5] bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center overflow-hidden relative">
+                    <p id="placeholder-text" class="text-xs text-gray-300">في انتظار رفع الصورة...</p>
+                    <canvas id="previewCanvas" class="max-w-full max-h-full cursor-move shadow-md hidden"></canvas>
+                </div>
+
+                <!-- Canvas Controls -->
+                <div class="grid grid-cols-2 gap-4 mt-4">
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-500 mb-1">حجم الخط</label>
+                        <% let cfgFontSize=60; let cfgFontColor='#000000' ; if (campaign && campaign.canvas_config) {
+                            try { const cc=JSON.parse(campaign.canvas_config); cfgFontSize=cc.fontSize || 60;
+                            cfgFontColor=cc.color || '#000000' ; } catch(e) {} } %>
+                            <input type="number" id="fontSize" value="<%= cfgFontSize %>"
+                                class="w-full px-3 py-1.5 rounded-lg border border-gray-200 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-500 mb-1">اللون</label>
+                        <input type="color" id="fontColor" value="<%= cfgFontColor %>"
+                            class="w-full h-8 p-0 rounded-lg border border-gray-200 cursor-pointer overflow-hidden">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </form>
+</div>
+
+<script src="/js/campaign-editor.js"></script>
+<script>
+    window.CAMPAIGN_DATA = <% - campaign ? JSON.stringify(campaign) : 'null' %>;
+    document.addEventListener('DOMContentLoaded', function () {
+        initCampaignEditor();
+    });
+</script>

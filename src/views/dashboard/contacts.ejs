@@ -1,0 +1,109 @@
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900">سجل جهات الاتصال</h2>
+            <p class="text-xs text-gray-400 mt-0.5">كل جهات الاتصال التي قمت برفعها ضمن حملاتك</p>
+        </div>
+        <div class="flex gap-2">
+            <!-- Future: Export Button -->
+            <button
+                class="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl text-xs font-medium hover:bg-gray-200 transition">تصدير
+                Excel</button>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex items-center gap-4 mb-6">
+        <div class="relative flex-1">
+            <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none"
+                stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input type="text" id="contact-search" placeholder="ابحث بالاسم أو الرقم"
+                class="w-full pr-10 pl-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/10 bg-gray-50">
+        </div>
+        <select id="status-filter"
+            class="bg-gray-50 border border-gray-200 text-gray-500 text-xs rounded-xl px-4 py-2.5 outline-none focus:border-brand-green">
+            <option value="all">كل الحالات</option>
+            <option value="pending">قيد الانتظار</option>
+            <option value="sent">تم الإرسال</option>
+            <option value="failed">فشل الإرسال</option>
+        </select>
+    </div>
+
+    <% if (contacts && contacts.length> 0) { %>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-gray-50 bg-gray-50/50">
+                        <th class="text-right px-5 py-3.5 font-medium text-gray-500 text-xs">الاسم</th>
+                        <th class="text-right px-5 py-3.5 font-medium text-gray-500 text-xs">رقم الهاتف</th>
+                        <th class="text-right px-5 py-3.5 font-medium text-gray-500 text-xs">الحملة</th>
+                        <th class="text-right px-5 py-3.5 font-medium text-gray-500 text-xs">الحالة</th>
+                        <th class="text-right px-5 py-3.5 font-medium text-gray-500 text-xs">تاريخ الإرسال</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50" id="contacts-tbody">
+                    <% contacts.forEach(function(c) { %>
+                        <tr class="hover:bg-gray-50/50 transition contact-row" data-name="<%= c.name.toLowerCase() %>"
+                            data-phone="<%= c.phone %>" data-status="<%= c.status %>">
+                            <td class="px-5 py-4 font-medium text-gray-800">
+                                <%= c.name || '—' %>
+                            </td>
+                            <td class="px-5 py-4 text-gray-500 dir-ltr text-right">
+                                <%= c.phone %>
+                            </td>
+                            <td class="px-5 py-4 text-gray-400 text-xs">
+                                <%= c.campaign_name || '—' %>
+                            </td>
+                            <td class="px-5 py-4">
+                                <% const st={ pending: 'bg-gray-100 text-gray-600' , sent: 'bg-green-100 text-green-700'
+                                    , failed: 'bg-red-100 text-red-700' }; %>
+                                    <% const labels={ pending: 'قيد الانتظار' , sent: 'تم الإرسال' , failed: 'فشل' }; %>
+                                        <span
+                                            class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold <%= st[c.status] || st.pending %>">
+                                            <%= labels[c.status] || c.status %>
+                                        </span>
+                            </td>
+                            <td class="px-5 py-4 text-gray-400 text-xs">
+                                <%= c.sent_at ? new Date(c.sent_at).toLocaleString('ar-SA') : '—' %>
+                            </td>
+                        </tr>
+                        <% }); %>
+                </tbody>
+            </table>
+        </div>
+        <% } else { %>
+            <div class="py-20 text-center">
+                <div class="w-16 h-16 mx-auto mb-4 text-gray-200">
+                    <svg fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+                        <path
+                            d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                </div>
+                <p class="text-gray-600 font-medium mb-1">لا توجد جهات اتصال</p>
+                <p class="text-gray-400 text-sm">سيتم عرض جهات الاتصال هنا بمجرد رفع ملفات الأسماء في حملاتك.</p>
+            </div>
+            <% } %>
+</div>
+
+<script>
+    // Logic for filter & search
+    const searchInput = document.getElementById('contact-search');
+    const statusFilter = document.getElementById('status-filter');
+    const rows = document.querySelectorAll('.contact-row');
+
+    function filterContacts() {
+        const query = searchInput.value.toLowerCase();
+        const status = statusFilter.value;
+
+        rows.forEach(row => {
+            const nameMatch = row.dataset.name.includes(query) || row.dataset.phone.includes(query);
+            const statusMatch = status === 'all' || row.dataset.status === status;
+            row.style.display = (nameMatch && statusMatch) ? '' : 'none';
+        });
+    }
+
+    searchInput.addEventListener('input', filterContacts);
+    statusFilter.addEventListener('change', filterContacts);
+</script>

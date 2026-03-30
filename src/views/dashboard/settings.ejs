@@ -1,0 +1,122 @@
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 mb-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+            <svg class="w-5 h-5 text-brand-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            إعدادات الحساب والأمان
+        </h2>
+
+        <form id="settings-form" class="space-y-8">
+
+            <!-- General Settings -->
+            <section>
+                <h3 class="text-sm font-semibold text-gray-800 mb-4 border-b border-gray-50 pb-2">الملف الشخصي</h3>
+                <div class="grid grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1.5">اسم العميل / المؤسسة</label>
+                        <input type="text" name="name" value="<%= tenant.name %>"
+                            class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1.5">اسم المستخدم (لا يمكن
+                            تغييره)</label>
+                        <input type="text" value="<%= tenant.username %>" readonly
+                            class="w-full px-4 py-2.5 rounded-xl border border-gray-100 bg-gray-50 text-gray-400 text-sm outline-none cursor-not-allowed">
+                    </div>
+                </div>
+            </section>
+
+            <!-- WhatsApp Safety Settings -->
+            <section>
+                <h3 class="text-sm font-semibold text-gray-800 mb-4 border-b border-gray-50 pb-2">إعدادات أمان الواتساب
+                    (Anti-Ban)</h3>
+                <p class="text-xs text-brand-green font-medium mb-4">هذه الإعدادات تساعد في حماية رقمك من الحظر البرمجي.
+                </p>
+
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-[11px] font-medium text-gray-500 mb-1.5">أدنى تأخير بين الرسائل
+                                (بالثواني)</label>
+                            <input type="number" name="min_delay" value="<%= tenant.settings.min_delay || 20 %>" min="5"
+                                class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-medium text-gray-500 mb-1.5">أقصى تأخير بين الرسائل
+                                (بالثواني)</label>
+                            <input type="number" name="max_delay" value="<%= tenant.settings.max_delay || 60 %>"
+                                min="10"
+                                class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green outline-none">
+                        </div>
+                    </div>
+
+                    <div
+                        class="flex items-center justify-between p-4 bg-brand-light/20 rounded-xl border border-brand-green/10">
+                        <div>
+                            <p class="text-sm font-bold text-brand-dark mb-0.5">الوضع الآمن (Safe Mode)</p>
+                            <p class="text-[10px] text-gray-500">يقوم بإيقاف الإرسال مؤقتاً عند ملاحظة أي علامات خطر من
+                                واتساب.</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="safe_mode" class="sr-only peer" <%=tenant.settings.safe_mode
+                                ? 'checked' : '' %>>
+                            <div
+                                class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-green">
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            <div class="pt-6 border-t border-gray-100 flex justify-end">
+                <button type="submit" id="save-settings-btn"
+                    class="bg-brand-dark text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:opacity-90 transition">
+                    حفظ كل التغييرات
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    const settingsForm = document.getElementById('settings-form');
+    settingsForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('save-settings-btn');
+        const originalText = btn.textContent;
+        btn.textContent = 'جاري الحفظ...';
+        btn.disabled = true;
+
+        const formData = new FormData(settingsForm);
+        const data = {
+            name: formData.get('name'),
+            settings: {
+                min_delay: parseInt(formData.get('min_delay')),
+                max_delay: parseInt(formData.get('max_delay')),
+                safe_mode: formData.get('safe_mode') === 'on'
+            }
+        };
+
+        try {
+            const res = await fetch('/api/tenant/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.success) {
+                alert('تم حفظ الإعدادات بنجاح! ✨');
+            } else {
+                alert('حدث خطأ: ' + result.message);
+            }
+        } catch (e) {
+            alert('فشل الاتصال بالسيرفر.');
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    });
+</script>

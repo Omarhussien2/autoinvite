@@ -1,0 +1,303 @@
+<div>
+
+    <!-- Welcome Header -->
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900">مرحباً بعودتك، <span class="text-brand-green">
+                    <%= tenantName %>
+                </span> 👋</h2>
+            <p class="text-sm text-gray-400 mt-0.5">إليك ملخص نشاطك اليوم</p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+            <a href="/contacts"
+                class="inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-600 text-xs px-3 py-2 rounded-xl font-medium hover:border-brand-green hover:text-brand-green transition shadow-sm">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                إضافة جهة اتصال
+            </a>
+            <a href="/campaigns/new"
+                class="inline-flex items-center gap-1.5 bg-brand-dark text-white text-xs px-3 py-2 rounded-xl font-medium hover:opacity-90 transition shadow-sm">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                إنشاء حملة
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards Grid -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+
+        <!-- Contacts -->
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition group">
+            <div class="flex items-start justify-between mb-3">
+                <div
+                    class="w-10 h-10 bg-brand-light rounded-xl flex items-center justify-center group-hover:scale-105 transition">
+                    <svg class="w-5 h-5 text-brand-dark" fill="none" stroke="currentColor" stroke-width="2"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </div>
+            </div>
+            <p class="text-3xl font-bold text-gray-900" id="stat-contacts">
+                <%= stats.contacts %>
+            </p>
+            <p class="text-sm text-gray-500 mt-1 mb-2">جهات الاتصال</p>
+            <a href="/contacts" class="text-xs text-brand-green font-medium hover:underline flex items-center gap-1">عرض
+                جهات الاتصال</a>
+        </div>
+
+        <!-- Campaigns -->
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition group">
+            <div class="flex items-start justify-between mb-3">
+                <div
+                    class="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center group-hover:scale-105 transition">
+                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" stroke-width="2"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                    </svg>
+                </div>
+            </div>
+            <p class="text-3xl font-bold text-gray-900" id="stat-campaigns">
+                <%= stats.campaigns %>
+            </p>
+            <p class="text-sm text-gray-500 mt-1 mb-2">الحملات</p>
+            <a href="/campaigns"
+                class="text-xs text-brand-green font-medium hover:underline flex items-center gap-1">عرض الحملات</a>
+        </div>
+
+        <!-- Messages Sent -->
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition group">
+            <div class="flex items-start justify-between mb-3">
+                <div
+                    class="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center group-hover:scale-105 transition">
+                    <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" stroke-width="2"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                </div>
+            </div>
+            <p class="text-3xl font-bold text-gray-900" id="stat-sent">
+                <%= stats.messagesSent %>
+            </p>
+            <p class="text-sm text-gray-500 mt-1 mb-2">الرسائل المُرسلة</p>
+            <a href="/reports" class="text-xs text-brand-green font-medium hover:underline flex items-center gap-1">عرض
+                التقارير</a>
+        </div>
+
+        <!-- Active Campaigns -->
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition group">
+            <div class="flex items-start justify-between mb-3">
+                <div
+                    class="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center group-hover:scale-105 transition">
+                    <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+            </div>
+            <p class="text-3xl font-bold text-gray-900" id="stat-active">
+                <%= stats.activeCampaigns %>
+            </p>
+            <p class="text-sm text-gray-500 mt-1 mb-2">حملات نشطة</p>
+            <a href="/campaigns"
+                class="text-xs text-brand-green font-medium hover:underline flex items-center gap-1">عرض الكل</a>
+        </div>
+
+    </div>
+
+    <!-- Main Content: Chart + WhatsApp Card -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+
+        <!-- Activity Chart (col-span-2) -->
+        <div class="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold text-gray-800 text-sm">نشاط الرسائل (آخر 7 أيام)</h3>
+                <div class="flex items-center gap-3 text-xs text-gray-500">
+                    <span class="flex items-center gap-1"><span
+                            class="w-2.5 h-2.5 rounded-full bg-brand-green inline-block"></span>الرسائل الصادرة</span>
+                </div>
+            </div>
+            <canvas id="activityChart" height="120"></canvas>
+        </div>
+
+        <!-- WhatsApp Setup Card (col-span-1) -->
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex flex-col">
+            <h3 class="font-semibold text-gray-800 text-sm mb-4">اتصال الواتساب</h3>
+
+            <!-- QR State -->
+            <div id="qr-section" class="hidden flex-1 flex flex-col items-center justify-center text-center">
+                <p class="text-xs text-gray-500 mb-3">امسح الباركود بتطبيق الواتساب</p>
+                <img id="qr-image" src="" alt="QR Code"
+                    class="w-44 h-44 rounded-xl border-2 border-gray-100 p-1 bg-white mx-auto shadow-sm">
+                <p class="text-xs text-gray-400 mt-2">افتح الواتساب > الأجهزة المتصلة > اربط جهازاً</p>
+            </div>
+
+            <!-- Not Connected State -->
+            <div id="disconnected-section" class="flex-1 flex flex-col items-center justify-center text-center gap-3">
+                <div class="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center">
+                    <svg class="w-7 h-7 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z" />
+                    </svg>
+                </div>
+                <p class="text-sm font-medium text-gray-700">إعداد الواتساب</p>
+                <p class="text-xs text-gray-400">قم بربط واتساب لبدء إرسال الحملات.</p>
+                <button onclick="initWhatsapp()"
+                    class="inline-flex items-center gap-1.5 bg-brand-dark text-white text-xs px-4 py-2.5 rounded-xl font-medium hover:opacity-90 transition w-full justify-center">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z" />
+                    </svg>
+                    ربط الواتساب
+                </button>
+            </div>
+
+            <!-- Connected State -->
+            <div id="connected-section"
+                class="hidden flex-1 flex flex-col items-center justify-center text-center gap-3">
+                <div class="w-14 h-14 bg-brand-light rounded-2xl flex items-center justify-center status-pulse">
+                    <svg class="w-7 h-7 text-brand-dark" fill="currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z" />
+                    </svg>
+                </div>
+                <p class="text-sm font-semibold text-brand-dark">الواتساب متصل ✓</p>
+                <p id="connected-phone" class="text-xs text-gray-500">جاهز للإرسال</p>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Recent Campaigns -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm">
+        <div class="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-50">
+            <h3 class="font-semibold text-gray-800 text-sm">آخر الحملات</h3>
+            <a href="/campaigns" class="text-xs text-brand-green font-medium hover:underline">عرض الكل →</a>
+        </div>
+
+        <% if (campaigns && campaigns.length> 0) { %>
+            <div class="divide-y divide-gray-50">
+                <% campaigns.slice(0,5).forEach(function(c) { %>
+                    <div class="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition">
+                        <div class="flex items-center gap-3">
+                            <div
+                                class="w-8 h-8 rounded-lg bg-brand-light flex items-center justify-center flex-shrink-0">
+                                <svg class="w-4 h-4 text-brand-dark" fill="none" stroke="currentColor" stroke-width="2"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium text-gray-800">
+                                    <%= c.name %>
+                                </p>
+                                <p class="text-xs text-gray-400">
+                                    <%= new Date(c.created_at).toLocaleDateString('ar-SA') %>
+                                </p>
+                            </div>
+                        </div>
+                        <% const statusColors={ active: 'bg-green-50 text-green-700' ,
+                            completed: 'bg-blue-50 text-blue-700' , paused: 'bg-amber-50 text-amber-700' ,
+                            failed: 'bg-red-50 text-red-700' }; %>
+                            <% const statusLabels={ active: 'نشطة' , completed: 'مكتملة' , paused: 'متوقفة' ,
+                                failed: 'فشلت' }; %>
+                                <span
+                                    class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium <%= statusColors[c.status] || 'bg-gray-100 text-gray-600' %>">
+                                    <%= statusLabels[c.status] || 'مسودة' %>
+                                </span>
+                    </div>
+                    <% }); %>
+            </div>
+            <% } else { %>
+                <!-- Empty state -->
+                <div class="py-14 text-center">
+                    <div class="w-14 h-14 mx-auto mb-3 text-gray-200">
+                        <svg fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                    </div>
+                    <p class="text-gray-500 text-sm font-medium mb-1">لا توجد حملات حالياً</p>
+                    <p class="text-gray-400 text-xs mb-4">أنشئ حملتك الأولى وابدأ إرسال الدعوات</p>
+                    <a href="/campaigns/new"
+                        class="inline-flex items-center gap-1.5 bg-brand-dark text-white text-xs px-4 py-2.5 rounded-xl font-medium hover:opacity-90 transition">إنشاء
+                        حملة</a>
+                </div>
+                <% } %>
+    </div>
+
+</div>
+
+<script>
+    // ---- Chart.js Activity ----
+    (function () {
+        const labels = <% - JSON.stringify(chartLabels || []) %>;
+        const data = <% - JSON.stringify(chartData || []) %>;
+        const ctx = document.getElementById('activityChart');
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets: [{ label: 'الرسائل الصادرة', data, borderColor: '#00C853', backgroundColor: 'rgba(0,200,83,0.08)', borderWidth: 2, pointBackgroundColor: '#00C853', pointRadius: 3, tension: 0.4, fill: true }] },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { font: { family: 'IBM Plex Sans Arabic', size: 11 }, color: '#9CA3AF' } }, y: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { family: 'IBM Plex Sans Arabic', size: 11 }, color: '#9CA3AF', stepSize: 1 }, beginAtZero: true } } }
+        });
+    })();
+
+    // ---- Socket.IO for WhatsApp status ----
+    const socket = io();
+
+    function setWaStatus(state) {
+        const badge = document.getElementById('wa-status-badge');
+        const dot = document.getElementById('wa-status-dot');
+        const statusText = document.getElementById('wa-status-text');
+        if (state === 'connected') {
+            dot.className = 'w-2 h-2 rounded-full bg-brand-green status-pulse';
+            statusText.textContent = 'متصل';
+            badge.className = 'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border bg-brand-light border-brand-green text-brand-dark';
+            document.getElementById('disconnected-section').classList.add('hidden');
+            document.getElementById('connected-section').classList.remove('hidden');
+            document.getElementById('qr-section').classList.add('hidden');
+        } else if (state === 'qr') {
+            dot.className = 'w-2 h-2 rounded-full bg-amber-400';
+            statusText.textContent = 'في انتظار الربط';
+            badge.className = 'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border bg-amber-50 border-amber-200 text-amber-700';
+            document.getElementById('disconnected-section').classList.add('hidden');
+            document.getElementById('connected-section').classList.add('hidden');
+            document.getElementById('qr-section').classList.remove('hidden');
+        } else {
+            dot.className = 'w-2 h-2 rounded-full bg-gray-300';
+            statusText.textContent = 'غير متصل';
+            badge.className = 'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border bg-gray-50 border-gray-200 text-gray-500';
+            document.getElementById('disconnected-section').classList.remove('hidden');
+            document.getElementById('connected-section').classList.add('hidden');
+            document.getElementById('qr-section').classList.add('hidden');
+        }
+    }
+
+    socket.on('qr', (url) => { document.getElementById('qr-image').src = url; setWaStatus('qr'); });
+    socket.on('ready', (data) => { setWaStatus('connected'); if (data && data.phone) document.getElementById('connected-phone').textContent = data.phone; });
+    socket.on('disconnected', () => setWaStatus('disconnected'));
+
+    async function initWhatsapp() {
+        try { await fetch('/api/whatsapp/init', { method: 'POST' }); } catch (e) { console.error(e); }
+    }
+
+    // ---- DASHBOARD POLLING ----
+    setInterval(async () => {
+        try {
+            const res = await fetch('/api/tenant/stats');
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('stat-contacts').textContent = data.stats.contacts;
+                document.getElementById('stat-campaigns').textContent = data.stats.campaigns;
+                document.getElementById('stat-sent').textContent = data.stats.messagesSent;
+                document.getElementById('stat-active').textContent = data.stats.activeCampaigns;
+            }
+        } catch (e) { console.error('Dashboard poll failed', e); }
+    }, 30000); // 30s
+</script>

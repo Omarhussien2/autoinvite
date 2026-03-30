@@ -1,204 +1,300 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
 const QRCode = require('qrcode');
 const session = require('express-session');
-const { client, loadContacts, processBatch } = require('./core');
+const db = require('./database/pg-client');
+const { WhatsAppManager, loadContacts, processBatch } = require('./core');
 const authRoutes = require('./routes/auth');
 const campaignRoutes = require('./routes/campaigns');
 const { isAuthenticated } = require('./middleware/auth');
+const { i18next, middleware: i18nMiddleware } = require('./config/i18n');
+const ejsLayout = require('./middleware/ejsLayout');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-const PORT = process.env.PORT || 5000;
+// --- VIEW ENGINE SETUP (EJS) ---
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
+WhatsAppManager.setIo(io);
+WhatsAppManager.startSleepMonitor(15 * 60 * 1000); // 15 mins idle sleep
+
+const PORT = process.env.PORT || 5000; // C-06: Default to 5000 for Replit
 
 // Body Parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Session Setup
-app.use(session({
-    secret: 'autoinvite-v2-secret-key',
+// --- i18next MIDDLEWARE ---
+app.use(i18nMiddleware.handle(i18next));
+
+// Session Setup — H-01: secret from env var, never hardcoded
+const sessionMiddleware = session({
+    secret: process.env.SESSION_SECRET || 'autoinvite-change-me-in-production',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: false,
-        maxAge: 24 * 60 * 60 * 1000
+        secure: process.env.NODE_ENV === 'production', // true on HTTPS VPS
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     }
-}));
+});
+app.use(sessionMiddleware);
+io.engine.use(sessionMiddleware);
 
-// Auth Routes
+// --- EJS LAYOUT MIDDLEWARE ---
+app.use(ejsLayout);
+
+// --- API ROUTES ---
 app.use('/auth', authRoutes);
 app.use('/api/campaigns', campaignRoutes);
+app.use('/api/whatsapp', require('./routes/whatsapp.api.js'));
 
-// State tracking
-let currentState = 'INITIALIZING';
-let lastQr = null;
+// Tenant Settings API
+app.put('/api/tenant/settings', isAuthenticated, async (req, res) => {
+    try {
+        const { name, settings } = req.body;
 
-// --- ROUTES ---
+        // Basic Validation
+        if (!name || typeof name !== 'string' || name.length < 3) {
+            return res.status(400).json({ success: false, message: 'Invalid name' });
+        }
+        if (!settings || typeof settings !== 'object') {
+            return res.status(400).json({ success: false, message: 'Settings must be an object' });
+        }
+
+        await db.query('UPDATE tenants SET name = $1, settings = $2 WHERE id = $3', [name, JSON.stringify(settings), req.session.tenantId]);
+        req.session.tenantName = name; // Update session
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// Tenant General Stats API
+app.get('/api/tenant/stats', isAuthenticated, async (req, res) => {
+    try {
+        const tenantId = req.session.tenantId;
+        const contactsCount = await db.query('SELECT COUNT(*) FROM contacts WHERE tenant_id = $1', [tenantId]);
+        const campaignResult = await db.query('SELECT * FROM campaigns WHERE tenant_id = $1', [tenantId]);
+        const sentResult = await db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1', [tenantId]);
+
+        res.json({
+            success: true,
+            stats: {
+                contacts: parseInt(contactsCount.rows[0].count || 0),
+                campaigns: campaignResult.rows.length,
+                messagesSent: parseInt(sentResult.rows[0].count || 0),
+                activeCampaigns: campaignResult.rows.filter(c => c.status === 'active' || c.status === 'running').length
+            }
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// Prevent Chrome/Puppeteer crashes from killing the entire server
+process.on('unhandledRejection', (reason) => {
+    console.error('⚠️ Unhandled Rejection (server stays alive):', reason?.message || reason);
+});
+
+// --- UI ROUTES (DYNAMIC EJS) ---
 
 // 1. Landing Page (Public)
 app.get('/', (req, res) => {
+    // For now, still serving static landing but could be EJS
     res.sendFile(path.join(__dirname, '../public/landing.html'));
 });
 
-// 2. Public Assets (CSS, Scripts for Landing)
-app.use('/landing.css', express.static(path.join(__dirname, '../public/landing.css')));
-app.use('/login.html', express.static(path.join(__dirname, '../public/login.html')));
-app.use('/style.css', express.static(path.join(__dirname, '../public/style.css')));
-
-// 3. Protected Dashboard
-app.get('/dashboard', isAuthenticated, (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/index.html'));
+// 2. Login Page (Public EJS)
+app.get('/login', (req, res) => {
+    if (req.session.tenantId) return res.redirect('/dashboard');
+    res.render('auth/login');
 });
 
-// 4. Protected Static Assets
-app.use(isAuthenticated);
-app.use(express.static(path.join(__dirname, '../public')));
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// 3. Protected Dashboard Overview
+app.get('/dashboard', isAuthenticated, async (req, res) => {
+    try {
+        const tenantId = req.session.tenantId;
 
-// Client Events
-client.on('qr', (qr) => {
-    currentState = 'QUERY_QR';
-    lastQr = qr;
-    QRCode.toDataURL(qr, (err, url) => {
-        if (!err) {
-            io.emit('qr', url);
-            io.emit('status', 'يا هلا! امسح الباركود عشان نربط الواتساب');
-        }
-    });
-});
+        // Fetch stats for the dashboard
+        let contactsTotal = 0;
+        try {
+            const contactsCount = await db.query('SELECT COUNT(*) FROM contacts WHERE tenant_id = $1', [tenantId]);
+            contactsTotal = contactsCount.rows[0].count;
+        } catch (e) { /* contacts table may not exist yet */ }
+        const campaignResult = await db.query('SELECT * FROM campaigns WHERE tenant_id = $1 ORDER BY created_at DESC', [tenantId]);
+        const campaigns = campaignResult.rows;
 
-client.on('ready', () => {
-    currentState = 'READY';
-    lastQr = null;
-    const phone = client.info ? client.info.wid.user : 'Unknown';
-    io.emit('ready', { phone }); // Send phone number
-    io.emit('status', `الواتساب جاهز ومتصل بالرقم (966${phone.substring(3)})`); // Show partial number for confirmation
-    console.log('Client is ready!');
-});
+        // Fetch Delivered Count from sent_logs
+        const sentResult = await db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1', [tenantId]);
 
-client.on('authenticated', () => {
-    io.emit('status', 'تم التوثيق بنجاح! جاري التحميل...');
-    // We don't have client.info yet usually, so wait for ready
-});
+        const stats = {
+            contacts: contactsTotal,
+            campaigns: campaigns.length,
+            messagesSent: sentResult.rows[0].count,
+            activeCampaigns: campaigns.filter(c => c.status === 'active' || c.status === 'running').length
+        };
 
-try {
-    client.initialize();
-} catch (e) {
-    console.log('Client initialization check: ', e.message);
-}
-
-io.on('connection', (socket) => {
-    console.log('New client connected');
-
-    if (currentState === 'QUERY_QR' && lastQr) {
-        QRCode.toDataURL(lastQr, (err, url) => {
-            if (!err) socket.emit('qr', url);
+        res.renderPage('dashboard/index', {
+            pageTitle: 'لوحة التحكم',
+            activePage: 'dashboard',
+            useSocket: true,
+            tenantName: req.session.tenantName || 'العميل',
+            stats,
+            campaigns,
+            chartLabels: ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'],
+            chartData: [0, 0, 0, 0, 0, 0, 0],
+            trialActive: true
         });
-        socket.emit('status', 'يا هلا! امسح الباركود عشان نربط الواتساب');
-    } else if (currentState === 'READY') {
-        const phone = client.info ? client.info.wid.user : '';
-        socket.emit('ready', { phone });
-        socket.emit('status', 'الواتساب جاهز ومتصل. اختر الحملة وابدأ!');
-    } else if (currentState === 'WORKING') {
-        socket.emit('ready');
-        socket.emit('status', 'الجهاز شغال يرسل الحين... ⏳');
-        socket.emit('working_state', true);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Internal Server Error');
+    }
+});
+
+// 4. Campaigns List View
+app.get('/campaigns', isAuthenticated, async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM campaigns WHERE tenant_id = $1 ORDER BY created_at DESC', [req.session.tenantId]);
+        res.renderPage('dashboard/campaigns', {
+            pageTitle: 'الحملات',
+            pageSubtitle: 'إضافة وإدارة حملات الواتساب',
+            activePage: 'campaigns',
+            campaigns: result.rows,
+            tenantName: req.session.tenantName,
+            quota: { limit: 5000, delivered: 0, remaining: 5000, progressPct: 0 }
+        });
+    } catch (err) {
+        res.status(500).send('Error loading campaigns');
+    }
+});
+
+// 5. Contacts Management View
+app.get('/contacts', isAuthenticated, async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT c.*, camp.name as campaign_name 
+            FROM contacts c 
+            LEFT JOIN campaigns camp ON c.campaign_id = camp.id 
+            WHERE c.tenant_id = $1 
+            ORDER BY c.created_at DESC
+        `, [req.session.tenantId]);
+
+        res.renderPage('dashboard/contacts', {
+            pageTitle: 'جهات الاتصال',
+            pageSubtitle: 'إدارة جميع جهات الاتصال المرفوعة',
+            activePage: 'contacts',
+            contacts: result.rows,
+            tenantName: req.session.tenantName
+        });
+    } catch (err) {
+        res.status(500).send('Error loading contacts');
+    }
+});
+
+// 6. Settings View
+app.get('/settings', isAuthenticated, async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM tenants WHERE id = $1', [req.session.tenantId]);
+        const tenant = result.rows[0];
+        if (!tenant.settings) tenant.settings = {};
+
+        res.renderPage('dashboard/settings', {
+            pageTitle: 'الإعدادات',
+            pageSubtitle: 'إدارة حسابك وإعدادات الإرسال',
+            activePage: 'settings',
+            tenant,
+            tenantName: req.session.tenantName
+        });
+    } catch (err) {
+        res.status(500).send('Error loading settings');
+    }
+});
+
+// 7. Reports & History View
+app.get('/reports', isAuthenticated, async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT sl.*, c.name as campaign_name 
+            FROM sent_logs sl
+            LEFT JOIN campaigns c ON sl.campaign_id = c.id
+            WHERE sl.tenant_id = $1
+            ORDER BY sl.sent_at DESC
+        `, [req.session.tenantId]);
+
+        res.renderPage('dashboard/reports', {
+            pageTitle: 'التقارير',
+            pageSubtitle: 'تاريخ الإرسال المفصل',
+            activePage: 'reports',
+            logs: result.rows,
+            tenantName: req.session.tenantName
+        });
+    } catch (err) {
+        res.status(500).send('Error loading reports');
+    }
+});
+
+// 8. Registration Page (Public)
+app.get('/register', (req, res) => {
+    if (req.session.tenantId) return res.redirect('/dashboard');
+    res.render('auth/register');
+});
+
+// 8. Create/Edit Campaign View
+app.get('/campaigns/new', isAuthenticated, (req, res) => {
+    res.renderPage('dashboard/campaign-form', { pageTitle: 'حملة جديدة', activePage: 'campaigns', breadcrumb: { href: '/campaigns' }, campaign: null, tenantName: req.session.tenantName });
+});
+
+app.get('/campaigns/:id/edit', isAuthenticated, async (req, res) => {
+    const result = await db.query('SELECT * FROM campaigns WHERE id = $1 AND tenant_id = $2', [req.params.id, req.session.tenantId]);
+    if (result.rows.length === 0) return res.status(404).send('Campaign not found');
+    res.renderPage('dashboard/campaign-form', { pageTitle: 'تعديل الحملة', activePage: 'campaigns', breadcrumb: { href: '/campaigns' }, campaign: result.rows[0], tenantName: req.session.tenantName });
+});
+
+// 9. Campaign Run/Monitor View
+app.get('/campaigns/:id/run', isAuthenticated, async (req, res) => {
+    const result = await db.query('SELECT * FROM campaigns WHERE id = $1 AND tenant_id = $2', [req.params.id, req.session.tenantId]);
+    if (result.rows.length === 0) return res.status(404).send('Campaign not found');
+    res.renderPage('dashboard/run-campaign', { pageTitle: 'تنفيذ الحملة', pageSubtitle: 'متابعة الإرسال مباشرة', activePage: 'campaigns', breadcrumb: { href: '/campaigns' }, useSocket: true, campaign: result.rows[0], tenantName: req.session.tenantName });
+});
+
+// --- ASSETS & STATIC ---
+app.use(express.static(path.join(__dirname, '../public')));
+app.use('/uploads', isAuthenticated, (req, res, next) => {
+    const tenantUploads = path.join(__dirname, `../storage/tenant_${req.session.tenantId}/uploads`);
+    express.static(tenantUploads)(req, res, next);
+});
+
+// --- SOCKET.IO HANDLER ---
+io.on('connection', async (socket) => {
+    const req = socket.request;
+    if (!req.session || !req.session.tenantId) {
+        socket.disconnect();
+        return;
     }
 
-    // Stop flag
-    socket.on('stop_batch', () => {
-        global.stopBatchRequested = true;
-        io.emit('log', { msg: '⏹️ تم طلب الإيقاف...', type: 'WARN' });
-    });
+    const tenantId = req.session.tenantId;
+    const tenantRoom = `tenant_${tenantId}`;
+    socket.join(tenantRoom);
 
-    socket.on('start_batch', async ({ startRow, endRow, campaignId }) => {
-        if (currentState === 'WORKING') return;
-        global.stopBatchRequested = false; // Reset stop flag
+    console.log(`📡 Socket connected: Tenant ${tenantId}`);
 
-        try {
-            socket.emit('log', { msg: 'Loading contacts...', type: 'INFO' });
-            const contacts = await loadContacts();
-            socket.emit('log', { msg: `Loaded ${contacts.length} contacts.`, type: 'INFO' });
+    // WhatsApp logic remains the same (QR, Ready, Status)
+    try { await WhatsAppManager.getClient(tenantId); } catch (e) { }
 
-            const start = parseInt(startRow) || 1;
-            const end = parseInt(endRow) || contacts.length;
-
-            if (start < 1 || end > contacts.length || start > end) {
-                socket.emit('log', { msg: 'Invalid Row Range', type: 'ERROR' });
-                return;
-            }
-
-            currentState = 'WORKING';
-            io.emit('working_state', true);
-
-            // Load messages: from campaign if selected, else from config
-            let messages;
-            if (campaignId) {
-                const db = require('./database/db');
-                const campaign = db.prepare('SELECT message_templates FROM campaigns WHERE id = ?').get(campaignId);
-                if (campaign && campaign.message_templates) {
-                    messages = JSON.parse(campaign.message_templates);
-                    socket.emit('log', { msg: `تم تحميل رسائل الحملة #${campaignId}`, type: 'INFO' });
-                }
-            }
-
-            if (!messages || !Array.isArray(messages) || messages.length === 0) {
-                const config = require('./config/settings');
-                messages = config.messages;
-                socket.emit('log', { msg: 'استخدام الرسائل الافتراضية', type: 'INFO' });
-            }
-
-            await processBatch(contacts, start, end, messages, campaignId, (msg, type) => {
-                io.emit('log', { msg, type });
-            });
-
-            // Update campaign progress if selected
-            if (campaignId) {
-                const db = require('./database/db');
-                db.prepare('UPDATE campaigns SET last_sent_row = ? WHERE id = ?').run(end, campaignId);
-                socket.emit('log', { msg: `تم حفظ التقدم: الصف ${end}`, type: 'INFO' });
-            }
-
-            currentState = 'READY';
-            io.emit('working_state', false);
-            io.emit('log', { msg: 'Batch processing finished.', type: 'DONE' });
-
-        } catch (error) {
-            currentState = 'READY';
-            io.emit('working_state', false);
-            socket.emit('log', { msg: `Error: ${error.message}`, type: 'ERROR' });
-            console.error(error);
-        }
-    });
-
-    // Handle Quick Test
-    socket.on('send_test', async ({ phone }) => {
-        try {
-            // Basic formatting for test: Remove non-digits
-            let targetPhone = phone.replace(/\D/g, '');
-            // If starts with 01 (Egyptian Local), replace with 201
-            if (targetPhone.startsWith('01')) {
-                const egyptianLocal = targetPhone.substring(1); // 1152806034
-                targetPhone = '20' + targetPhone.substring(1);
-            }
-
-            const chatId = `${targetPhone}@c.us`;
-            socket.emit('log', { msg: `Sending test to ${targetPhone}...`, type: 'INFO' });
-
-            await client.sendMessage(chatId, 'تجربة أوتو إنفايت: هلا والله! النظام شغال 🚀');
-
-            socket.emit('log', { msg: `Test sent to ${targetPhone} ✅`, type: 'DONE' });
-        } catch (err) {
-            socket.emit('log', { msg: `Test Failed: ${err.message} ❌`, type: 'ERROR' });
-        }
-    });
+    const state = WhatsAppManager.getTenantState(tenantId);
+    if (state.status === 'QUERY_QR' && state.lastQr) {
+        QRCode.toDataURL(state.lastQr, (err, url) => { if (!err) socket.emit('qr', url); });
+    } else if (state.status === 'READY') {
+        socket.emit('ready', { phone: state.phone });
+    }
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log(`🚀 SaaS Platform running on http://localhost:${PORT}`);
 });

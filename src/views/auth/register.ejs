@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>التسجيل في AutoInvite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        body {
+            font-family: 'IBM Plex Sans Arabic', sans-serif;
+            background: #fafafa;
+        }
+
+        .brand-green {
+            color: #00C853;
+        }
+
+        .bg-brand-dark {
+            background-color: #075E54;
+        }
+
+        .focus-ring:focus {
+            border-color: #00C853;
+            box-shadow: 0 0 0 4px rgba(0, 200, 83, 0.1);
+        }
+    </style>
+</head>
+
+<body class="min-h-screen flex items-center justify-center p-6 sm:p-12">
+    <div class="max-w-md w-full">
+        <div class="text-center mb-10">
+            <div
+                class="w-16 h-16 bg-brand-dark text-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+            </div>
+            <h1 class="text-3xl font-bold text-gray-900 tracking-tight">ابدأ رحلتك اليوم! 🚀</h1>
+            <p class="text-sm text-gray-500 mt-2">انضم لأكثر من 500 مستخدم يدعون ضيوفهم بضغطة زر</p>
+        </div>
+
+        <div class="bg-white rounded-[2.5rem] p-10 shadow-2xl border border-gray-100 relative overflow-hidden">
+            <form id="register-form" class="space-y-6 relative z-10">
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 mr-1">اسم المؤسسة
+                        أو العميل</label>
+                    <input type="text" name="name" required placeholder="مثلاً: قاعة الأمراء أو اسمك الشخصي"
+                        class="w-full px-5 py-4 rounded-2xl border border-gray-200 text-sm focus-ring outline-none transition-all placeholder:text-gray-300">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 mr-1">اسم
+                        المستخدم</label>
+                    <input type="text" name="username" required placeholder="username"
+                        class="w-full px-5 py-4 rounded-2xl border border-gray-200 text-sm focus-ring outline-none transition-all placeholder:text-gray-300 dir-ltr text-right">
+                </div>
+                <div>
+                    <label
+                        class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 mr-1 border-gray-100">كلمة
+                        المرور</label>
+                    <input type="password" name="password" required placeholder="••••••••"
+                        class="w-full px-5 py-4 rounded-2xl border border-gray-200 text-sm focus-ring outline-none transition-all placeholder:text-gray-300 dir-ltr text-right">
+                </div>
+                <button type="submit" id="reg-btn"
+                    class="w-full bg-brand-dark text-white py-4 rounded-2xl font-bold shadow-lg hover:opacity-90 transition transform hover:scale-[1.02] active:scale-95">
+                    إنشاء حساب مجاني ✨
+                </button>
+            </form>
+
+            <div class="mt-8 pt-8 border-t border-gray-50 text-center">
+                <p class="text-sm text-gray-400">لديك حساب بالفعل؟ <a href="/login"
+                        class="text-brand-green font-bold hover:underline">تسجيل الدخول</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('register-form');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('reg-btn');
+            const originalText = btn.textContent;
+            btn.textContent = 'جاري الإنشاء...';
+            btn.disabled = true;
+
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+
+            try {
+                const res = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                if (result.success) {
+                    window.location.href = result.redirect;
+                } else {
+                    alert('حدث خطأ: ' + result.message);
+                }
+            } catch (e) {
+                alert('فشل الاتصال بالسيرفر.');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>

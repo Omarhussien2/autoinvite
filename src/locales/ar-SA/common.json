@@ -1,0 +1,217 @@
+{
+    "app": {
+        "name": "أوتو إنفايت",
+        "tagline": "منصة دعوات الواتساب الذكية"
+    },
+    "nav": {
+        "dashboard": "لوحة التحكم",
+        "campaigns": "الحملات",
+        "contacts": "جهات الاتصال",
+        "reports": "التقارير",
+        "settings": "الإعدادات",
+        "team": "الفريق",
+        "billing": "الاشتراك والفواتير",
+        "logout": "تسجيل الخروج",
+        "view_profile": "عرض الملف الشخصي"
+    },
+    "login": {
+        "title": "تسجيل الدخول",
+        "subtitle": "ليس لديك حساب؟",
+        "subtitle_link": "أنشئ حساباً هنا",
+        "email": "البريد الإلكتروني",
+        "email_placeholder": "example@company.com",
+        "password": "كلمة المرور",
+        "password_placeholder": "••••••••",
+        "remember_me": "تذكرني",
+        "forgot_password": "نسيت كلمة المرور؟",
+        "submit": "تسجيل الدخول",
+        "error_invalid": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+        "error_network": "حدث خطأ في الاتصال، تحقق من الإنترنت."
+    },
+    "register": {
+        "title": "إنشاء حساب جديد",
+        "subtitle": "لديك حساب بالفعل؟",
+        "subtitle_link": "سجّل دخولك",
+        "company_name": "اسم الشركة",
+        "email": "البريد الإلكتروني",
+        "password": "كلمة المرور",
+        "confirm_password": "تأكيد كلمة المرور",
+        "submit": "إنشاء الحساب",
+        "error_mismatch": "كلمتا المرور غير متطابقتين.",
+        "error_exists": "هذا البريد الإلكتروني مسجّل بالفعل."
+    },
+    "dashboard": {
+        "title": "لوحة التحكم",
+        "welcome": "مرحباً بعودتك، {{name}} 👋",
+        "add_contact": "إضافة جهة اتصال",
+        "create_campaign": "إنشاء حملة",
+        "create_template": "إنشاء قالب",
+        "setup_whatsapp": "إعداد الواتساب",
+        "setup_whatsapp_desc": "قم بربط واتساب لبدء استخدام الخدمة.",
+        "setup_whatsapp_btn": "ربط الواتساب",
+        "setup_team": "إعداد الفريق",
+        "setup_team_desc": "أضف أعضاء فريقك.",
+        "setup_team_btn": "إضافة مستخدم",
+        "trial_period": "الفترة التجريبية",
+        "trial_expires": "الفترة التجريبية تنتهي في: {{date}}",
+        "dismiss": "تجاهل الإشعار",
+        "recent_campaigns": "آخر الحملات",
+        "no_recent_campaigns": "لا توجد حملات حالياً",
+        "inbound_chats": "الرسائل الواردة",
+        "outbound_chats": "الرسائل الصادرة"
+    },
+    "stats": {
+        "contacts": "جهات الاتصال",
+        "campaigns": "الحملات",
+        "templates": "القوالب",
+        "messages_sent": "الرسائل المُرسلة",
+        "messages_remaining": "الرصيد المتبقي",
+        "view_contacts": "عرض جهات الاتصال",
+        "view_campaigns": "عرض الحملات",
+        "view_templates": "عرض القوالب",
+        "view_all": "عرض الكل"
+    },
+    "campaigns": {
+        "title": "الحملات",
+        "add_campaigns": "إضافة حملات",
+        "messages_limit": "حد الرسائل للحملات",
+        "delivered": "الرسائل المُرسلة",
+        "remaining_balance": "الرصيد المتبقي",
+        "progress": "التقدم",
+        "search_placeholder": "البحث في الحملات",
+        "create_campaign": "إنشاء حملة",
+        "empty": "لا توجد لديك حملات",
+        "empty_desc": "أنشئ حملتك الأولى الآن وابدأ الإرسال.",
+        "create_first": "إنشاء حملة",
+        "table": {
+            "name": "اسم الحملة",
+            "template": "القالب",
+            "delivery_rate": "نسبة التسليم",
+            "read_rate": "نسبة القراءة",
+            "status": "الحالة",
+            "created_at": "تاريخ الإنشاء",
+            "actions": "إجراءات"
+        }
+    },
+    "campaign": {
+        "new_title": "إنشاء حملة جديدة",
+        "edit_title": "تعديل الحملة",
+        "field": {
+            "name": "اسم الحملة",
+            "name_placeholder": "مثلاً: عيد الفطر 1447",
+            "description": "وصف الحملة",
+            "contacts_file": "ملف جهات الاتصال (Excel / CSV)",
+            "select_group": "أو اختر من المجموعات الحالية",
+            "image_template": "صورة الدعوة (القالب)",
+            "messages": "تنويع الرسائل",
+            "msg_weight": "أولوية الرسالة",
+            "row_range": "نطاق الإرسال",
+            "from_row": "من صف رقم #",
+            "to_row": "إلى صف رقم #",
+            "test_phone": "رقم للتجربة السريعة"
+        },
+        "hint": {
+            "file_format": "تأكد أن الملف يحتوي على عمود «الاسم» وعمود «الهاتف».",
+            "spintax": "💡 استخدم [الاسم] في الرسالة وسيتم استبداله باسم كل شخص تلقائياً.",
+            "anti_ban": "تنويع الرسائل يحميك من حظر الواتساب"
+        },
+        "weight": {
+            "high": "🌟 أولوية عالية (50%)",
+            "medium": "⚖️ متوسطة (30%)",
+            "low": "🔽 منخفضة (20%)"
+        },
+        "editor": {
+            "title": "المصمم الذكي",
+            "drag_hint": "ارفع الصورة، ثم اسحب الاسم وضعه في المكان المناسب على البطاقة.",
+            "font_size": "حجم الخط",
+            "font_color": "لون الخط",
+            "waiting_image": "في انتظار الصورة..."
+        },
+        "action": {
+            "save": "حفظ الحملة",
+            "launch": "إطلاق الحملة 🚀",
+            "stop": "إيقاف الحملة",
+            "quick_test": "تجربة سريعة 📨",
+            "add_message": "+ رسالة جديدة",
+            "remove_message": "حذف"
+        }
+    },
+    "contacts": {
+        "title": "جهات الاتصال",
+        "search_placeholder": "البحث بالاسم أو الرقم أو البريد",
+        "select_all": "تحديد الكل",
+        "tab": {
+            "all": "كل جهات الاتصال",
+            "groups": "المجموعات"
+        },
+        "action": {
+            "add": "إضافة جهة اتصال",
+            "bulk_upload": "رفع جماعي",
+            "select_contact": "اختر جهة اتصال"
+        },
+        "empty": "لا توجد جهات اتصال",
+        "empty_desc": "أضف جهات الاتصال يدوياً أو ارفع ملف CSV / Excel.",
+        "or": "أو"
+    },
+    "settings": {
+        "title": "الإعدادات",
+        "profile": "الملف الشخصي",
+        "whatsapp": "إعدادات الواتساب",
+        "team": "الفريق",
+        "billing": "الاشتراك والفواتير",
+        "language": "اللغة",
+        "save": "حفظ التغييرات"
+    },
+    "whatsapp": {
+        "scan_qr": "امسح الباركود بتطبيق واتساب",
+        "scan_desc": "افتح الواتساب > الأجهزة المتصلة > اربط جهازاً",
+        "connected": "الواتساب متصل وجاهز",
+        "disconnected": "الواتساب غير متصل",
+        "connecting": "جاري الاتصال...",
+        "reconnect": "إعادة الربط",
+        "disconnect": "فصل الاتصال",
+        "status_ready": "الواتساب جاهز ومتصل. اختر الحملة وابدأ!",
+        "status_qr": "امسح الباركود عشان نربط الواتساب",
+        "status_working": "الجهاز يرسل الآن... ⏳"
+    },
+    "logs": {
+        "title": "سجل العمليات (مباشر)",
+        "sending": "جاري الإرسال...",
+        "sent_success": "✅ تم إرسال الرسالة بنجاح إلى {{name}}",
+        "sent_fail": "❌ فشل الإرسال إلى {{phone}}",
+        "campaign_complete": "🎉 تم الانتهاء من الحملة بنجاح!",
+        "empty": "لا توجد سجلات بعد."
+    },
+    "status": {
+        "draft": "مسودة",
+        "running": "جارية",
+        "active": "نشطة",
+        "completed": "مكتملة",
+        "paused": "متوقفة",
+        "failed": "فشلت",
+        "connected": "متصل",
+        "disconnected": "غير متصل",
+        "online": "نشط",
+        "offline": "غير نشط"
+    },
+    "trial": {
+        "banner": "الفترة التجريبية نشطة حالياً.",
+        "cta": "تواصل معنا لبدء الاشتراك"
+    },
+    "common": {
+        "save": "حفظ",
+        "cancel": "إلغاء",
+        "delete": "حذف",
+        "edit": "تعديل",
+        "confirm": "تأكيد",
+        "back": "رجوع",
+        "next": "التالي",
+        "loading": "جاري التحميل...",
+        "no_data": "لا توجد بيانات",
+        "or": "أو",
+        "view_all": "عرض الكل",
+        "actions": "إجراءات",
+        "search": "بحث",
+        "close": "إغلاق"
+    }
+}

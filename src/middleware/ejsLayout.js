@@ -1,0 +1,46 @@
+/**
+ * EJS Layout Middleware
+ * Wraps page content inside the main layout template.
+ * Usage: res.renderPage('dashboard/index', { stats, campaigns, ... })
+ */
+const path = require('path');
+const ejs = require('ejs');
+const fs = require('fs');
+
+const layoutPath = path.join(__dirname, '../views/layouts/main.ejs');
+
+function layoutMiddleware(req, res, next) {
+    // Add renderPage method to response
+    res.renderPage = function (view, locals = {}) {
+        const viewsDir = path.join(__dirname, '../views');
+
+        // First render the page partial
+        const pageFilePath = path.join(viewsDir, view + '.ejs');
+
+        ejs.renderFile(pageFilePath, { ...locals, __dirname: viewsDir }, { views: [viewsDir] }, (err, pageHtml) => {
+            if (err) {
+                console.error('EJS Page Render Error:', err);
+                return res.status(500).send('<pre>' + err.message + '</pre>');
+            }
+
+            // Then render the layout, passing the page HTML as `body`
+            const layoutLocals = {
+                ...locals,
+                body: pageHtml,
+                __dirname: viewsDir,
+            };
+
+            ejs.renderFile(layoutPath, layoutLocals, { views: [viewsDir] }, (err2, fullHtml) => {
+                if (err2) {
+                    console.error('EJS Layout Render Error:', err2);
+                    return res.status(500).send('<pre>' + err2.message + '</pre>');
+                }
+                res.send(fullHtml);
+            });
+        });
+    };
+
+    next();
+}
+
+module.exports = layoutMiddleware;

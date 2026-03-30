@@ -1,0 +1,105 @@
+{
+    "app": {
+        "name": "AutoInvite",
+        "tagline": "Smart WhatsApp Invitation Platform"
+    },
+    "nav": {
+        "dashboard": "Dashboard",
+        "campaigns": "Campaigns",
+        "contacts": "Contacts",
+        "reports": "Reports",
+        "settings": "Settings",
+        "team": "Team",
+        "billing": "Billing & Subscription",
+        "logout": "Sign Out",
+        "view_profile": "View Profile"
+    },
+    "login": {
+        "title": "Sign In",
+        "subtitle": "Don't have an account?",
+        "subtitle_link": "Create one here",
+        "email": "Email",
+        "email_placeholder": "example@company.com",
+        "password": "Password",
+        "password_placeholder": "••••••••",
+        "remember_me": "Remember me",
+        "forgot_password": "Forgot password?",
+        "submit": "Sign In",
+        "error_invalid": "Invalid email or password.",
+        "error_network": "Connection error. Check your internet."
+    },
+    "dashboard": {
+        "title": "Dashboard",
+        "welcome": "Welcome back, {{name}} 👋",
+        "add_contact": "Add Contact",
+        "create_campaign": "Create Campaign",
+        "create_template": "Create Template",
+        "setup_whatsapp": "Setup WhatsApp",
+        "setup_whatsapp_desc": "Set up your WhatsApp API to start using your instance.",
+        "setup_whatsapp_btn": "Setup WhatsApp",
+        "recent_campaigns": "Recent Campaigns",
+        "no_recent_campaigns": "No campaigns yet"
+    },
+    "stats": {
+        "contacts": "Contacts",
+        "campaigns": "Campaigns",
+        "messages_sent": "Messages Sent",
+        "messages_remaining": "Remaining Balance",
+        "view_all": "View All"
+    },
+    "campaigns": {
+        "title": "Campaigns",
+        "create_campaign": "Create Campaign",
+        "empty": "You Don't Have Any Campaigns",
+        "empty_desc": "Create your first campaign now.",
+        "search_placeholder": "Search Campaigns",
+        "table": {
+            "name": "Campaign Name",
+            "template": "Template",
+            "delivery_rate": "Delivery Rate",
+            "read_rate": "Read Rate",
+            "status": "Status"
+        }
+    },
+    "contacts": {
+        "title": "Contacts",
+        "search_placeholder": "Search name, phone or email",
+        "select_all": "Select All",
+        "tab": {
+            "all": "All Contacts",
+            "groups": "Groups"
+        },
+        "action": {
+            "add": "Add Contact",
+            "bulk_upload": "Bulk Upload"
+        },
+        "empty": "No contacts yet",
+        "or": "OR"
+    },
+    "status": {
+        "draft": "Draft",
+        "running": "Running",
+        "active": "Active",
+        "completed": "Completed",
+        "paused": "Paused",
+        "failed": "Failed"
+    },
+    "whatsapp": {
+        "scan_qr": "Scan QR Code",
+        "connected": "WhatsApp Connected",
+        "disconnected": "WhatsApp Disconnected"
+    },
+    "common": {
+        "save": "Save",
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "edit": "Edit",
+        "back": "Back",
+        "loading": "Loading...",
+        "no_data": "No data",
+        "or": "OR",
+        "view_all": "View All",
+        "search": "Search",
+        "close": "Close"
+    }
+}

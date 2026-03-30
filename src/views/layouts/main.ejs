@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof pageTitle !== 'undefined' ? pageTitle + ' - ' : '' %>أوتو إنفايت</title>
+  <meta name="description" content="منصة دعوات الواتساب الذكية">
+
+  <!-- Google Fonts: IBM Plex Sans Arabic -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS (CDN for now, replace with compiled output in production) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              green: '#00C853',
+              dark: '#0A3D2E',
+              light: '#E8FAF0',
+              medium: '#1B5E20',
+            },
+            surface: { white: '#FFFFFF', gray: '#F7F8FA' },
+          },
+          fontFamily: {
+            sans: ['"IBM Plex Sans Arabic"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
+          },
+        }
+      }
+    }
+  </script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- Socket.IO (only loaded when needed) -->
+  <% if (typeof useSocket !== 'undefined' && useSocket) { %>
+  <script src="/socket.io/socket.io.js"></script>
+  <% } %>
+
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'IBM Plex Sans Arabic', sans-serif; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #F7F8FA; }
+    ::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+
+    /* Sidebar active state */
+    .nav-item.active {
+      background-color: #E8FAF0;
+      color: #0A3D2E;
+      font-weight: 600;
+      border-right: 3px solid #00C853;
+    }
+    .nav-item { transition: all 0.15s ease; }
+    .nav-item:hover:not(.active) { background-color: #F7F8FA; }
+
+    /* Status badge pulse */
+    @keyframes pulse-green {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.4); }
+      50% { box-shadow: 0 0 0 6px rgba(0, 200, 83, 0); }
+    }
+    .status-pulse { animation: pulse-green 2s infinite; }
+
+    /* Page fade-in */
+    .page-content { animation: fadeIn 0.25s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Toast */
+    #toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem; }
+
+    /* Logs panel */
+    #logs-area {
+      height: 280px; overflow-y: auto;
+      background: #0f172a; border-radius: 10px;
+      padding: 1rem; font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; line-height: 1.6;
+    }
+    .log-SUCCESS { color: #00C853; font-weight: 600; }
+    .log-ERROR { color: #ef4444; font-weight: 600; }
+    .log-WARN { color: #fbbf24; }
+    .log-INFO { color: #94a3b8; }
+    .log-DONE { color: #fff; background: #00C853; padding: 2px 8px; border-radius: 4px; }
+  </style>
+
+  <%- typeof extraHead !== 'undefined' ? extraHead : '' %>
+</head>
+
+<body class="bg-surface-gray text-gray-800 min-h-screen">
+
+<!-- Toast Container -->
+<div id="toast-container"></div>
+
+<!-- Trial Banner -->
+<% if (typeof trialActive !== 'undefined' && trialActive) { %>
+<div id="trial-banner" class="bg-amber-50 border-b border-amber-200 px-6 py-2 flex items-center justify-between text-sm">
+  <div class="flex items-center gap-2 text-amber-700">
+    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+    <span>الفترة التجريبية نشطة حالياً.</span>
+  </div>
+  <a href="#" class="inline-flex items-center gap-1.5 bg-brand-dark text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:opacity-90 transition">
+    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/></svg>
+    تواصل معنا لبدء الاشتراك
+  </a>
+</div>
+<% } %>
+
+<!-- App Shell -->
+<div class="flex min-h-screen">
+
+  <!-- ====== SIDEBAR (Right in RTL) ====== -->
+  <%- include('../partials/sidebar') %>
+
+  <!-- ====== MAIN AREA ====== -->
+  <div class="flex-1 flex flex-col min-h-screen" style="margin-right: 224px;">
+
+    <!-- ====== TOP BAR ====== -->
+    <%- include('../partials/topbar') %>
+
+    <!-- ====== PAGE CONTENT ====== -->
+    <main class="flex-1 p-6 page-content">
+      <%- body %>
+    </main>
+
+  </div>
+</div>
+
+<!-- Global JS Utilities -->
+<script>
+// Toast utility
+function showToast(message, type = 'success') {
+  const colors = {
+    success: 'bg-green-50 border-green-200 text-green-800',
+    error: 'bg-red-50 border-red-200 text-red-800',
+    warning: 'bg-amber-50 border-amber-200 text-amber-800',
+    info: 'bg-blue-50 border-blue-200 text-blue-800',
+  };
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `border rounded-xl px-4 py-3 text-sm font-medium shadow-lg flex items-center gap-2 ${colors[type]} animate-in`;
+  toast.style.animation = 'slideIn 0.3s ease';
+  toast.innerHTML = message;
+  container.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(() => toast.remove(), 300); }, 4000);
+}
+</script>
+
+<%- typeof extraScript !== 'undefined' ? extraScript : '' %>
+</body>
+</html>

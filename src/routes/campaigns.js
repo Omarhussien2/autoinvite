@@ -1,38 +1,18 @@
 const express = require('express');
-const multer = require('multer');
 const path = require('path');
-const db = require('../database/db');
+const db = require('../database/pg-client');
 const { isAuthenticated } = require('../middleware/auth');
-
+const { tenantScope } = require('../middleware/tenantScope');
+const { upload } = require('../middleware/uploadStorage');
+const { WhatsAppManager, loadContacts, processBatch } = require('../core');
 const fs = require('fs');
 
 const router = express.Router();
 
-// Ensure uploads directory exists
-const uploadDir = path.join(__dirname, '../../uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Multer Storage Configuration
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadDir); // Use absolute path
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
-    }
-});
-
-const upload = multer({ storage: storage });
-
 // Create Campaign
-router.post('/', isAuthenticated, upload.fields([{ name: 'template' }, { name: 'contacts' }]), (req, res) => {
+router.post('/', isAuthenticated, tenantScope, upload.fields([{ name: 'template' }, { name: 'contacts' }]), async (req, res) => {
     try {
         const { name, message_templates, canvas_config } = req.body;
-
-        // Access files securely
         const templatePath = req.files['template'] ? req.files['template'][0].path : null;
         const contactsPath = req.files['contacts'] ? req.files['contacts'][0].path : null;
 
@@ -40,89 +20,63 @@ router.post('/', isAuthenticated, upload.fields([{ name: 'template' }, { name: '
             return res.status(400).json({ success: false, message: 'Name, Messages, and Contact File are required' });
         }
 
-        // Insert into DB
-        const stmt = db.prepare(`
-            INSERT INTO campaigns (name, template_path, contacts_path, message_templates, canvas_config, status)
-            VALUES (?, ?, ?, ?, ?, ?)
-        `);
+        const result = await db.query(`
+            INSERT INTO campaigns (tenant_id, name, template_path, contacts_path, message_templates, canvas_config, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id
+        `, [req.tenantId, name, templatePath, contactsPath, message_templates, canvas_config || '{}', 'active']);
 
-        // message_templates comes as a stringified JSON if sent via FormData
-        // canvas_config also comes as a stringified JSON
-
-        const result = stmt.run(
-            name,
-            templatePath,
-            contactsPath,
-            message_templates,
-            canvas_config || '{}',
-            'active'
-        );
-
-        res.json({ success: true, campaignId: result.lastInsertRowid });
-
+        res.json({ success: true, campaignId: result.rows[0].id });
     } catch (error) {
-        console.error('Create Campaign Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
 // List Campaigns
-router.get('/', isAuthenticated, (req, res) => {
+router.get('/', isAuthenticated, tenantScope, async (req, res) => {
     try {
-        const campaigns = db.prepare('SELECT * FROM campaigns ORDER BY created_at DESC').all();
-        res.json({ success: true, campaigns });
+        const result = await db.query('SELECT * FROM campaigns WHERE tenant_id = $1 ORDER BY created_at DESC', [req.tenantId]);
+        res.json({ success: true, campaigns: result.rows });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
 // Get Single Campaign
-router.get('/:id', isAuthenticated, (req, res) => {
+router.get('/:id', isAuthenticated, tenantScope, async (req, res) => {
     try {
-        const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
-        if (!campaign) {
-            return res.status(404).json({ success: false, message: 'Campaign not found' });
-        }
+        const result = await db.query('SELECT * FROM campaigns WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenantId]);
+        const campaign = result.rows[0];
+        if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
         res.json({ success: true, campaign });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// Update Campaign Progress (last_sent_row)
-router.patch('/:id/progress', isAuthenticated, (req, res) => {
-    try {
-        const { lastRow } = req.body;
-        db.prepare('UPDATE campaigns SET last_sent_row = ? WHERE id = ?').run(lastRow, req.params.id);
-        res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
 // Update Campaign (Edit)
-router.put('/:id', isAuthenticated, upload.fields([{ name: 'template' }, { name: 'contacts' }]), (req, res) => {
+router.put('/:id', isAuthenticated, tenantScope, upload.fields([{ name: 'template' }, { name: 'contacts' }]), async (req, res) => {
     try {
         const { name, message_templates, canvas_config } = req.body;
         const templatePath = req.files['template'] ? req.files['template'][0].path : null;
         const contactsPath = req.files['contacts'] ? req.files['contacts'][0].path : null;
 
-        let query = 'UPDATE campaigns SET name = ?, message_templates = ?, canvas_config = ?';
+        let query = 'UPDATE campaigns SET name = $1, message_templates = $2, canvas_config = $3';
         const params = [name, message_templates, canvas_config];
 
         if (templatePath) {
-            query += ', template_path = ?';
             params.push(templatePath);
+            query += `, template_path = $${params.length}`;
         }
         if (contactsPath) {
-            query += ', contacts_path = ?';
             params.push(contactsPath);
+            query += `, contacts_path = $${params.length}`;
         }
 
-        query += ' WHERE id = ?';
-        params.push(req.params.id);
+        params.push(req.params.id, req.tenantId);
+        query += ` WHERE id = $${params.length - 1} AND tenant_id = $${params.length}`;
 
-        db.prepare(query).run(...params);
+        await db.query(query, params);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -130,12 +84,51 @@ router.put('/:id', isAuthenticated, upload.fields([{ name: 'template' }, { name:
 });
 
 // Delete Campaign
-router.delete('/:id', isAuthenticated, (req, res) => {
+router.delete('/:id', isAuthenticated, tenantScope, async (req, res) => {
     try {
-        // Option: also delete physical files (template, contacts) if needed
-        db.prepare('DELETE FROM campaigns WHERE id = ?').run(req.params.id);
-        db.prepare('DELETE FROM sent_logs WHERE campaign_id = ?').run(req.params.id);
+        await db.query('DELETE FROM campaigns WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenantId]);
         res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Get Campaign Stats
+router.get('/:id/stats', isAuthenticated, tenantScope, async (req, res) => {
+    try {
+        const campaignId = req.params.id;
+        const tenantId = req.tenantId;
+
+        const campRes = await db.query('SELECT status, contacts_path FROM campaigns WHERE id = $1 AND tenant_id = $2', [campaignId, tenantId]);
+        if (campRes.rows.length === 0) return res.status(404).json({ success: false, message: 'Campaign not found' });
+
+        const campaign = campRes.rows[0];
+
+        // Total contacts count
+        let totalContacts = 0;
+        try {
+            const contacts = await loadContacts(campaign.contacts_path);
+            totalContacts = contacts.length;
+        } catch (e) { console.error('Error loading contacts for stats:', e.message); }
+
+        // Sent count
+        const sentRes = await db.query('SELECT COUNT(*) FROM sent_logs WHERE campaign_id = $1 AND tenant_id = $2', [campaignId, tenantId]);
+        const sentCount = parseInt(sentRes.rows[0].count);
+
+        // Failed count (from logs if we had a dedicated failed table, for now we can check logs for specific status if we log them)
+        // Since we only insert into sent_logs on success in the current logic, we might need a fail_logs table or a status column in sent_logs.
+        // Let's assume for now we only track successes in the DB.
+
+        res.json({
+            success: true,
+            stats: {
+                total_contacts: totalContacts,
+                sent_count: sentCount,
+                failed_count: 0, // Placeholder until fail logging is implemented
+                pending_count: Math.max(0, totalContacts - sentCount),
+                status: campaign.status
+            }
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

@@ -1,0 +1,136 @@
+const express = require('express');
+const { isAuthenticated } = require('../middleware/auth');
+const { tenantScope } = require('../middleware/tenantScope');
+const BackgroundQueue = require('../core/BackgroundQueue');
+const { WhatsAppManager, loadContacts } = require('../core');
+const db = require('../database/pg-client');
+
+const router = express.Router();
+
+router.use(isAuthenticated);
+router.use(tenantScope);
+
+// WhatsApp Initialization Trigger
+router.post('/init', async (req, res) => {
+    try {
+        await WhatsAppManager.getClient(req.tenantId);
+        res.json({ success: true, message: 'Initialization started' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Start Campaign Batch
+router.post('/start', async (req, res) => {
+    const { startRow, endRow, campaignId } = req.body;
+    const tenantId = req.tenantId;
+
+    const curState = WhatsAppManager.getTenantState(tenantId);
+    if (curState.status === 'WORKING') {
+        return res.status(400).json({ success: false, message: 'الجهاز يعمل مسبقا' }); // already working
+    }
+
+    try {
+        let contactsPath = null;
+        let messages;
+        let hasTemplate = false;
+        let templatePath = null;
+        let canvasConfig = null;
+
+        if (campaignId) {
+            const result = await db.query('SELECT message_templates, template_path, canvas_config, contacts_path FROM campaigns WHERE id = $1 AND tenant_id = $2', [campaignId, tenantId]);
+            const campaign = result.rows[0];
+            if (campaign) {
+                if (campaign.message_templates) messages = campaign.message_templates;
+                if (campaign.template_path) {
+                    hasTemplate = true;
+                    templatePath = campaign.template_path;
+                    if (campaign.canvas_config) canvasConfig = campaign.canvas_config;
+                }
+                if (campaign.contacts_path) contactsPath = campaign.contacts_path;
+            } else {
+                return res.status(404).json({ success: false, message: 'Campaign not found' });
+            }
+        }
+
+        if (!messages || !Array.isArray(messages) || messages.length === 0) {
+            const config = require('../config/settings');
+            messages = config.messages;
+        }
+
+        const contacts = await loadContacts(contactsPath);
+        const start = parseInt(startRow) || 1;
+        const end = parseInt(endRow) || contacts.length;
+
+        if (start < 1 || end > contacts.length || start > end) {
+            return res.status(400).json({ success: false, message: 'Invalid Row Range' });
+        }
+
+        if (!global.stopBatchRequested) global.stopBatchRequested = {};
+        global.stopBatchRequested[tenantId] = false;
+
+        // C-04: Safe null check before updating state
+        if (!WhatsAppManager.states.has(tenantId)) {
+            WhatsAppManager.states.set(tenantId, { status: 'WORKING', lastQr: null, lastActive: Date.now(), phone: null });
+        } else {
+            WhatsAppManager.states.get(tenantId).status = 'WORKING';
+        }
+        WhatsAppManager.emitToTenant(tenantId, 'working_state', true);
+
+        BackgroundQueue.addJob(tenantId, campaignId, contacts, start, end, messages, hasTemplate, templatePath, canvasConfig)
+            .catch(console.error); // Catch generic BG queue errs if any
+
+        res.json({ success: true, message: 'Started successfully' });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Stop Campaign Batch
+router.post('/stop', (req, res) => {
+    BackgroundQueue.stopJob(req.tenantId);
+    res.json({ success: true, message: 'Stop Requested' });
+});
+
+// Quick Test Send
+router.post('/test', async (req, res) => {
+    try {
+        const { phone } = req.body;
+        const tenantId = req.tenantId;
+
+        // Format Number
+        let targetPhone = phone.replace(/\D/g, '');
+        if (targetPhone.startsWith('01')) {
+            targetPhone = '20' + targetPhone.substring(1);
+        }
+
+        const chatId = `${targetPhone}@c.us`;
+        const client = await WhatsAppManager.getClient(tenantId);
+
+        await client.sendMessage(chatId, 'تجربة أوتو إنفايت: هلا والله! النظام شغال 🚀');
+        res.json({ success: true, message: 'Test message sent' });
+    } catch (err) {
+        console.error('Test Err:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Client Status
+router.get('/status', (req, res) => {
+    const state = WhatsAppManager.getTenantState(req.tenantId);
+    res.json({ success: true, state });
+});
+
+// Disconnect Session
+router.post('/disconnect', async (req, res) => {
+    try {
+        await WhatsAppManager.stopClient(req.tenantId);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+module.exports = router;
