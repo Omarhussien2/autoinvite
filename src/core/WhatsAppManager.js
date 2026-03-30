@@ -75,7 +75,18 @@ class WhatsAppManager {
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
                 '--disable-software-rasterizer',
-                '--disable-extensions'
+                '--disable-extensions',
+                '--no-zygote',                      // Saves ~50MB RAM per session on VPS
+                '--single-process',                 // Further RAM reduction (trades for slight stability)
+                '--disable-background-networking',
+                '--disable-default-apps',
+                '--disable-sync',
+                '--disable-translate',
+                '--hide-scrollbars',
+                '--metrics-recording-only',
+                '--mute-audio',
+                '--safebrowsing-disable-auto-update',
+                '--disable-features=site-per-process'
             ]
         };
         if (executablePath) puppeteerConfig.executablePath = executablePath;

@@ -1,9 +1,31 @@
-node_modules
-.wwebjs_auth
-.wwebjs_cache
-logs
-temp
+# ── Node.js ──────────────────────────────────────────
+node_modules/
+
+# ── Environment & Secrets (NEVER commit) ─────────────
+.env
+.env.production
+.env.local
+
+# ── WhatsApp Session Data ────────────────────────────
+.wwebjs_auth/
+.wwebjs_cache/
+storage/
+
+# ── Logs ─────────────────────────────────────────────
+logs/*.log
+temp/
+
+# ── Test Artifacts ────────────────────────────────────
 test_output.txt
 *.log
+
+# ── OS Files ─────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ── SQLite (legacy — replaced by PostgreSQL) ─────────
+database.db
+
+# ── Large test files in project root ─────────────────
+grid_test.png
+template.png

@@ -28,6 +28,6 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p logs temp uploads .wwebjs_auth .wwebjs_cache
 
-EXPOSE 3000
+EXPOSE 5000
 
 CMD [ "npm", "start" ]

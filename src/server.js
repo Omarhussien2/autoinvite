@@ -1,10 +1,26 @@
 require('dotenv').config();
+
+// ── Startup Environment Validation ──────────────────────────────────────────
+const REQUIRED_ENV = ['DATABASE_URL', 'SESSION_SECRET'];
+const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missing.length > 0) {
+    console.error(`❌ FATAL: Missing required environment variables: ${missing.join(', ')}`);
+    console.error('   Copy .env.example to .env and fill in the values.');
+    process.exit(1);
+}
+if (process.env.SESSION_SECRET === 'autoinvite-change-me-in-production' && process.env.NODE_ENV === 'production') {
+    console.error('❌ FATAL: SESSION_SECRET is still the default placeholder. Generate a strong secret with: openssl rand -hex 32');
+    process.exit(1);
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
 const QRCode = require('qrcode');
 const session = require('express-session');
+const connectPgSimple = require('connect-pg-simple');
 const db = require('./database/pg-client');
 const { WhatsAppManager, loadContacts, processBatch } = require('./core');
 const authRoutes = require('./routes/auth');
@@ -12,6 +28,8 @@ const campaignRoutes = require('./routes/campaigns');
 const { isAuthenticated } = require('./middleware/auth');
 const { i18next, middleware: i18nMiddleware } = require('./config/i18n');
 const ejsLayout = require('./middleware/ejsLayout');
+
+const PgSession = connectPgSimple(session);
 
 const app = express();
 const server = http.createServer(app);
@@ -33,14 +51,21 @@ app.use(express.urlencoded({ extended: true }));
 // --- i18next MIDDLEWARE ---
 app.use(i18nMiddleware.handle(i18next));
 
-// Session Setup — H-01: secret from env var, never hardcoded
+// Session Setup — persistent via PostgreSQL (survives restarts & PM2 reloads)
 const sessionMiddleware = session({
-    secret: process.env.SESSION_SECRET || 'autoinvite-change-me-in-production',
+    store: new PgSession({
+        pool: db.pool,               // Reuse existing pg Pool (no extra connection)
+        tableName: 'user_sessions',
+        createTableIfMissing: true   // auto-create session table on first run
+    }),
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: process.env.NODE_ENV === 'production', // true on HTTPS VPS
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        secure: process.env.NODE_ENV === 'production',  // HTTPS only in prod
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000  // 7 days
     }
 });
 app.use(sessionMiddleware);

@@ -27,9 +27,9 @@ class BackgroundQueue {
         }
 
         // Process in background (do not await here)
-        processBatch(contacts, startRow, endRow, messages, campaignId, hasTemplate, (msg, type) => {
+        processBatch(contacts, startRow, endRow, messages, campaignId, hasTemplate, (message, type) => {
             const WhatsAppManager = require('./WhatsAppManager');
-            WhatsAppManager.emitToTenant(tenantId, 'log', { msg, type });
+            WhatsAppManager.emitToTenant(tenantId, 'log', { message, type });
         }, templatePath, canvasConfig, tenantId)
             .then(async () => {
                 const WhatsAppManager = require('./WhatsAppManager');
