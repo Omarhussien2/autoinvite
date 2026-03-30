@@ -35,26 +35,59 @@ function pickWeightedMessage(messages, name) {
 
 const xlsx = require('xlsx');
 
+/**
+ * Smart column detector — maps ANY file columns to { Name, Phone }
+ * Works by: (1) known name/phone synonyms (case-insensitive), (2) positional fallback
+ */
+function normalizeContactColumns(rows) {
+    if (!rows || rows.length === 0) return [];
+
+    const keys = Object.keys(rows[0]);
+
+    const nameSynonyms = new Set([
+        'name', 'الاسم', 'الإسم', 'اسم', 'fullname', 'full_name',
+        'customer_name', 'client_name', 'الأسماء', 'الأسم', 'العميل',
+        'الاسم الكامل', 'اسم العميل', 'الشخص'
+    ]);
+    const phoneSynonyms = new Set([
+        'phone', 'mobile', 'رقم الجوال', 'رقم', 'جوال', 'موبايل',
+        'هاتف', 'telephone', 'tel', 'number', 'الهاتف', 'الجوال',
+        'رقم الهاتف', 'رقم الموبايل', 'رقم التليفون', 'تليفون',
+        'phone number', 'mobile number', 'contact'
+    ]);
+
+    // Find by known synonyms (case-insensitive)
+    const nameKey = keys.find(k => nameSynonyms.has(k.toLowerCase().trim())) || keys[0];
+    const phoneKey = keys.find(k => phoneSynonyms.has(k.toLowerCase().trim())) || (keys.length > 1 ? keys[1] : keys[0]);
+
+    return rows.map(row => ({
+        Name: (row[nameKey] !== undefined && row[nameKey] !== null) ? row[nameKey].toString().trim() : '',
+        Phone: (row[phoneKey] !== undefined && row[phoneKey] !== null) ? row[phoneKey].toString().trim() : '',
+    })).filter(r => r.Phone !== ''); // Remove rows with empty phone
+}
+
 async function loadContacts(customFilePath = null) {
     // If a custom file path is provided from the campaign, use it. Otherwise fallback to the old default.
     const filePath = customFilePath || path.resolve(__dirname, '../data/data - Sheet1.csv');
     
     return new Promise((resolve, reject) => {
         try {
-            if (filePath.toLowerCase().endsWith('.csv')) {
-                const contacts = [];
+            const ext = filePath.toLowerCase().split('.').pop();
+
+            if (ext === 'csv' || ext === 'txt') {
+                const rows = [];
                 fs.createReadStream(filePath)
                     .pipe(csv())
-                    .on('data', (data) => contacts.push(data))
-                    .on('end', () => resolve(contacts))
+                    .on('data', (data) => rows.push(data))
+                    .on('end', () => resolve(normalizeContactColumns(rows)))
                     .on('error', (err) => reject(err));
-            } else if (filePath.toLowerCase().endsWith('.xlsx')) {
-                const workbook = xlsx.readFile(filePath);
+            } else if (ext === 'xlsx' || ext === 'xls') {
+                const workbook = xlsx.readFile(filePath, { cellText: false, cellDates: true });
                 const sheetName = workbook.SheetNames[0];
-                const contacts = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-                resolve(contacts);
+                const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+                resolve(normalizeContactColumns(rows));
             } else {
-                reject(new Error(`Unsupported file type: ${filePath}`));
+                reject(new Error(`نوع الملف غير مدعوم: ${ext}. المدعوم: CSV, XLSX, XLS`));
             }
         } catch (e) {
             reject(e);
@@ -94,9 +127,9 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             break;
         }
 
-        const rawName = contact['الإسم'] || contact['Name'] || 'Guest';
+        const rawName = contact.Name || contact['الإسم'] || contact['name'] || 'ضيف';
         const name = await processName(rawName); // Auto-Translate Name
-        const rawPhone = contact['رقم الجوال'] || contact['Phone'];
+        const rawPhone = contact.Phone || contact['رقم الجوال'] || contact['phone'];
         const currentRow = startRow + index;
 
         // 1. Normalize Phone (Smart Engine)

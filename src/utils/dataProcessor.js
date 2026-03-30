@@ -150,8 +150,8 @@ function processContacts(contacts) {
     };
 
     for (const contact of contacts) {
-        const name = contact['name'] || contact['Name'] || contact['الإسم'] || 'Guest';
-        const rawPhone = contact['phone'] || contact['Phone'] || contact['mobile'] || contact['رقم الجوال'];
+        const name = contact['Name'] || contact['name'] || contact['الإسم'] || contact['اسم'] || 'ضيف';
+        const rawPhone = contact['Phone'] || contact['phone'] || contact['mobile'] || contact['رقم الجوال'] || contact['جوال'] || contact['هاتف'];
 
         const normalized = normalizePhone(rawPhone);
 
