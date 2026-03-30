@@ -64,7 +64,16 @@ Deployed via PM2 + Nginx on a Hostinger VPS (Ubuntu 22.04).
   /js
     campaign-editor.js   - Canvas drag-and-drop image editor (text overlay)
     campaign-runner.js   - Socket.IO real-time campaign runner
-  landing.html / login.html - Legacy static pages
+  /assets/images/
+    logo-new.png         - New brand logo (envelope + infinity)
+    hero-human.png       - Landing hero scene 1 (stressed Saudi man)
+    hero-robot.png       - Landing hero scene 2 (Saudi robot)
+/taqreerk               - Landing page (React + Vite + GSAP + Lenis)
+  App.tsx                - Root: Lenis smooth scroll, GSAP ScrollTrigger, all sections
+  components/Hero.tsx    - Two-scene hero with GSAP pin scroll animation
+  components/Navbar.tsx  - Fixed navbar with new logo + WhatsApp contact button
+  Comparison.tsx, FeaturesBento.tsx, Timeline.tsx, FAQ.tsx, CTA.tsx, Footer.tsx
+  vite.config.ts         - base='/taqreerk/', port 3000
 /storage                 - Per-tenant uploads and WhatsApp auth sessions (gitignored)
 /logs                    - PM2 log files (gitignored)
 ```
