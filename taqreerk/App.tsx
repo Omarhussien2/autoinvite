@@ -5,6 +5,7 @@ import Lenis from 'lenis';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Hero } from './components/Hero';
+import { Navbar } from './components/Navbar';
 import { FeaturesBento } from './FeaturesBento';
 import { Timeline } from './Timeline';
 import { Comparison } from './Comparison';
@@ -57,10 +58,11 @@ export default function App() {
   return (
     <div className="w-full min-h-screen bg-bg-dark text-zinc-50 overflow-x-hidden selection:bg-digital-teal selection:text-white" dir="rtl">
       <motion.div
-        className="fixed top-0 left-0 right-0 h-1 bg-digital-teal origin-right z-50 shadow-[0_0_10px_rgba(20,241,149,0.5)]"
-        style={{ scaleX }}
+        className="fixed top-0 left-0 right-0 h-0.5 bg-digital-teal origin-right shadow-[0_0_10px_rgba(20,241,149,0.5)]"
+        style={{ scaleX, zIndex: 200 }}
       />
 
+      <Navbar />
       <Hero />
       <Comparison />
       <FeaturesBento />
