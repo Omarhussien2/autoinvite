@@ -1,39 +1,110 @@
 <div>
 
-    <!-- Quota Stats Bar -->
-    <div class="grid grid-cols-3 gap-4 mb-6">
-        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm text-center">
-            <p class="text-3xl font-bold text-gray-900">
-                <%= quota.limit || 0 %>
-            </p>
-            <p class="text-xs text-gray-500 mt-1">حد الرسائل للحملات</p>
+    <%
+        var safeColor   = quota.safetyLevel === 'safe'    ? '#00C853' :
+                          quota.safetyLevel === 'warning'  ? '#F59E0B' : '#EF4444';
+        var safeBg      = quota.safetyLevel === 'safe'    ? '#F0FDF4' :
+                          quota.safetyLevel === 'warning'  ? '#FFFBEB' : '#FEF2F2';
+        var safeBorder  = quota.safetyLevel === 'safe'    ? '#BBF7D0' :
+                          quota.safetyLevel === 'warning'  ? '#FDE68A' : '#FECACA';
+        var safeLabel   = quota.safetyLevel === 'safe'    ? 'آمن' :
+                          quota.safetyLevel === 'warning'  ? 'تنبيه' : 'خطر';
+        var safeIcon    = quota.safetyLevel === 'safe'    ? '🟢' :
+                          quota.safetyLevel === 'warning'  ? '🟡' : '🔴';
+        var remaining   = Math.max(0, quota.dailySafe - quota.dailyCount);
+    %>
+
+    <!-- Stats Row -->
+    <div class="grid grid-cols-3 gap-4 mb-4">
+
+        <!-- Today's sent -->
+        <div class="bg-white rounded-2xl border p-5 shadow-sm text-center" style="border-color:<%= safeBorder %>; background:<%= safeBg %>;">
+            <div class="flex items-center justify-center gap-1.5 mb-1">
+                <span class="text-xs font-semibold" style="color:<%= safeColor %>"><%= safeIcon %> <%= safeLabel %></span>
+            </div>
+            <p class="text-3xl font-bold" style="color:<%= safeColor %>"><%= quota.dailyCount %></p>
+            <p class="text-xs text-gray-500 mt-1">أُرسل اليوم</p>
         </div>
+
+        <!-- Monthly sent -->
         <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm text-center">
-            <p class="text-3xl font-bold text-gray-900">
-                <%= quota.delivered || 0 %>
-            </p>
-            <p class="text-xs text-gray-500 mt-1">الرسائل المُرسلة</p>
+            <p class="text-3xl font-bold text-gray-900"><%= quota.monthlyCount %></p>
+            <p class="text-xs text-gray-500 mt-1">رسائل هذا الشهر</p>
         </div>
+
+        <!-- Total all-time -->
         <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm text-center">
-            <p class="text-3xl font-bold text-gray-900">
-                <%= quota.remaining || 0 %>
-            </p>
-            <p class="text-xs text-gray-500 mt-1">الرصيد المتبقي</p>
+            <p class="text-3xl font-bold text-gray-900"><%= quota.totalDelivered %></p>
+            <p class="text-xs text-gray-500 mt-1">إجمالي كل الوقت</p>
         </div>
+
     </div>
 
-    <!-- Progress Bar -->
-    <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-5 shadow-sm">
-        <div class="flex items-center justify-between text-xs text-gray-500 mb-2">
-            <span>التقدم</span>
-            <span>
-                <%= quota.progressPct || 0 %>%
+    <!-- AntiBan Engine Panel -->
+    <div class="bg-white rounded-2xl border border-gray-100 p-5 mb-5 shadow-sm">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+                <span class="text-base">🛡️</span>
+                <span class="text-sm font-semibold text-gray-800">AntiBan Engine — مقياس الأمان اليومي</span>
+            </div>
+            <span class="text-xs text-gray-400">الحد الموصى به: <%= quota.dailySafe %> رسالة/يوم</span>
+        </div>
+
+        <!-- Progress bar -->
+        <div class="w-full bg-gray-100 rounded-full h-3 mb-2 overflow-hidden">
+            <div class="h-3 rounded-full transition-all duration-700"
+                 style="width:<%= quota.dailyPct %>%; background:<%= safeColor %>; box-shadow: 0 0 8px <%= safeColor %>55;">
+            </div>
+        </div>
+
+        <!-- Labels under bar -->
+        <div class="flex items-center justify-between text-xs text-gray-400 mb-4">
+            <span>0</span>
+            <span class="font-medium" style="color:<%= safeColor %>">
+                <%= quota.dailyCount %> / <%= quota.dailySafe %> رسالة اليوم
+                (<%= quota.dailyPct %>%)
             </span>
+            <span><%= quota.dailySafe %></span>
         </div>
-        <div class="w-full bg-gray-100 rounded-full h-2">
-            <div class="bg-brand-green h-2 rounded-full transition-all duration-700"
-                style="width: <%= quota.progressPct || 0 %>%"></div>
+
+        <!-- Guidance cards -->
+        <div class="grid grid-cols-3 gap-3">
+
+            <div class="rounded-xl p-3 text-center bg-green-50 border border-green-100">
+                <div class="text-lg mb-1">✅</div>
+                <p class="text-xs font-bold text-green-800">أقل من ١٠٠ يومياً</p>
+                <p class="text-[11px] text-green-700 mt-1 leading-relaxed">الأفضل دائماً — أقل كلما كان رقمك أأمن وأطول عمراً</p>
+            </div>
+
+            <div class="rounded-xl p-3 text-center bg-amber-50 border border-amber-100">
+                <div class="text-lg mb-1">⚠️</div>
+                <p class="text-xs font-bold text-amber-800">١٠٠ — ٢٠٠ يومياً</p>
+                <p class="text-[11px] text-amber-700 mt-1 leading-relaxed">الحد الموصى به — آمن مع AntiBan لأرقام تجاوزت أسبوعاً</p>
+            </div>
+
+            <div class="rounded-xl p-3 text-center bg-red-50 border border-red-100">
+                <div class="text-lg mb-1">🚫</div>
+                <p class="text-xs font-bold text-red-800">أكثر من ٢٠٠ يومياً</p>
+                <p class="text-[11px] text-red-700 mt-1 leading-relaxed">خطر حظر مرتفع — لا تُرسل بكميات كبيرة بأرقام جديدة</p>
+            </div>
+
         </div>
+
+        <% if (quota.safetyLevel !== 'safe') { %>
+        <div class="mt-3 flex items-start gap-2 rounded-xl p-3" style="background:<%= safeBg %>; border: 1px solid <%= safeBorder %>;">
+            <span class="text-sm mt-0.5 shrink-0"><%= quota.safetyLevel === 'warning' ? '⚠️' : '🚨' %></span>
+            <p class="text-xs leading-relaxed" style="color:<%= safeColor %>">
+                <% if (quota.safetyLevel === 'warning') { %>
+                    أرسلت <strong><%= quota.dailyCount %></strong> رسالة اليوم. تبقّى لك <%= remaining %> رسالة قبل الوصول للحد الموصى به. ننصح بإيقاف الحملات الآن حفاظاً على رقمك.
+                <% } else { %>
+                    تجاوزت الحد الموصى به اليوم (<%= quota.dailyCount %> رسالة). أوقف الإرسال فوراً وأعطِ الرقم راحة لـ ٢٤ ساعة على الأقل.
+                <% } %>
+            </p>
+        </div>
+        <% } %>
+
     </div>
 
     <!-- Search + Table Card -->

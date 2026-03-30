@@ -185,12 +185,25 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
 // 4. Campaigns List View
 app.get('/campaigns', isAuthenticated, async (req, res) => {
     try {
-        const result = await db.query('SELECT * FROM campaigns WHERE tenant_id = $1 ORDER BY created_at DESC', [req.session.tenantId]);
-        const sentResult = await db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1', [req.session.tenantId]);
-        const delivered = parseInt(sentResult.rows[0].count || 0);
-        const limit = 5000;
-        const remaining = Math.max(0, limit - delivered);
-        const progressPct = Math.min(100, Math.round((delivered / limit) * 100));
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        const [campaignRes, totalRes, monthlyRes, dailyRes] = await Promise.all([
+            db.query('SELECT * FROM campaigns WHERE tenant_id = $1 ORDER BY created_at DESC', [req.session.tenantId]),
+            db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1', [req.session.tenantId]),
+            db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND sent_at >= $2', [req.session.tenantId, monthStart]),
+            db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND sent_at >= $2', [req.session.tenantId, todayStart]),
+        ]);
+
+        const DAILY_SAFE = 200;
+        const totalDelivered = parseInt(totalRes.rows[0].count || 0);
+        const monthlyCount  = parseInt(monthlyRes.rows[0].count || 0);
+        const dailyCount    = parseInt(dailyRes.rows[0].count || 0);
+        const dailyPct      = Math.min(100, Math.round((dailyCount / DAILY_SAFE) * 100));
+        const safetyLevel   = dailyPct < 50 ? 'safe' : dailyPct < 85 ? 'warning' : 'danger';
+
+        const result = campaignRes;
 
         res.renderPage('dashboard/campaigns', {
             pageTitle: 'الحملات',
@@ -198,7 +211,7 @@ app.get('/campaigns', isAuthenticated, async (req, res) => {
             activePage: 'campaigns',
             campaigns: result.rows,
             tenantName: req.session.tenantName,
-            quota: { limit, delivered, remaining, progressPct },
+            quota: { totalDelivered, monthlyCount, dailyCount, dailySafe: DAILY_SAFE, dailyPct, safetyLevel },
             topbarActions: `<a href="/campaigns/new" class="inline-flex items-center gap-1.5 bg-brand-dark text-white text-xs px-3.5 py-2 rounded-xl font-medium hover:opacity-90 transition shadow-sm">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
                 إنشاء حملة
