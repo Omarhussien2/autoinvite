@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "mTEaz6ZApQ_-fQd3QgqI-"
+uri = "file://verification-report.md"
+type = "text"
+title = "AutoInvite SaaS — Backend Verification Report"
