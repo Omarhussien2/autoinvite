@@ -4,8 +4,8 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
 gsap.registerPlugin(ScrollTrigger);
 
-const HUMAN_IMG = '/assets/images/hero-human.jpg';
-const ROBOT_IMG = '/assets/images/Gemini_Generated_Image_meid75meid75meid.jpg';
+const HUMAN_IMG = '/assets/images/hero-human.png';
+const ROBOT_IMG = '/assets/images/hero-robot.png';
 
 export const Hero = () => {
   const wrapperRef  = useRef<HTMLDivElement>(null);
