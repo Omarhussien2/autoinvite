@@ -57,16 +57,28 @@
                         class="bg-gray-100 px-2 py-0.5 rounded text-xs">متوقفة</span></p>
             </div>
 
+            <% if (contactsCount > 0) { %>
+            <div class="bg-brand-light rounded-xl px-4 py-2.5 flex items-center justify-between text-xs mb-1">
+                <span class="text-brand-dark font-medium">إجمالي جهات الاتصال</span>
+                <span class="font-bold text-brand-green text-sm"><%= contactsCount %> جهة</span>
+            </div>
+            <% } %>
+            <% if (contactsCount === 0) { %>
+            <div class="bg-red-50 rounded-xl px-4 py-2.5 text-xs text-red-600 text-center mb-1">
+                ⚠️ لم يتم رفع ملف الأرقام بعد
+            </div>
+            <% } %>
+
             <div class="space-y-4">
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="text-[10px] text-gray-500">من صف #</label>
-                        <input type="number" id="startRow" value="<%= campaign.last_sent_row || 2 %>"
+                        <input type="number" id="startRow" value="<%= campaign.last_sent_row || 1 %>"
                             class="w-full text-sm border border-gray-200 rounded-lg p-2 focus:border-brand-green outline-none">
                     </div>
                     <div>
-                        <label class="text-[10px] text-gray-500">إلى صف #</label>
-                        <input type="number" id="endRow" value="100"
+                        <label class="text-[10px] text-gray-500">إلى صف # <% if(contactsCount>0){%>(max <%= contactsCount %>)<%}%></label>
+                        <input type="number" id="endRow" value="<%= contactsCount || 100 %>"
                             class="w-full text-sm border border-gray-200 rounded-lg p-2 focus:border-brand-green outline-none">
                     </div>
                 </div>

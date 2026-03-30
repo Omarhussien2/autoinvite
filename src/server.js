@@ -308,7 +308,14 @@ app.get('/campaigns/:id/edit', isAuthenticated, async (req, res) => {
 app.get('/campaigns/:id/run', isAuthenticated, async (req, res) => {
     const result = await db.query('SELECT * FROM campaigns WHERE id = $1 AND tenant_id = $2', [req.params.id, req.session.tenantId]);
     if (result.rows.length === 0) return res.status(404).send('Campaign not found');
-    res.renderPage('dashboard/run-campaign', { pageTitle: 'تنفيذ الحملة', pageSubtitle: 'متابعة الإرسال مباشرة', activePage: 'campaigns', breadcrumb: { href: '/campaigns' }, useSocket: true, campaign: result.rows[0], tenantName: req.session.tenantName });
+    const campaign = result.rows[0];
+    let contactsCount = 0;
+    try {
+        const { loadContacts } = require('./core');
+        const contacts = await loadContacts(campaign.contacts_path);
+        contactsCount = contacts.length;
+    } catch (e) { /* file may not exist yet */ }
+    res.renderPage('dashboard/run-campaign', { pageTitle: 'تنفيذ الحملة', pageSubtitle: 'متابعة الإرسال مباشرة', activePage: 'campaigns', breadcrumb: { href: '/campaigns' }, useSocket: true, campaign, contactsCount, tenantName: req.session.tenantName });
 });
 
 // --- ASSETS & STATIC ---

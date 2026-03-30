@@ -59,11 +59,16 @@ router.post('/start', async (req, res) => {
         }
 
         const contacts = await loadContacts(contactsPath);
-        const start = parseInt(startRow) || 1;
-        const end = parseInt(endRow) || contacts.length;
 
-        if (start < 1 || end > contacts.length || start > end) {
-            return res.status(400).json({ success: false, message: 'Invalid Row Range' });
+        if (!contacts || contacts.length === 0) {
+            return res.status(400).json({ success: false, message: 'ملف الأرقام فارغ أو غير صالح' });
+        }
+
+        const start = Math.max(1, parseInt(startRow) || 1);
+        const end = Math.min(parseInt(endRow) || contacts.length, contacts.length);
+
+        if (start > end) {
+            return res.status(400).json({ success: false, message: 'صف البداية أكبر من صف النهاية' });
         }
 
         if (!global.stopBatchRequested) global.stopBatchRequested = {};

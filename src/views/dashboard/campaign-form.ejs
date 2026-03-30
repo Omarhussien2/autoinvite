@@ -38,9 +38,9 @@
                                 <input type="file" id="contactsUpload" accept=".csv, .xlsx, .xls" <%=campaign ? ''
                                     : 'required' %> class="absolute inset-0 w-full h-full opacity-0 cursor-pointer
                                 z-10">
-                                <div
+                                <div id="contactsUploadLabel"
                                     class="w-full px-4 py-2.5 rounded-xl border border-dashed border-gray-300 text-xs text-center text-gray-500 group-hover:border-brand-green transition text-ellipsis overflow-hidden whitespace-nowrap">
-                                    <%= campaign ? 'تحديث ملف الأرقام 📊' : 'ارفع ملف الأسماء 📊' %>
+                                    <%= campaign && campaign.contacts_path ? '📊 ' + campaign.contacts_path.split('/').pop() : (campaign ? 'تحديث ملف الأرقام 📊' : 'ارفع ملف الأسماء 📊') %>
                                 </div>
                             </div>
                         </div>

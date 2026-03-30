@@ -39,6 +39,21 @@
         const imgInput = document.getElementById('imgUpload');
         if (imgInput) imgInput.addEventListener('change', onImageUpload);
 
+        // Contacts file upload — show filename feedback
+        const contactsInput = document.getElementById('contactsUpload');
+        const contactsLabel = document.getElementById('contactsUploadLabel');
+        if (contactsInput && contactsLabel) {
+            contactsInput.addEventListener('change', function () {
+                if (this.files && this.files[0]) {
+                    const fileName = this.files[0].name;
+                    const fileSize = (this.files[0].size / 1024).toFixed(0);
+                    contactsLabel.textContent = '✅ ' + fileName + ' (' + fileSize + ' KB)';
+                    contactsLabel.classList.remove('text-gray-500', 'border-gray-300');
+                    contactsLabel.classList.add('text-brand-green', 'border-brand-green');
+                }
+            });
+        }
+
         // Controls
         document.getElementById('fontSize').addEventListener('input', function () {
             fontSize = parseInt(this.value) || 60;
