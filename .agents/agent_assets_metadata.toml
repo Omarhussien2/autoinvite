@@ -6,3 +6,9 @@ id = "mTEaz6ZApQ_-fQd3QgqI-"
 uri = "file://verification-report.md"
 type = "text"
 title = "تقرير المراجعة المحدث — فرع SaaS Transformation"
+
+[[outputs]]
+id = "Z3jY5grGSTNA6DpIzriss"
+uri = "file://ZERO-DAY-REPORT.md"
+type = "text"
+title = "ZERO-DAY-REPORT — Security & Performance Audit"

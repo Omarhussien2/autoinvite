@@ -77,7 +77,6 @@ class WhatsAppManager {
                 '--disable-software-rasterizer',
                 '--disable-extensions',
                 '--no-zygote',                      // Saves ~50MB RAM per session on VPS
-                '--single-process',                 // Further RAM reduction (trades for slight stability)
                 '--disable-background-networking',
                 '--disable-default-apps',
                 '--disable-sync',
@@ -134,9 +133,15 @@ class WhatsAppManager {
             this.stopClient(tenantId);
         });
 
-        // Initialize and catch errors
-        client.initialize().catch(err => {
+        // Initialize and catch errors — always destroy before removing to prevent zombie Chromium
+        client.initialize().catch(async err => {
             console.error(`[Tenant ${tenantId}] WhatsApp Init Error:`, err.message);
+            try {
+                await client.destroy();
+            } catch (_) {
+                // If destroy fails, attempt to kill the underlying browser process directly
+                try { client.pupBrowser && client.pupBrowser.process() && client.pupBrowser.process().kill('SIGKILL'); } catch (_2) {}
+            }
             this.clients.delete(tenantId);
             this.states.set(tenantId, { status: 'ERROR', error: err.message });
         });

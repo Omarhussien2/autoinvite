@@ -7,6 +7,9 @@ const SAUDI_PREFIX = '966';
 
 const { translate } = require('google-translate-api-x');
 
+// In-memory translation cache — prevents hammering Google Translate API with duplicate names
+const _translateCache = new Map();
+
 /**
  * Enhanced English-to-Arabic name processing with Google Translate fallback.
  * @param {string} name - The input name (could be English or Arabic).
@@ -68,10 +71,16 @@ async function processName(name) {
         return nameMap[lowerName];
     }
 
-    // 2. Fallback: Google Translate (Async)
+    // 2. Fallback: Google Translate (Async) — with cache to prevent per-contact API spam
+    if (_translateCache.has(lowerName)) {
+        return _translateCache.get(lowerName);
+    }
+
     try {
         const res = await translate(trimmedName, { to: 'ar' });
-        return res.text; // Return the translated text
+        const translated = res.text;
+        _translateCache.set(lowerName, translated);
+        return translated;
     } catch (error) {
         console.error(`Translation failed for ${trimmedName}:`, error.message);
         return trimmedName; // Fallback to original if translation fails

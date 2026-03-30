@@ -10,6 +10,11 @@
     let successCount = 0, failCount = 0, totalSent = 0;
     let isRunning = false;
 
+    // DOM performance: batch log writes and throttle layout-forcing scrollTop
+    let _logQueue = [];
+    let _logFlushPending = false;
+    const MAX_LOG_LINES = 500; // Cap DOM nodes to prevent unbounded memory growth
+
     /* ──────────── Init ──────────── */
     function initRunner(socket, campaignId) {
         _socket = socket;
@@ -185,26 +190,51 @@
 
     /* ──────────── UI Helpers ──────────── */
     function appendLog(message, type) {
-        const logsArea = document.getElementById('logs-area');
-        if (!logsArea) return;
+        _logQueue.push({ message, type, time: new Date() });
+        if (!_logFlushPending) {
+            _logFlushPending = true;
+            requestAnimationFrame(flushLogs);
+        }
+    }
 
-        // Remove placeholder text on first real log
+    function flushLogs() {
+        _logFlushPending = false;
+        if (_logQueue.length === 0) return;
+
+        const logsArea = document.getElementById('logs-area');
+        if (!logsArea) { _logQueue = []; return; }
+
         const placeholder = logsArea.querySelector('p.italic');
         if (placeholder) placeholder.remove();
 
-        const line = document.createElement('p');
-        line.className = `log-${type || 'INFO'} mb-1`;
+        const fragment = document.createDocumentFragment();
+        let addedCount = 0;
 
-        const time = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        line.innerHTML = `<span class="text-gray-600 text-[10px] ml-2 font-mono">${time}</span>${escapeHtml(message)}`;
-        logsArea.appendChild(line);
+        while (_logQueue.length > 0) {
+            const { message, type, time } = _logQueue.shift();
+            const line = document.createElement('p');
+            line.className = `log-${type || 'INFO'} mb-1`;
+            const timeStr = time.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            line.innerHTML = `<span class="text-gray-600 text-[10px] ml-2 font-mono">${timeStr}</span>${escapeHtml(message)}`;
+            fragment.appendChild(line);
+            addedCount++;
+        }
+
+        logsArea.appendChild(fragment);
+
+        // Trim old entries if log exceeds MAX_LOG_LINES to prevent memory bloat
+        while (logsArea.childElementCount > MAX_LOG_LINES) {
+            logsArea.removeChild(logsArea.firstElementChild);
+        }
+
+        // Single scrollTop per frame — not per log entry
         logsArea.scrollTop = logsArea.scrollHeight;
 
-        // Update log count
+        // Update log count once per flush
         const countEl = document.getElementById('log-count');
         if (countEl) {
             const current = parseInt(countEl.textContent) || 0;
-            countEl.textContent = (current + 1) + ' سجل';
+            countEl.textContent = (current + addedCount) + ' سجل';
         }
     }
 

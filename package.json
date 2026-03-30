@@ -21,6 +21,7 @@
     "dotenv": "^17.3.1",
     "ejs": "^5.0.1",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.3.1",
     "express-session": "^1.19.0",
     "fs-extra": "^11.3.3",
     "google-translate-api-x": "^10.7.2",

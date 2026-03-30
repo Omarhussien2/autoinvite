@@ -16,7 +16,7 @@ router.post('/init', async (req, res) => {
         await WhatsAppManager.getClient(req.tenantId);
         res.json({ success: true, message: 'Initialization started' });
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
 
@@ -84,7 +84,7 @@ router.post('/start', async (req, res) => {
 
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
 
@@ -113,7 +113,7 @@ router.post('/test', async (req, res) => {
         res.json({ success: true, message: 'Test message sent' });
     } catch (err) {
         console.error('Test Err:', err);
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
 
@@ -129,7 +129,7 @@ router.post('/disconnect', async (req, res) => {
         await WhatsAppManager.stopClient(req.tenantId);
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
 

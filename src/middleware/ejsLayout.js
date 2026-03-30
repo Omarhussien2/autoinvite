@@ -20,7 +20,7 @@ function layoutMiddleware(req, res, next) {
         ejs.renderFile(pageFilePath, { ...locals, __dirname: viewsDir }, { views: [viewsDir] }, (err, pageHtml) => {
             if (err) {
                 console.error('EJS Page Render Error:', err);
-                return res.status(500).send('<pre>' + err.message + '</pre>');
+                return res.status(500).send('<h1>500 — خطأ في السيرفر</h1>');
             }
 
             // Then render the layout, passing the page HTML as `body`
@@ -33,7 +33,7 @@ function layoutMiddleware(req, res, next) {
             ejs.renderFile(layoutPath, layoutLocals, { views: [viewsDir] }, (err2, fullHtml) => {
                 if (err2) {
                     console.error('EJS Layout Render Error:', err2);
-                    return res.status(500).send('<pre>' + err2.message + '</pre>');
+                    return res.status(500).send('<h1>500 — خطأ في السيرفر</h1>');
                 }
                 res.send(fullHtml);
             });

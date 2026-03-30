@@ -28,7 +28,7 @@ router.post('/', isAuthenticated, tenantScope, upload.fields([{ name: 'template'
 
         res.json({ success: true, campaignId: result.rows[0].id });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
 
@@ -38,7 +38,7 @@ router.get('/', isAuthenticated, tenantScope, async (req, res) => {
         const result = await db.query('SELECT * FROM campaigns WHERE tenant_id = $1 ORDER BY created_at DESC', [req.tenantId]);
         res.json({ success: true, campaigns: result.rows });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
 
@@ -50,7 +50,7 @@ router.get('/:id', isAuthenticated, tenantScope, async (req, res) => {
         if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
         res.json({ success: true, campaign });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
 
@@ -79,7 +79,7 @@ router.put('/:id', isAuthenticated, tenantScope, upload.fields([{ name: 'templat
         await db.query(query, params);
         res.json({ success: true });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
 
@@ -89,7 +89,7 @@ router.delete('/:id', isAuthenticated, tenantScope, async (req, res) => {
         await db.query('DELETE FROM campaigns WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenantId]);
         res.json({ success: true });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
 
@@ -130,7 +130,7 @@ router.get('/:id/stats', isAuthenticated, tenantScope, async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
 

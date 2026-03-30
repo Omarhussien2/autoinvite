@@ -1,11 +1,21 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
+const rateLimit = require('express-rate-limit');
 const db = require('../database/pg-client');
 
 const router = express.Router();
 
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    skipSuccessfulRequests: true,
+    message: { success: false, message: 'محاولات تسجيل دخول كثيرة. حاول بعد 15 دقيقة.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
 // Login Endpoint
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
@@ -41,6 +51,14 @@ router.post('/register', async (req, res) => {
 
     if (!name || !username || !password) {
         return res.status(400).json({ success: false, message: 'جميع الحقول مطلوبة' });
+    }
+
+    if (password.length < 8) {
+        return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' });
+    }
+
+    if (username.length < 3 || username.length > 50 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+        return res.status(400).json({ success: false, message: 'اسم المستخدم يجب أن يكون 3-50 حرفاً (أحرف إنجليزية وأرقام فقط)' });
     }
 
     try {

@@ -37,12 +37,12 @@ class BackgroundQueue {
                 if (state) state.status = 'READY';
 
                 WhatsAppManager.emitToTenant(tenantId, 'working_state', false);
-                WhatsAppManager.emitToTenant(tenantId, 'log', { msg: 'Batch processing finished.', type: 'DONE' });
+                WhatsAppManager.emitToTenant(tenantId, 'log', { message: 'Batch processing finished.', type: 'DONE' });
                 this.jobs.delete(tenantId);
 
                 if (campaignId) {
                     await db.query('UPDATE campaigns SET last_sent_row = $1, status = $2 WHERE id = $3', [endRow, 'completed', campaignId]);
-                    WhatsAppManager.emitToTenant(tenantId, 'log', { msg: `تم إكمال الحملة بنجاح ✅`, type: 'SUCCESS' });
+                    WhatsAppManager.emitToTenant(tenantId, 'log', { message: `تم إكمال الحملة بنجاح ✅`, type: 'SUCCESS' });
                 }
 
             })
