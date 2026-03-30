@@ -138,7 +138,7 @@
 
 <script src="/js/campaign-editor.js"></script>
 <script>
-    window.CAMPAIGN_DATA = <% - campaign ? JSON.stringify(campaign) : 'null' %>;
+    window.CAMPAIGN_DATA = <%- campaign ? JSON.stringify(campaign) : 'null' %>;
     document.addEventListener('DOMContentLoaded', function () {
         initCampaignEditor();
     });

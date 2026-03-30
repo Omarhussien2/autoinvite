@@ -161,13 +161,23 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
 app.get('/campaigns', isAuthenticated, async (req, res) => {
     try {
         const result = await db.query('SELECT * FROM campaigns WHERE tenant_id = $1 ORDER BY created_at DESC', [req.session.tenantId]);
+        const sentResult = await db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1', [req.session.tenantId]);
+        const delivered = parseInt(sentResult.rows[0].count || 0);
+        const limit = 5000;
+        const remaining = Math.max(0, limit - delivered);
+        const progressPct = Math.min(100, Math.round((delivered / limit) * 100));
+
         res.renderPage('dashboard/campaigns', {
             pageTitle: 'الحملات',
             pageSubtitle: 'إضافة وإدارة حملات الواتساب',
             activePage: 'campaigns',
             campaigns: result.rows,
             tenantName: req.session.tenantName,
-            quota: { limit: 5000, delivered: 0, remaining: 5000, progressPct: 0 }
+            quota: { limit, delivered, remaining, progressPct },
+            topbarActions: `<a href="/campaigns/new" class="inline-flex items-center gap-1.5 bg-brand-dark text-white text-xs px-3.5 py-2 rounded-xl font-medium hover:opacity-90 transition shadow-sm">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                إنشاء حملة
+            </a>`
         });
     } catch (err) {
         res.status(500).send('Error loading campaigns');
