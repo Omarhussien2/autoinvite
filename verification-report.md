@@ -1,155 +1,196 @@
-# AutoInvite SaaS — Backend Verification Report
-**Auditor:** Principal QA Engineer / System Architect  
-**Date:** 2026-03-30  
-**Scope:** Full `src/` directory audit, user journey trace, gap analysis  
+# AutoInvite SaaS — تقرير المراجعة المحدث
+**المراجع:** Principal QA Engineer / System Architect  
+**التاريخ:** 2026-03-30  
+**الفرع:** `001-saas-transformation`  
+**المقارنة:** مراجعة كاملة بالنسبة للتقرير الأول (النسخة القديمة)
 
 ---
 
-## Executive Summary
+## ملخص تنفيذي
 
-The codebase currently represents a **functional single-tenant tool**, not a SaaS platform. The claim that a "Multi-Tenancy phase" has been completed is **not reflected anywhere in the code**. Zero multi-tenancy primitives (tenant_id columns, tenant-scoped queries, per-tenant WhatsApp sessions) exist. The backend must be considered **pre-MVP** before any SaaS frontend can be connected.
-
----
-
-## Task 1: Code Audit & Architecture Review
-
-### ✅ Successfully Verified Features
-
-| # | Feature | File(s) | Status |
-|---|---------|---------|--------|
-| 1 | Express server boots on port 5000 | `server.js` | ✅ Working |
-| 2 | Session-based login / logout | `routes/auth.js` | ✅ Working |
-| 3 | `GET /auth/me` session check endpoint | `routes/auth.js` | ✅ Working |
-| 4 | `isAuthenticated` middleware guards API routes | `middleware/auth.js` | ✅ Working |
-| 5 | Campaign CRUD (Create, List, Get, Update, Delete) | `routes/campaigns.js` | ✅ Working |
-| 6 | Campaign progress tracking (`last_sent_row`) | `routes/campaigns.js` | ✅ Working |
-| 7 | File upload (template image + CSV contacts) via Multer | `routes/campaigns.js` | ✅ Working |
-| 8 | Phone normalization — Saudi 05x, 5x, 966x formats | `utils/dataProcessor.js` | ✅ Working |
-| 9 | Phone normalization — Egyptian 01x, 20x formats | `utils/normalizer.js` | ✅ Working |
-| 10 | Arabic name transliteration from English mappings | `utils/dataProcessor.js` | ✅ Working |
-| 11 | Weighted random message selection (Spintax-lite) | `core.js` | ✅ Working |
-| 12 | Anti-ban randomized delay (20–45 seconds) | `core.js` | ✅ Working |
-| 13 | WhatsApp QR code generated and emitted via Socket.io | `server.js` | ✅ Working |
-| 14 | WhatsApp `ready` event broadcasts phone number | `server.js` | ✅ Working |
-| 15 | Stop batch via `stop_batch` Socket.io event | `server.js` | ✅ Working |
-| 16 | In-campaign deduplication via `sent_logs` table | `core.js` | ✅ Working |
-| 17 | Temp image cleanup after send | `core.js` | ✅ Working |
-| 18 | Log result to file (`logs/report.txt`) | `utils/logger.js` | ✅ Working |
-| 19 | SQLite database with better-sqlite3 | `database/db.js` | ✅ Working |
-| 20 | Chromium path resolved at runtime from system PATH | `core.js` | ✅ Working |
+التحول نحو SaaS حقيقي وملموس. **6 من أصل 6 مشاكل حرجة** من التقرير الأول تم معالجتها معمارياً. البنية الجديدة صحيحة في مجملها. ما تبقى هو **6 أخطاء حرجة جديدة** معظمها في الأسلاك الداخلية (Wiring) وليس في التصميم — أي أن الهيكل صح لكن بعض الاتصالات مقطوعة بعد.
 
 ---
 
-## Task 2: Bug, Gap & Missing Logic Table
+## القسم الأول: ما تم إصلاحه ✅ (مقارنة بالتقرير الأول)
 
-### 🔴 CRITICAL
-
-| # | ID | Location | Description | Impact |
-|---|---|---------|------------|--------|
-| 1 | **C-01** | Entire codebase | **No multi-tenancy exists.** There is no `tenant_id` column in `users`, `campaigns`, or `sent_logs`. All campaign queries return data for ALL users (`SELECT * FROM campaigns`). Any logged-in user can read, edit, or delete any other user's campaigns. | Complete data isolation failure. SaaS is impossible without this. |
-| 2 | **C-02** | `core.js` line 13 | **Single global WhatsApp client.** One `Client` instance is shared by all users. In a multi-tenant context, every tenant would share the same WhatsApp session — scanning one QR would disconnect everyone else. | SaaS multi-tenant WhatsApp is architecturally impossible in current form. |
-| 3 | **C-03** | `core.js` `loadContacts()` (line 50) | **Contact file path is hardcoded** to `'../data/data - Sheet1.csv'`. Even though campaigns store a `contacts_path` field, it is **never passed into `loadContacts()`**. Every campaign run reads the same static CSV file regardless of which campaign was selected. | All campaigns silently send to the same contact list — wrong contacts. |
-| 4 | **C-04** | `utils/generator.js` line 19 | **Template image path is hardcoded** to `config.image.templatePath` (`assets/TEMPLATE2.png`). Campaigns store their own `template_path` and `canvas_config`, but `generateImage()` ignores both completely. | Every invitation uses the same hardcoded design regardless of campaign settings. |
-| 5 | **C-05** | `server.js` | **No background job queue.** `processBatch` runs in-band inside the Socket.io event handler. The Node.js event loop is occupied for the entire duration (potentially hours). A second user attempting to start a batch is silently blocked by a single in-memory `currentState` flag. | Server freezes for all tenants while any one batch is running. Not scalable beyond 1 concurrent user. |
-| 6 | **C-06** | `routes/auth.js` | **No tenant registration endpoint.** There is no `POST /auth/register`. The only way to create a user is via `database/init.js` which hardcodes `admin / admin123` as the only account. | A SaaS cannot onboard new tenants. |
-
----
-
-### 🟠 HIGH
-
-| # | ID | Location | Description | Impact |
-|---|---|---------|------------|--------|
-| 7 | **H-01** | `routes/campaigns.js` lines 104, 133 | **No ownership check on PUT/DELETE.** `PUT /:id` and `DELETE /:id` do not verify the campaign belongs to the requesting user. Any authenticated user can destroy any other user's campaign. | Unauthorized data modification across users. |
-| 8 | **H-02** | `server.js` line 23 | **Session secret is hardcoded.** `'autoinvite-v2-secret-key'` is a plaintext constant in source code. Sessions can be forged by anyone who reads the repo. | Session forgery vulnerability. Must be an environment variable. |
-| 9 | **H-03** | `database/db.js` line 5 | **`verbose: console.log` is enabled in production.** Every SQL statement — including queries containing user passwords and phone numbers — is printed to stdout. | Performance degradation + potential PII exposure in logs. |
-| 10 | **H-04** | `routes/campaigns.js` lines 18–28 | **No file type validation in Multer.** The upload handler accepts any file extension and MIME type. A user can upload a `.js` script disguised as a template image. | Remote code execution risk if uploaded files are ever executed or `require()`d. |
-| 11 | **H-05** | `routes/auth.js` | **No brute-force / rate limiting on login.** Unlimited password attempts are accepted. | Credential stuffing and brute-force attacks. |
-| 12 | **H-06** | `config/settings.js` line 6 | **Template path references `TEMPLATE2.png`** which exists in `/assets`, however the image generation uses global config, not the campaign's uploaded template (see C-04). Additionally the global config uses `assets/TEMPLATE2.png` but some parts of the code were written for `template.png`. Any mismatch will cause a runtime crash mid-batch with no recovery. | Batch crashes silently after investing hours in setup. |
+| ID القديم | المشكلة | الحالة |
+|-----------|---------|--------|
+| **C-01** | لا يوجد tenant_id في أي جدول | ✅ مُصلح — جميع الجداول (tenants, campaigns, contacts, sent_logs) بها UUID tenant_id مع FK |
+| **C-02** | WhatsApp Client واحد مشترك بين الجميع | ✅ مُصلح — WhatsAppManager يدير Map كاملة (tenantId → client) مع عزل تام |
+| **C-03** | مسار ملف الاتصالات مُضمَّن في الكود | ✅ مُصلح — loadContacts() تقبل customFilePath وتقرأ مسار الحملة |
+| **C-04** | قالب الصورة مُضمَّن ويتجاهل إعدادات الحملة | ✅ مُصلح — generateImage() تقبل templatePath و canvasConfig لكل حملة |
+| **C-05** | لا يوجد Background Job Queue، السيرفر يتجمد | ✅ مُصلح — BackgroundQueue يشغّل processBatch بدون await |
+| **C-06** | لا يوجد Tenant Registration | ✅ مُصلح — POST /auth/register موجود وكامل |
+| **H-01** | PUT/DELETE بدون فحص الملكية | ✅ مُصلح — كل query تحتوي `AND tenant_id = $X` |
+| **M-01** | تكرار دالتي normalizePhone بمنطق مختلف | ✅ مُصلح — dataProcessor.js أصبح المصدر الرئيسي |
+| **M-02** | state.js يُصدَّر لكن لا يُستخدم | ✅ تم استبداله بنظام أفضل (BackgroundQueue + WhatsAppManager states) |
 
 ---
 
-### 🟡 MEDIUM
+## القسم الثاني: جدول الأخطاء والفجوات الحالية
 
-| # | ID | Location | Description | Impact |
-|---|---|---------|------------|--------|
-| 13 | **M-01** | `utils/normalizer.js` vs `utils/dataProcessor.js` | **Duplicate `normalizePhone` functions with different logic.** `normalizer.js` handles Egyptian numbers (`01x`). `dataProcessor.js` does not. `core.js` imports from `dataProcessor.js`. Egyptian numbers sent via the test message handler (server.js) work, but Egyptian numbers in a batch CSV will be dropped as invalid. | Silent data loss for non-Saudi contacts in batch mode. |
-| 14 | **M-02** | `utils/state.js` | **`state.js` is completely orphaned.** `loadSession()`, `saveSession()`, `clearSession()` are exported but imported by nobody. The session resume feature (crash recovery) was planned but never wired up. | Incomplete feature. A crash mid-batch loses all progress, forcing restart from row 1. |
-| 15 | **M-03** | `utils/dataProcessor.js` | **`processContacts()` is exported but never called.** This is the deduplication/validation pipeline for CSV uploads. It was never integrated into the campaign creation flow. | Uploaded CSVs are stored raw with no validation. Bad data silently enters the pipeline. |
-| 16 | **M-04** | `routes/campaigns.js` line 45 | **`canvas_config` is saved but never used.** The per-campaign font, size, color, and position settings are stored in the DB but `generateImage()` always reads `config.image.*` globals. Campaign customization is a dead feature. | UI allows customization that has zero effect on output. |
-| 17 | **M-05** | `server.js` | **In-memory session store (MemoryStore).** `express-session` defaults to MemoryStore which leaks memory on every new session. Under any significant load the server will run out of RAM. | Memory leak — server will eventually crash under real traffic. |
-| 18 | **M-06** | `database/init.js` | **`init.js` is never called by `server.js`.** If the database file does not have the required tables (fresh environment), the server will crash on startup. There is no automatic bootstrap check. | First-time deployment will fail without manual intervention. |
-| 19 | **M-07** | `core.js` line 86 | **`currentRow` variable is declared but never used.** Dead code. | Minor — no functional impact. |
+### 🔴 حرجة (CRITICAL) — تمنع التشغيل
 
----
-
-### 🔵 LOW
-
-| # | ID | Location | Description | Impact |
-|---|---|---------|------------|--------|
-| 20 | **L-01** | `src/index.js` | **`index.js` is a dead CLI entry point** that calls `client.initialize()` independently. If run accidentally alongside `server.js`, it creates a second simultaneous WhatsApp session initialization on the same `LocalAuth` storage, corrupting the session. | Risk of WhatsApp session corruption if script is run by mistake. |
-| 21 | **L-02** | `core.js` line 2 | **`qrcode-terminal` is imported in `core.js` but never used there.** QR display is handled in `server.js`. | Dead import. Minor noise. |
-| 22 | **L-03** | `server.js` line 186 | **Unused variable `egyptianLocal`** in `send_test` handler. The value is computed and immediately discarded. | Dead code. No functional impact. |
-| 23 | **L-04** | `middleware/auth.js` line 7 | **`req.path.startsWith('/api')` detection is unreliable** in router-mounted contexts. When middleware is attached at the router level, `req.path` is relative. However since `isAuthenticated` is always applied per-route in campaigns.js, this is currently harmless. | Fragile pattern that will break if middleware placement changes. |
+| # | ID | الملف | الوصف | التأثير |
+|---|---|-------|------|---------|
+| 1 | **C-01** | `src/core.js` سطر 161 | **tenant_id مفقود في INSERT إلى sent_logs.** الكود: `INSERT INTO sent_logs (campaign_id, phone, name)` — لا يتضمن tenant_id رغم وجوده في الـ Schema. كل استعلامات `SELECT COUNT(*) FROM sent_logs WHERE tenant_id = ?` ستُرجع صفراً دائماً. | إحصائيات لوحة التحكم (الرسائل المُرسلة) ستظهر 0 دائماً لكل المستأجرين. |
+| 2 | **C-02** | `package.json` سطر 7 | **سكريبت start خاطئ.** القيمة الحالية: `"node src/database/init.js && node src/server.js"` — يشغّل `init.js` القديم (SQLite) وليس `init_saas.js` (PostgreSQL). السيرفر سيُعطي خطأ على الفور. | السيرفر لا يعمل على أي بيئة نظيفة. |
+| 3 | **C-03** | `src/core/WhatsAppManager.js` سطر 57 | **لا يوجد executablePath للـ Chromium.** `puppeteer: { headless: true, args: [...] }` — بدون `executablePath`، سيحاول استخدام Chromium المُدمج في puppeteer الذي لا يوجد على NixOS/Replit/VPS بدون تثبيت مسبق. | WhatsApp Client لن يُهيَّأ لأي مستأجر على بيئة الاستضافة. |
+| 4 | **C-04** | `src/routes/whatsapp.api.js` سطر 72 | **Null Reference على tenantId جديد.** `WhatsAppManager.states.get(tenantId).status = 'WORKING'` — إذا لم يُضف المستأجر client بعد، `states.get()` تُرجع undefined، والإسناد يُحدث `TypeError: Cannot set properties of undefined`. | خطأ مفاجئ عند بدء أي حملة لمستأجر لم يُهيئ WhatsApp بعد. |
+| 5 | **C-05** | `src/database/pg-client.js` سطر 13 | **`process.exit(-1)` عند أي خطأ بـ PostgreSQL.** `pool.on('error', (err) => { process.exit(-1) })` — أي مشكلة في الاتصال بالـ Pool (timeout، إعادة اتصال، إلخ) ستُنهي السيرفر فوراً بدون إشعار. | السيرفر يسقط في الإنتاج بسبب انقطاع مؤقت في قاعدة البيانات. |
+| 6 | **C-06** | `src/server.js` سطر 26 | **PORT الافتراضي 3000 بدلاً من 5000.** `const PORT = process.env.PORT \|\| 3000` — على Replit، يجب أن يكون الافتراضي 5000 أو يُضبط عبر متغير بيئي واضح. | الواجهة لا تظهر في Preview على Replit. |
 
 ---
 
-## Task 3: Gap Analysis & API Readiness
+### 🟠 عالية (HIGH)
 
-### Missing API Endpoints (Frontend Will Definitely Need)
-
-| Method | Route | Status | Notes |
-|--------|-------|--------|-------|
-| `POST` | `/auth/register` | ❌ MISSING | SaaS tenant self-registration |
-| `GET` | `/auth/me` | ✅ EXISTS | Returns `{ loggedIn, username }` |
-| `POST` | `/auth/login` | ✅ EXISTS | Returns `{ success, redirect }` |
-| `POST` | `/auth/logout` | ✅ EXISTS | Clears session |
-| `POST` | `/api/campaigns` | ✅ EXISTS | Create campaign (multipart/form-data) |
-| `GET` | `/api/campaigns` | ✅ EXISTS | List all campaigns (unscoped — no tenant filter) |
-| `GET` | `/api/campaigns/:id` | ✅ EXISTS | Get single campaign |
-| `PUT` | `/api/campaigns/:id` | ✅ EXISTS | Update campaign (no ownership check) |
-| `DELETE` | `/api/campaigns/:id` | ✅ EXISTS | Delete campaign (no ownership check) |
-| `PATCH` | `/api/campaigns/:id/progress` | ✅ EXISTS | Update `last_sent_row` |
-| `GET` | `/api/campaigns/:id/contacts` | ❌ MISSING | Preview/count contacts from campaign's CSV |
-| `GET` | `/api/campaigns/:id/logs` | ❌ MISSING | Paginated sent_logs for a campaign |
-| `GET` | `/api/campaigns/:id/stats` | ❌ MISSING | Total sent / failed / pending counts |
-| `GET` | `/api/whatsapp/status` | ❌ MISSING | REST equivalent of Socket.io status (needed for page load) |
-| `GET` | `/api/settings` | ❌ MISSING | Read delay, daily limit, safe_mode settings |
-| `PUT` | `/api/settings` | ❌ MISSING | Update global settings |
-| `GET` | `/api/logs` | ❌ MISSING | Fetch/download the `logs/report.txt` file |
-| `GET` | `/api/users` | ❌ MISSING | List all users (admin only — needed for SaaS user management) |
-| `POST` | `/api/users` | ❌ MISSING | Create a user / invite a tenant |
-| `DELETE` | `/api/users/:id` | ❌ MISSING | Remove a user |
+| # | ID | الملف | الوصف | التأثير |
+|---|---|-------|------|---------|
+| 7 | **H-01** | `src/server.js` سطر 37 | **Session Secret مُضمَّن في الكود.** `secret: 'autoinvite-v3-saas-secret'` — يجب أن يكون `process.env.SESSION_SECRET`. | ثغرة أمنية — من يقرأ الكود يستطيع تزوير الجلسات. |
+| 8 | **H-02** | `src/utils/dataProcessor.js` | **normalizePhone لا تدعم الأرقام المصرية في المعالجة الدفعية.** الدالة تعالج سعودي (05x, 5x, 966x) لكن لا تعالج مصري (01x, 20x). normalizer.js يدعمها لكن core.js يستورد من dataProcessor.js فقط. | الأرقام المصرية ستُحذف كـ "Invalid" خلال batch processing بصمت. |
+| 9 | **H-03** | `src/utils/dataProcessor.js` `processName()` | **Google Translate API تُستدعى لكل اسم في الـ Batch.** طلب HTTP خارجي لكل جهة اتصال غير معروفة. 500 جهة اتصال = 500 طلب HTTP متتالي. Rate limiting أو failure يُوقف كل البيانات. | تباطؤ شديد في الإرسال + خطر توقف الـ Batch كامل عند انقطاع الـ API. |
+| 10 | **H-04** | `src/middleware/ejsLayout.js` سطر 23 | **كشف Stack Trace للمستخدم.** `res.status(500).send('<pre>' + err.message + '</pre>')` — يُظهر تفاصيل داخلية في حالة خطأ EJS. | كشف معلومات النظام في الإنتاج. |
+| 11 | **H-05** | `src/routes/campaigns.js` | **PATCH /:id/progress مفقود.** كان موجوداً في النسخة القديمة لكنه لم يُنقل للنسخة الجديدة. التحديث يتم الآن فقط في processBatch مباشرة (عبر core.js)، لكن ليس من واجهة API مستقلة. | Frontend لا يمكنه تحديث تقدم الحملة من الخارج. |
 
 ---
 
-### Background Job Queue — Is It Implemented?
+### 🟡 متوسطة (MEDIUM)
 
-**No. It is not implemented.**
-
-The current architecture runs `processBatch()` synchronously inside a Socket.io event callback. The implications:
-
-1. **The Node.js process is occupied** for the entire batch duration (potentially hours with 20–45 second delays between each contact). During this time, the event loop is not free to handle other requests.
-2. **A single in-memory `currentState` flag** prevents concurrent batches from starting. This is not thread-safe and is not tenant-aware. A second tenant connecting cannot run their own campaign.
-3. **If the server restarts mid-batch** (crash, deploy, OOM), the entire batch is lost. No recovery mechanism exists (`state.js` was written for this but is never called).
-4. **The correct architecture** requires a job queue (e.g., `bull`, `bee-queue`, or `p-queue`) with a worker pool, where each tenant's batch is enqueued as an independent job and processed in a dedicated worker thread or process.
-
-**Verdict: 5 tenants sending simultaneously would cause the server to queue only one and silently block the others, with the event loop effectively frozen.**
+| # | ID | الملف | الوصف | التأثير |
+|---|---|-------|------|---------|
+| 12 | **M-01** | البروجكت كله | **لا يوجد `.env.example`.** `pg-client.js` يستخدم `dotenv` لكن لا يوجد ملف مثال يوضح المتغيرات المطلوبة. | مطورون جدد لا يعرفون ما يجب إعداده (DB_USER, DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, SESSION_SECRET). |
+| 13 | **M-02** | `src/server.js` | **MemoryStore للجلسات.** express-session يستخدم MemoryStore الافتراضي الذي يسرب الذاكرة عند وجود مستأجرين كُثر. | تدهور أداء السيرفر على المدى الطويل. |
+| 14 | **M-03** | `src/core/BackgroundQueue.js` سطر 67-73 | **stopJob يحذف المهمة قبل توقفها.** `this.jobs.delete(tenantId)` يحدث فوراً، لكن `processBatch` لا تزال تعمل. مستأجر يضغط Stop ثم Start فوراً سيبدأ مهمتين متوازيتين. | تشغيل حملتين في نفس الوقت لنفس المستأجر — خطر إرسال مضاعف. |
+| 15 | **M-04** | `src/core/BackgroundQueue.js` سطر 31 | **BackgroundQueue لا يُوقف Chromium من النوم.** `processBatch` لا تستدعي `WhatsAppManager.updateActivity(tenantId)` بانتظام خلال التأخيرات الطويلة (20-45 ثانية). إذا كان idleMs = 15 دقيقة وكانت الحملة تعمل، قد يُوقف SleepMonitor الـ Client. | قطع مفاجئ لجلسة WhatsApp أثناء الإرسال — فقدان تقدم الحملة. |
+| 16 | **M-05** | `src/utils/dataProcessor.js` | **processContacts() لا تزال غير مُدمجة.** الدالة مُصدَّرة لكن لا تُستدعى أثناء رفع CSV، مما يعني عدم وجود validation للبيانات المرفوعة. | ملفات CSV بأرقام خاطئة تدخل النظام بدون فحص. |
 
 ---
 
-## Recommended Fix Priority Order
+### 🔵 منخفضة (LOW)
 
-Before any frontend is built, these must be addressed in order:
+| # | ID | الملف | الوصف |
+|---|---|-------|------|
+| 17 | **L-01** | `src/index.js` | ملف CLI قديم لا يزال موجوداً، يُنشئ WhatsApp Client مستقلاً. خطر تعارض مع النظام الجديد إذا شُغّل بالخطأ. |
+| 18 | **L-02** | `src/core.js` | `qrcode-terminal` مُستورَد في core.js القديم لكن لم يُستخدم. |
+| 19 | **L-03** | `src/server.js` | `tenantScope` middleware غير مُستخدم في route `/api/tenant/settings` و `/api/tenant/stats` — يستخدم `req.session.tenantId` مباشرة بدلاً من `req.tenantId`. يعمل لكنه غير متناسق. |
+| 20 | **L-04** | `src/database/init_saas.js` | `process.exit(0)` في نهاية الدالة — إذا استُدعيت كـ module وليس كـ script مستقل، ستُنهي السيرفر. يجب أن تُرجع Promise بدلاً. |
 
-1. **[C-01 + C-02]** Design and implement multi-tenancy: `tenant_id` on all tables, per-tenant WhatsApp client pool, tenant-scoped queries.
-2. **[C-03]** Wire `contacts_path` from the selected campaign into `loadContacts()`.
-3. **[C-04]** Wire `template_path` and `canvas_config` from the campaign into `generateImage()`.
-4. **[C-06]** Add `POST /auth/register` endpoint.
-5. **[C-05]** Implement a background job queue (even a simple `bull`-based single-worker queue) to free the event loop.
-6. **[H-01]** Add ownership checks (`WHERE id = ? AND user_id = ?`) to all campaign mutations.
-7. **[H-02]** Move session secret to `SESSION_SECRET` environment variable.
-8. **[H-03]** Remove `verbose: console.log` from `db.js` for production.
-9. **[M-01]** Consolidate `normalizePhone` — use `normalizer.js` (which handles both Saudi + Egyptian) everywhere.
-10. **[M-02]** Wire `state.js` into `processBatch` for crash recovery.
-11. **[M-05]** Replace MemoryStore with `connect-sqlite3` or `better-sqlite3-session-store`.
-12. Add all 8 missing API endpoints listed above.
+---
+
+## القسم الثالث: User Journey Trace — التحقق من المسار الكامل
+
+### 1. التسجيل والدخول ✅ مع ملاحظة
+
+| الخطوة | الملف | الحالة | الملاحظة |
+|--------|-------|--------|---------|
+| POST /auth/register | `routes/auth.js` | ✅ | يحفظ tenant في PostgreSQL مع إعدادات افتراضية |
+| POST /auth/login | `routes/auth.js` | ✅ | يستعلم tenants ويضع tenantId في session |
+| Session Setup | `server.js` | ✅ | tenantId, tenantName في الجلسة |
+| isAuthenticated | `middleware/auth.js` | ✅ | يفحص session.tenantId بدلاً من userId |
+| tenantScope | `middleware/tenantScope.js` | ✅ | يُعيّن req.tenantId من الجلسة |
+
+### 2. إنشاء الحملة وعزل التخزين ✅ مع خلل
+
+| الخطوة | الملف | الحالة | الملاحظة |
+|--------|-------|--------|---------|
+| رفع الملفات | `middleware/uploadStorage.js` | ✅ | `storage/tenant_{id}/uploads/` — عزل تام |
+| حفظ الحملة في DB | `routes/campaigns.js` | ✅ | tenant_id مُدرج في INSERT |
+| فحص الملكية عند Edit/Delete | `routes/campaigns.js` | ✅ | WHERE id = ? AND tenant_id = ? |
+| contactsPath في Campaign | `routes/campaigns.js` | ✅ | يُحفظ المسار الصحيح |
+| قراءة CSV من مسار الحملة | `routes/whatsapp.api.js` | ✅ | يمرر contactsPath لـ loadContacts() |
+
+### 3. محرك WhatsApp وإدارة الجلسات ✅ مع خلل
+
+| الخطوة | الملف | الحالة | الملاحظة |
+|--------|-------|--------|---------|
+| إنشاء Client مستقل لكل مستأجر | `WhatsAppManager.js` | ✅ | Map(tenantId → client) |
+| عزل جلسات Auth | `WhatsAppManager.js` | ✅ | `storage/tenant_{id}/auth_session/` |
+| توليد QR وبثه | `WhatsAppManager.js` + `server.js` | ✅ | io.to(`tenant_{id}`) — عزل بالـ Room |
+| Sleep Monitor | `WhatsAppManager.js` | ✅ | setInterval كل دقيقة |
+| Chromium Path | `WhatsAppManager.js` | 🔴 **مفقود** | executablePath غير محدد — سيفشل على NixOS |
+
+### 4. تنفيذ الحملة — الإرسال الفعلي
+
+| الخطوة | الملف | الحالة | الملاحظة |
+|--------|-------|--------|---------|
+| BackgroundQueue — عدم تجميد السيرفر | `BackgroundQueue.js` | ✅ | .then().catch() بدون await |
+| Stop flag per-tenant | `core.js` | ✅ | global.stopBatchRequested[tenantId] |
+| Anti-ban delays | `AntiBanEngine.js` + `core.js` | ✅ | تأخير عشوائي بين كل رسالة |
+| فحص رقم الواتساب | `core.js` | ✅ | isRegisteredUser() مع timeout 10 ثانية |
+| توليد الصورة بقالب الحملة | `core.js` + `generator.js` | ✅ | templatePath + canvasConfig مُمرَّران |
+| INSERT في sent_logs | `core.js` سطر 161 | 🔴 **خلل** | tenant_id مفقود في INSERT |
+| تحديث last_sent_row | `core.js` | ✅ | يُحدَّث بعد كل رسالة |
+| Timeout على sendMessage | `core.js` | ✅ | 30 ثانية للنص، 60 للصور |
+| تنظيف الصور المؤقتة | `core.js` | ✅ | fs.remove() بعد الإرسال |
+
+---
+
+## القسم الرابع: جاهزية API للـ Frontend
+
+### APIs متاحة وجاهزة ✅
+
+| Method | Route | الوصف |
+|--------|-------|------|
+| POST | `/auth/register` | تسجيل مستأجر جديد |
+| POST | `/auth/login` | تسجيل الدخول |
+| POST | `/auth/logout` | تسجيل الخروج |
+| GET | `/auth/me` | حالة الجلسة الحالية |
+| GET | `/api/campaigns` | قائمة حملات المستأجر |
+| POST | `/api/campaigns` | إنشاء حملة جديدة |
+| GET | `/api/campaigns/:id` | تفاصيل حملة |
+| PUT | `/api/campaigns/:id` | تعديل حملة |
+| DELETE | `/api/campaigns/:id` | حذف حملة |
+| GET | `/api/campaigns/:id/stats` | إحصائيات حملة (sent/pending) |
+| POST | `/api/whatsapp/init` | بدء تهيئة WhatsApp |
+| GET | `/api/whatsapp/status` | حالة الاتصال الحالية |
+| POST | `/api/whatsapp/start` | بدء إرسال الحملة |
+| POST | `/api/whatsapp/stop` | إيقاف الإرسال |
+| POST | `/api/whatsapp/test` | إرسال رسالة تجريبية |
+| POST | `/api/whatsapp/disconnect` | قطع جلسة WhatsApp |
+| PUT | `/api/tenant/settings` | تحديث إعدادات المستأجر |
+| GET | `/api/tenant/stats` | إحصائيات عامة للمستأجر |
+
+### APIs مفقودة يحتاجها Frontend
+
+| Method | Route | لماذا مطلوبة؟ |
+|--------|-------|--------------|
+| GET | `/api/campaigns/:id/logs` | عرض سجل الإرسال التفصيلي لكل حملة |
+| GET | `/api/reports` | تقرير الإرسال الكامل (صفحة التقارير) |
+| PATCH | `/api/campaigns/:id/progress` | تحديث last_sent_row مستقل |
+| GET | `/api/contacts` | قائمة جهات الاتصال المرفوعة |
+| POST | `/api/contacts/preview` | معاينة CSV قبل بدء الحملة |
+
+---
+
+## ترتيب الإصلاحات الموصى به (قبل بناء الـ Frontend)
+
+1. **[C-01]** أضف `tenant_id` في INSERT الخاص بـ sent_logs في `core.js`
+2. **[C-02]** صحّح `start` script في `package.json` ليُشغّل `init_saas.js`
+3. **[C-03]** أضف `executablePath` في `WhatsAppManager.js` (مثل: `process.env.CHROMIUM_PATH || require('child_process').execSync('which chromium').toString().trim()`)
+4. **[C-04]** أضف null check قبل `.status = 'WORKING'` في `whatsapp.api.js`
+5. **[C-05]** غيّر `process.exit(-1)` في `pg-client.js` إلى `console.error()` فقط
+6. **[C-06]** ضبط PORT الافتراضي إلى 5000 في `server.js`
+7. **[H-01]** حرّك SESSION_SECRET إلى متغير بيئي
+8. **[H-02]** دمج منطق normalizePhone من `normalizer.js` (مع دعم المصري) في `dataProcessor.js`
+9. **[M-04]** أضف `WhatsAppManager.updateActivity(tenantId)` في حلقة processBatch كل تكرار
+10. أنشئ `.env.example` يشرح جميع المتغيرات المطلوبة
+
+---
+
+## الخلاصة
+
+| المعيار | التقرير الأول | التقرير الحالي |
+|---------|--------------|---------------|
+| مشاكل حرجة | 6 | 6 (جديدة، أبسط) |
+| مشاكل عالية | 6 | 5 |
+| مشاكل متوسطة | 7 | 5 |
+| مشاكل منخفضة | 4 | 4 |
+| Multi-Tenancy | ❌ غائب | ✅ موجود |
+| Background Queue | ❌ غائب | ✅ موجود |
+| WhatsApp Pool | ❌ غائب | ✅ موجود |
+| Storage Isolation | ❌ غائب | ✅ موجود |
+| EJS Views | ❌ غائب | ✅ 12 ملف |
+| i18n (Arabic) | ❌ غائب | ✅ موجود |
+| PostgreSQL | ❌ SQLite | ✅ PostgreSQL |
+| **الجاهزية للـ Frontend** | **0%** | **~75%** |
