@@ -18,6 +18,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 const QRCode = require('qrcode');
 const session = require('express-session');
 const connectPgSimple = require('connect-pg-simple');
@@ -25,6 +26,7 @@ const db = require('./database/pg-client');
 const { WhatsAppManager, loadContacts, processBatch } = require('./core');
 const authRoutes = require('./routes/auth');
 const campaignRoutes = require('./routes/campaigns');
+const adminRoutes = require('./routes/admin');
 const { isAuthenticated } = require('./middleware/auth');
 const { i18next, middleware: i18nMiddleware } = require('./config/i18n');
 const ejsLayout = require('./middleware/ejsLayout');
@@ -42,7 +44,7 @@ app.set('views', path.join(__dirname, 'views'));
 WhatsAppManager.setIo(io);
 WhatsAppManager.startSleepMonitor(15 * 60 * 1000); // 15 mins idle sleep
 
-const PORT = process.env.PORT || 5000; // C-06: Default to 5000 for Replit
+const PORT = process.env.PORT || 5000;
 
 // Body Parsing
 app.use(express.json());
@@ -51,21 +53,21 @@ app.use(express.urlencoded({ extended: true }));
 // --- i18next MIDDLEWARE ---
 app.use(i18nMiddleware.handle(i18next));
 
-// Session Setup — persistent via PostgreSQL (survives restarts & PM2 reloads)
+// Session Setup — persistent via PostgreSQL
 const sessionMiddleware = session({
     store: new PgSession({
-        pool: db.pool,               // Reuse existing pg Pool (no extra connection)
+        pool: db.pool,
         tableName: 'user_sessions',
-        createTableIfMissing: true   // auto-create session table on first run
+        createTableIfMissing: true
     }),
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: process.env.NODE_ENV === 'production',  // HTTPS only in prod
+        secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
         sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000  // 7 days
+        maxAge: 7 * 24 * 60 * 60 * 1000
     }
 });
 app.use(sessionMiddleware);
@@ -79,12 +81,14 @@ app.use('/auth', authRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/whatsapp', require('./routes/whatsapp.api.js'));
 
+// --- ADMIN ROUTES ---
+app.use('/admin', adminRoutes);
+
 // Tenant Settings API
 app.put('/api/tenant/settings', isAuthenticated, async (req, res) => {
     try {
         const { name, settings } = req.body;
 
-        // Basic Validation
         if (!name || typeof name !== 'string' || name.length < 3) {
             return res.status(400).json({ success: false, message: 'Invalid name' });
         }
@@ -93,7 +97,7 @@ app.put('/api/tenant/settings', isAuthenticated, async (req, res) => {
         }
 
         await db.query('UPDATE tenants SET name = $1, settings = $2 WHERE id = $3', [name, JSON.stringify(settings), req.session.tenantId]);
-        req.session.tenantName = name; // Update session
+        req.session.tenantName = name;
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -106,7 +110,10 @@ app.get('/api/tenant/stats', isAuthenticated, async (req, res) => {
         const tenantId = req.session.tenantId;
         const contactsCount = await db.query('SELECT COUNT(*) FROM contacts WHERE tenant_id = $1', [tenantId]);
         const campaignResult = await db.query('SELECT * FROM campaigns WHERE tenant_id = $1', [tenantId]);
-        const sentResult = await db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1', [tenantId]);
+        const sentResult = await db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND (status IS NULL OR status = $2)', [tenantId, 'success']);
+        const tenantRes = await db.query('SELECT message_quota, messages_used FROM tenants WHERE id = $1', [tenantId]);
+
+        const tenant = tenantRes.rows[0] || { message_quota: 1000, messages_used: 0 };
 
         res.json({
             success: true,
@@ -114,7 +121,10 @@ app.get('/api/tenant/stats', isAuthenticated, async (req, res) => {
                 contacts: parseInt(contactsCount.rows[0].count || 0),
                 campaigns: campaignResult.rows.length,
                 messagesSent: parseInt(sentResult.rows[0].count || 0),
-                activeCampaigns: campaignResult.rows.filter(c => c.status === 'active' || c.status === 'running').length
+                activeCampaigns: campaignResult.rows.filter(c => c.status === 'active' || c.status === 'running').length,
+                messageQuota: parseInt(tenant.message_quota || 1000),
+                messagesUsed: parseInt(tenant.messages_used || 0),
+                quotaRemaining: Math.max(0, parseInt(tenant.message_quota || 1000) - parseInt(tenant.messages_used || 0))
             }
         });
     } catch (e) {
@@ -130,9 +140,28 @@ process.on('unhandledRejection', (reason) => {
 // --- UI ROUTES (DYNAMIC EJS) ---
 
 // 1. Landing Page (Public) — served from taqreerk React build
-app.use('/taqreerk', express.static(path.join(__dirname, '../taqreerk/dist')));
+const landingDistPath = path.join(__dirname, '../taqreerk/dist');
+const landingIndexPath = path.join(landingDistPath, 'index.html');
+
+// Auto-build landing page if dist doesn't exist
+if (!fs.existsSync(landingIndexPath)) {
+    console.log('⚙️ Landing page dist not found, attempting build...');
+    try {
+        const { execSync } = require('child_process');
+        execSync('cd taqreerk && npm install && npm run build', { stdio: 'inherit', cwd: path.join(__dirname, '..') });
+        console.log('✅ Landing page built successfully.');
+    } catch (buildErr) {
+        console.warn('⚠️ Landing page build failed:', buildErr.message);
+    }
+}
+
+app.use('/taqreerk', express.static(landingDistPath));
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../taqreerk/dist/index.html'));
+    if (fs.existsSync(landingIndexPath)) {
+        res.sendFile(landingIndexPath);
+    } else {
+        res.redirect('/login');
+    }
 });
 
 // 2. Login Page (Public EJS)
@@ -146,24 +175,63 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
     try {
         const tenantId = req.session.tenantId;
 
-        // Fetch stats for the dashboard
         let contactsTotal = 0;
         try {
             const contactsCount = await db.query('SELECT COUNT(*) FROM contacts WHERE tenant_id = $1', [tenantId]);
             contactsTotal = contactsCount.rows[0].count;
         } catch (e) { /* contacts table may not exist yet */ }
+
         const campaignResult = await db.query('SELECT * FROM campaigns WHERE tenant_id = $1 ORDER BY created_at DESC', [tenantId]);
         const campaigns = campaignResult.rows;
 
-        // Fetch Delivered Count from sent_logs
-        const sentResult = await db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1', [tenantId]);
+        const sentResult = await db.query(
+            'SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND (status IS NULL OR status = $2)',
+            [tenantId, 'success']
+        );
+
+        // Quota data
+        const tenantRes = await db.query('SELECT message_quota, messages_used FROM tenants WHERE id = $1', [tenantId]);
+        const tenant = tenantRes.rows[0] || { message_quota: 1000, messages_used: 0 };
 
         const stats = {
             contacts: contactsTotal,
             campaigns: campaigns.length,
             messagesSent: sentResult.rows[0].count,
-            activeCampaigns: campaigns.filter(c => c.status === 'active' || c.status === 'running').length
+            activeCampaigns: campaigns.filter(c => c.status === 'active' || c.status === 'running').length,
+            messageQuota: parseInt(tenant.message_quota || 1000),
+            messagesUsed: parseInt(tenant.messages_used || 0),
+            quotaRemaining: Math.max(0, parseInt(tenant.message_quota || 1000) - parseInt(tenant.messages_used || 0))
         };
+
+        // Real chart data: last 7 days
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        sevenDaysAgo.setHours(0, 0, 0, 0);
+
+        const chartRes = await db.query(`
+            SELECT
+                DATE(sent_at) AS day,
+                COUNT(*) AS count
+            FROM sent_logs
+            WHERE tenant_id = $1
+              AND (status IS NULL OR status = 'success')
+              AND sent_at >= $2
+            GROUP BY DATE(sent_at)
+            ORDER BY day ASC
+        `, [tenantId, sevenDaysAgo]);
+
+        const dayLabels = [];
+        const dayData = [];
+        const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const dateStr = d.toISOString().split('T')[0];
+            dayLabels.push(dayNames[d.getDay()]);
+            const match = chartRes.rows.find(r => r.day && r.day.toISOString().split('T')[0] === dateStr);
+            dayData.push(match ? parseInt(match.count) : 0);
+        }
 
         res.renderPage('dashboard/index', {
             pageTitle: 'لوحة التحكم',
@@ -172,8 +240,8 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
             tenantName: req.session.tenantName || 'العميل',
             stats,
             campaigns,
-            chartLabels: ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'],
-            chartData: [0, 0, 0, 0, 0, 0, 0],
+            chartLabels: dayLabels,
+            chartData: dayData,
             trialActive: true
         });
     } catch (err) {
@@ -191,9 +259,9 @@ app.get('/campaigns', isAuthenticated, async (req, res) => {
 
         const [campaignRes, totalRes, monthlyRes, dailyRes] = await Promise.all([
             db.query('SELECT * FROM campaigns WHERE tenant_id = $1 ORDER BY created_at DESC', [req.session.tenantId]),
-            db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1', [req.session.tenantId]),
-            db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND sent_at >= $2', [req.session.tenantId, monthStart]),
-            db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND sent_at >= $2', [req.session.tenantId, todayStart]),
+            db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND (status IS NULL OR status = $2)', [req.session.tenantId, 'success']),
+            db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND (status IS NULL OR status = $2) AND sent_at >= $3', [req.session.tenantId, 'success', monthStart]),
+            db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND (status IS NULL OR status = $2) AND sent_at >= $3', [req.session.tenantId, 'success', todayStart]),
         ]);
 
         const DAILY_SAFE = 200;
@@ -203,13 +271,11 @@ app.get('/campaigns', isAuthenticated, async (req, res) => {
         const dailyPct      = Math.min(100, Math.round((dailyCount / DAILY_SAFE) * 100));
         const safetyLevel   = dailyPct < 50 ? 'safe' : dailyPct < 85 ? 'warning' : 'danger';
 
-        const result = campaignRes;
-
         res.renderPage('dashboard/campaigns', {
             pageTitle: 'الحملات',
             pageSubtitle: 'إضافة وإدارة حملات الواتساب',
             activePage: 'campaigns',
-            campaigns: result.rows,
+            campaigns: campaignRes.rows,
             tenantName: req.session.tenantName,
             quota: { totalDelivered, monthlyCount, dailyCount, dailySafe: DAILY_SAFE, dailyPct, safetyLevel },
             topbarActions: `<a href="/campaigns/new" class="inline-flex items-center gap-1.5 bg-brand-dark text-white text-xs px-3.5 py-2 rounded-xl font-medium hover:opacity-90 transition shadow-sm">
@@ -293,7 +359,7 @@ app.get('/register', (req, res) => {
     res.render('auth/register');
 });
 
-// 8. Create/Edit Campaign View
+// 9. Create/Edit Campaign View
 app.get('/campaigns/new', isAuthenticated, (req, res) => {
     res.renderPage('dashboard/campaign-form', { pageTitle: 'حملة جديدة', activePage: 'campaigns', breadcrumb: { href: '/campaigns' }, campaign: null, tenantName: req.session.tenantName });
 });
@@ -304,7 +370,7 @@ app.get('/campaigns/:id/edit', isAuthenticated, async (req, res) => {
     res.renderPage('dashboard/campaign-form', { pageTitle: 'تعديل الحملة', activePage: 'campaigns', breadcrumb: { href: '/campaigns' }, campaign: result.rows[0], tenantName: req.session.tenantName });
 });
 
-// 9. Campaign Run/Monitor View
+// 10. Campaign Run/Monitor View
 app.get('/campaigns/:id/run', isAuthenticated, async (req, res) => {
     const result = await db.query('SELECT * FROM campaigns WHERE id = $1 AND tenant_id = $2', [req.params.id, req.session.tenantId]);
     if (result.rows.length === 0) return res.status(404).send('Campaign not found');
@@ -339,7 +405,6 @@ io.on('connection', async (socket) => {
 
     console.log(`📡 Socket connected: Tenant ${tenantId}`);
 
-    // WhatsApp logic remains the same (QR, Ready, Status)
     try { await WhatsAppManager.getClient(tenantId); } catch (e) { }
 
     const state = WhatsAppManager.getTenantState(tenantId);

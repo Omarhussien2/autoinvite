@@ -14,10 +14,15 @@ function layoutMiddleware(req, res, next) {
     res.renderPage = function (view, locals = {}) {
         const viewsDir = path.join(__dirname, '../views');
 
+        // Inject session-based globals (role for admin sidebar link, etc.)
+        const sessionLocals = {
+            tenantRole: req.session && req.session.tenantRole ? req.session.tenantRole : 'user',
+        };
+
         // First render the page partial
         const pageFilePath = path.join(viewsDir, view + '.ejs');
 
-        ejs.renderFile(pageFilePath, { ...locals, __dirname: viewsDir }, { views: [viewsDir] }, (err, pageHtml) => {
+        ejs.renderFile(pageFilePath, { ...sessionLocals, ...locals, __dirname: viewsDir }, { views: [viewsDir] }, (err, pageHtml) => {
             if (err) {
                 console.error('EJS Page Render Error:', err);
                 return res.status(500).send('<h1>500 — خطأ في السيرفر</h1>');
@@ -25,6 +30,7 @@ function layoutMiddleware(req, res, next) {
 
             // Then render the layout, passing the page HTML as `body`
             const layoutLocals = {
+                ...sessionLocals,
                 ...locals,
                 body: pageHtml,
                 __dirname: viewsDir,

@@ -35,7 +35,9 @@ router.post('/login', authLimiter, async (req, res) => {
         if (match) {
             req.session.tenantId = tenant.id;
             req.session.tenantName = tenant.name;
-            return res.json({ success: true, redirect: '/dashboard' });
+            req.session.tenantRole = tenant.role || 'user';
+            const redirect = (tenant.role === 'admin') ? '/admin/dashboard' : '/dashboard';
+            return res.json({ success: true, redirect });
         } else {
             return res.status(401).json({ success: false, message: 'بيانات الدخول غير صحيحة' });
         }
@@ -77,6 +79,7 @@ router.post('/register', async (req, res) => {
         const newTenant = result.rows[0];
         req.session.tenantId = newTenant.id;
         req.session.tenantName = newTenant.name;
+        req.session.tenantRole = 'user';
 
         res.json({ success: true, redirect: '/dashboard' });
     } catch (err) {

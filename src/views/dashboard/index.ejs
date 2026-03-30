@@ -110,6 +110,39 @@
 
     </div>
 
+    <!-- Quota Consumption Bar -->
+    <% if (typeof stats.messageQuota !== 'undefined') { %>
+    <% const quotaPct = Math.min(100, Math.round(((stats.messagesUsed || 0) / Math.max(1, stats.messageQuota || 1000)) * 100)); %>
+    <% const quotaBarColor = quotaPct < 60 ? 'bg-brand-green' : quotaPct < 85 ? 'bg-amber-400' : 'bg-red-500'; %>
+    <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm mb-5">
+        <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                </svg>
+                <span class="text-sm font-semibold text-gray-700">رصيد الرسائل</span>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-gray-500">
+                <span id="stat-used"><%= (stats.messagesUsed || 0).toLocaleString('ar-SA') %></span>
+                <span>/</span>
+                <span id="stat-quota"><%= (stats.messageQuota || 1000).toLocaleString('ar-SA') %></span>
+                <span class="font-semibold text-gray-700"><%= quotaPct %>%</span>
+                <% if (stats.quotaRemaining === 0) { %>
+                <span class="bg-red-50 text-red-600 border border-red-100 text-[10px] px-2 py-0.5 rounded-lg font-medium">خلص الرصيد</span>
+                <% } else { %>
+                <span class="text-gray-400">متبقي: <span id="stat-remaining"><%= (stats.quotaRemaining || 0).toLocaleString('ar-SA') %></span></span>
+                <% } %>
+            </div>
+        </div>
+        <div class="w-full bg-gray-100 rounded-full h-2.5">
+            <div id="quota-bar" class="<%= quotaBarColor %> h-2.5 rounded-full transition-all duration-500" style="width: <%= quotaPct %>%"></div>
+        </div>
+        <% if (stats.quotaRemaining === 0) { %>
+        <p class="text-xs text-red-600 mt-2">خلص رصيدك من الرسائل. تواصل مع الإدارة لتجديد الباقة 📩</p>
+        <% } %>
+    </div>
+    <% } %>
+
     <!-- Main Content: Chart + WhatsApp Card -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
 

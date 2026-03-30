@@ -26,6 +26,13 @@ Thumbs.db
 # ── SQLite (legacy — replaced by PostgreSQL) ─────────
 database.db
 
+# ── React Landing Page Build Output ──────────────────
+taqreerk/dist/
+taqreerk/node_modules/
+
 # ── Large test files in project root ─────────────────
 grid_test.png
 template.png
+
+# ── Attached assets (prompt dumps, auto-generated images) ──
+attached_assets/*.txt

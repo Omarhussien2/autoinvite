@@ -3,14 +3,15 @@ const path = require('path');
 const db = require('../database/pg-client');
 const { isAuthenticated } = require('../middleware/auth');
 const { tenantScope } = require('../middleware/tenantScope');
+const { quotaGuard } = require('../middleware/quotaGuard');
 const { upload } = require('../middleware/uploadStorage');
 const { WhatsAppManager, loadContacts, processBatch } = require('../core');
 const fs = require('fs');
 
 const router = express.Router();
 
-// Create Campaign
-router.post('/', isAuthenticated, tenantScope, upload.fields([{ name: 'template' }, { name: 'contacts' }]), async (req, res) => {
+// Create Campaign — quota guard applies (uploading contacts is a pre-launch step)
+router.post('/', isAuthenticated, tenantScope, quotaGuard, upload.fields([{ name: 'template' }, { name: 'contacts' }]), async (req, res) => {
     try {
         const { name, message_templates, canvas_config } = req.body;
         const templatePath = req.files['template'] ? req.files['template'][0].path : null;
@@ -93,39 +94,37 @@ router.delete('/:id', isAuthenticated, tenantScope, async (req, res) => {
     }
 });
 
-// Get Campaign Stats
+// Get Campaign Stats — returns real failed_count from DB
 router.get('/:id/stats', isAuthenticated, tenantScope, async (req, res) => {
     try {
         const campaignId = req.params.id;
         const tenantId = req.tenantId;
 
-        const campRes = await db.query('SELECT status, contacts_path FROM campaigns WHERE id = $1 AND tenant_id = $2', [campaignId, tenantId]);
+        const campRes = await db.query('SELECT status, contacts_path, failed_count FROM campaigns WHERE id = $1 AND tenant_id = $2', [campaignId, tenantId]);
         if (campRes.rows.length === 0) return res.status(404).json({ success: false, message: 'Campaign not found' });
 
         const campaign = campRes.rows[0];
 
-        // Total contacts count
         let totalContacts = 0;
         try {
             const contacts = await loadContacts(campaign.contacts_path);
             totalContacts = contacts.length;
         } catch (e) { console.error('Error loading contacts for stats:', e.message); }
 
-        // Sent count
-        const sentRes = await db.query('SELECT COUNT(*) FROM sent_logs WHERE campaign_id = $1 AND tenant_id = $2', [campaignId, tenantId]);
+        const sentRes = await db.query(
+            'SELECT COUNT(*) FROM sent_logs WHERE campaign_id = $1 AND tenant_id = $2 AND (status IS NULL OR status = $3)',
+            [campaignId, tenantId, 'success']
+        );
         const sentCount = parseInt(sentRes.rows[0].count);
-
-        // Failed count (from logs if we had a dedicated failed table, for now we can check logs for specific status if we log them)
-        // Since we only insert into sent_logs on success in the current logic, we might need a fail_logs table or a status column in sent_logs.
-        // Let's assume for now we only track successes in the DB.
+        const failedCount = parseInt(campaign.failed_count || 0);
 
         res.json({
             success: true,
             stats: {
                 total_contacts: totalContacts,
                 sent_count: sentCount,
-                failed_count: 0, // Placeholder until fail logging is implemented
-                pending_count: Math.max(0, totalContacts - sentCount),
+                failed_count: failedCount,
+                pending_count: Math.max(0, totalContacts - sentCount - failedCount),
                 status: campaign.status
             }
         });

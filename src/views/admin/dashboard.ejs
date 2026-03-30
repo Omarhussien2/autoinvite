@@ -1,0 +1,207 @@
+<div>
+
+    <!-- Page Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900">لوحة تحكم المشرف</h2>
+            <p class="text-sm text-gray-400 mt-0.5">إدارة المستخدمين والحصص</p>
+        </div>
+        <div class="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded-xl font-medium">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            وصول المشرف العام
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <p class="text-3xl font-bold text-gray-900"><%= tenants.length %></p>
+            <p class="text-sm text-gray-500 mt-1">إجمالي المستخدمين</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <p class="text-3xl font-bold text-gray-900"><%= tenants.reduce((s, t) => s + parseInt(t.active_campaign_count || 0), 0) %></p>
+            <p class="text-sm text-gray-500 mt-1">حملات نشطة</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <p class="text-3xl font-bold text-gray-900"><%= tenants.reduce((s, t) => s + parseInt(t.messages_used || 0), 0).toLocaleString('ar-SA') %></p>
+            <p class="text-sm text-gray-500 mt-1">إجمالي الرسائل المُرسلة</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <p class="text-3xl font-bold text-gray-900"><%= tenants.filter(t => t.whatsapp_status === 'READY').length %></p>
+            <p class="text-sm text-gray-500 mt-1">واتساب متصل</p>
+        </div>
+    </div>
+
+    <!-- Tenants Table -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div class="px-5 pt-5 pb-3 border-b border-gray-50">
+            <h3 class="font-semibold text-gray-800 text-sm">المستخدمون</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-gray-50 text-xs text-gray-400 uppercase">
+                        <th class="text-right px-5 py-3 font-medium">البريد / المستخدم</th>
+                        <th class="text-right px-4 py-3 font-medium">حملات نشطة</th>
+                        <th class="text-right px-4 py-3 font-medium">الرسائل المُرسلة</th>
+                        <th class="text-right px-4 py-3 font-medium">الحصة المتبقية</th>
+                        <th class="text-right px-4 py-3 font-medium">الاستهلاك</th>
+                        <th class="text-right px-4 py-3 font-medium">حالة الواتساب</th>
+                        <th class="text-right px-4 py-3 font-medium">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                    <% tenants.forEach(function(t) { %>
+                    <% const used = parseInt(t.messages_used || 0); %>
+                    <% const quota = parseInt(t.message_quota || 1000); %>
+                    <% const remaining = Math.max(0, quota - used); %>
+                    <% const pct = Math.min(100, Math.round((used / quota) * 100)); %>
+                    <% const barColor = pct < 60 ? 'bg-brand-green' : pct < 85 ? 'bg-amber-400' : 'bg-red-500'; %>
+                    <% const waReady = t.whatsapp_status === 'READY'; %>
+                    <% const waWorking = t.whatsapp_status === 'WORKING'; %>
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-5 py-4">
+                            <p class="font-medium text-gray-800"><%= t.name %></p>
+                            <p class="text-xs text-gray-400">@<%= t.username %></p>
+                            <% if (t.role === 'admin') { %>
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-700 mt-0.5">مشرف</span>
+                            <% } %>
+                        </td>
+                        <td class="px-4 py-4 text-gray-700">
+                            <span class="font-semibold <%= parseInt(t.active_campaign_count || 0) > 0 ? 'text-brand-green' : 'text-gray-400' %>">
+                                <%= t.active_campaign_count || 0 %>
+                            </span>
+                            <span class="text-xs text-gray-400"> / <%= t.total_campaign_count || 0 %></span>
+                        </td>
+                        <td class="px-4 py-4 text-gray-700"><%= used.toLocaleString('ar-SA') %></td>
+                        <td class="px-4 py-4">
+                            <div class="flex items-center gap-2">
+                                <span id="quota-display-<%= t.id %>" class="text-gray-700 font-medium"><%= remaining.toLocaleString('ar-SA') %></span>
+                                <span class="text-xs text-gray-400">/ <%= quota.toLocaleString('ar-SA') %></span>
+                                <button onclick="openQuotaModal('<%= t.id %>', '<%= t.name %>', <%= quota %>)"
+                                    class="text-xs text-brand-green hover:underline mr-1">تعديل</button>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="flex items-center gap-2 min-w-[100px]">
+                                <div class="flex-1 bg-gray-100 rounded-full h-2">
+                                    <div class="<%= barColor %> h-2 rounded-full transition-all" style="width: <%= pct %>%"></div>
+                                </div>
+                                <span class="text-xs text-gray-500 whitespace-nowrap"><%= pct %>%</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4">
+                            <% if (waReady || waWorking) { %>
+                            <div class="flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full <%= waWorking ? 'bg-amber-400' : 'bg-brand-green' %> status-pulse"></span>
+                                <span class="text-xs font-medium <%= waWorking ? 'text-amber-600' : 'text-brand-green' %>">
+                                    <%= waWorking ? 'يرسل' : 'متصل' %>
+                                </span>
+                            </div>
+                            <% } else { %>
+                            <div class="flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-gray-300"></span>
+                                <span class="text-xs text-gray-400">غير متصل</span>
+                            </div>
+                            <% } %>
+                        </td>
+                        <td class="px-4 py-4">
+                            <button onclick="resetUsage('<%= t.id %>', '<%= t.name %>')"
+                                class="text-xs text-gray-400 hover:text-red-500 transition">إعادة تعيين</button>
+                        </td>
+                    </tr>
+                    <% }); %>
+                    <% if (tenants.length === 0) { %>
+                    <tr>
+                        <td colspan="7" class="text-center py-12 text-gray-400">لا يوجد مستخدمون حالياً</td>
+                    </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- Quota Edit Modal -->
+<div id="quota-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <h3 class="font-bold text-gray-900 mb-1">تعديل الحصة</h3>
+        <p class="text-sm text-gray-500 mb-4" id="quota-modal-name"></p>
+        <label class="text-xs font-medium text-gray-600 block mb-1">الحصة الجديدة (إجمالي الرسائل المسموح بها)</label>
+        <input type="number" id="quota-input" min="0" step="100"
+            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green mb-4">
+        <div class="flex gap-2">
+            <button onclick="saveQuota()"
+                class="flex-1 bg-brand-dark text-white text-sm py-2.5 rounded-xl font-medium hover:opacity-90 transition">حفظ</button>
+            <button onclick="closeQuotaModal()"
+                class="flex-1 bg-gray-100 text-gray-600 text-sm py-2.5 rounded-xl font-medium hover:bg-gray-200 transition">إلغاء</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentTenantId = null;
+
+    function openQuotaModal(id, name, currentQuota) {
+        currentTenantId = id;
+        document.getElementById('quota-modal-name').textContent = name;
+        document.getElementById('quota-input').value = currentQuota;
+        document.getElementById('quota-modal').classList.remove('hidden');
+    }
+
+    function closeQuotaModal() {
+        document.getElementById('quota-modal').classList.add('hidden');
+        currentTenantId = null;
+    }
+
+    async function saveQuota() {
+        const newQuota = parseInt(document.getElementById('quota-input').value);
+        if (isNaN(newQuota) || newQuota < 0) {
+            showToast('أدخل قيمة صحيحة للحصة', 'error');
+            return;
+        }
+        try {
+            const res = await fetch(`/admin/tenants/${currentTenantId}/quota`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message_quota: newQuota })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast('تم تحديث الحصة بنجاح ✅', 'success');
+                closeQuotaModal();
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast(data.message || 'فشل التحديث', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ في الاتصال', 'error');
+        }
+    }
+
+    async function resetUsage(id, name) {
+        if (!confirm(`هل تريد إعادة تعيين عداد الرسائل لـ "${name}"؟`)) return;
+        try {
+            const res = await fetch(`/admin/tenants/${id}/reset-usage`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast('تم إعادة التعيين بنجاح ✅', 'success');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast(data.message || 'فشل التحديث', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ في الاتصال', 'error');
+        }
+    }
+
+    document.getElementById('quota-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeQuotaModal();
+    });
+</script>

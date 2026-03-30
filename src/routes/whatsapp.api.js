@@ -1,6 +1,7 @@
 const express = require('express');
 const { isAuthenticated } = require('../middleware/auth');
 const { tenantScope } = require('../middleware/tenantScope');
+const { quotaGuard } = require('../middleware/quotaGuard');
 const BackgroundQueue = require('../core/BackgroundQueue');
 const { WhatsAppManager, loadContacts } = require('../core');
 const db = require('../database/pg-client');
@@ -20,14 +21,14 @@ router.post('/init', async (req, res) => {
     }
 });
 
-// Start Campaign Batch
-router.post('/start', async (req, res) => {
+// Start Campaign Batch — quota guard applies here (HTTP only, never Socket.io)
+router.post('/start', quotaGuard, async (req, res) => {
     const { startRow, endRow, campaignId } = req.body;
     const tenantId = req.tenantId;
 
     const curState = WhatsAppManager.getTenantState(tenantId);
     if (curState.status === 'WORKING') {
-        return res.status(400).json({ success: false, message: 'الجهاز يعمل مسبقا' }); // already working
+        return res.status(400).json({ success: false, message: 'الجهاز يعمل مسبقا' });
     }
 
     try {
@@ -74,7 +75,6 @@ router.post('/start', async (req, res) => {
         if (!global.stopBatchRequested) global.stopBatchRequested = {};
         global.stopBatchRequested[tenantId] = false;
 
-        // C-04: Safe null check before updating state
         if (!WhatsAppManager.states.has(tenantId)) {
             WhatsAppManager.states.set(tenantId, { status: 'WORKING', lastQr: null, lastActive: Date.now(), phone: null });
         } else {
@@ -83,7 +83,7 @@ router.post('/start', async (req, res) => {
         WhatsAppManager.emitToTenant(tenantId, 'working_state', true);
 
         BackgroundQueue.addJob(tenantId, campaignId, contacts, start, end, messages, hasTemplate, templatePath, canvasConfig)
-            .catch(console.error); // Catch generic BG queue errs if any
+            .catch(console.error);
 
         res.json({ success: true, message: 'Started successfully' });
 
@@ -99,13 +99,12 @@ router.post('/stop', (req, res) => {
     res.json({ success: true, message: 'Stop Requested' });
 });
 
-// Quick Test Send
-router.post('/test', async (req, res) => {
+// Quick Test Send — quota guard applies here too
+router.post('/test', quotaGuard, async (req, res) => {
     try {
         const { phone } = req.body;
         const tenantId = req.tenantId;
 
-        // Format Number
         let targetPhone = phone.replace(/\D/g, '');
         if (targetPhone.startsWith('01')) {
             targetPhone = '20' + targetPhone.substring(1);

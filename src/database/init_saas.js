@@ -12,6 +12,9 @@ async function initializeSaaS() {
         username TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         settings JSONB DEFAULT '{}',
+        role VARCHAR(20) NOT NULL DEFAULT 'user',
+        message_quota INTEGER NOT NULL DEFAULT 1000,
+        messages_used INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -27,6 +30,7 @@ async function initializeSaaS() {
         message_templates JSONB,
         canvas_config JSONB,
         last_sent_row INTEGER DEFAULT 1,
+        failed_count INTEGER NOT NULL DEFAULT 0,
         status TEXT DEFAULT 'draft',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -55,6 +59,7 @@ async function initializeSaaS() {
         phone TEXT NOT NULL,
         name TEXT,
         status TEXT DEFAULT 'success',
+        failed_at TIMESTAMP DEFAULT NULL,
         sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);

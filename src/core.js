@@ -9,36 +9,20 @@ const db = require('./database/pg-client');
 const WhatsAppManager = require('./core/WhatsAppManager');
 const AntiBanEngine = require('./core/AntiBanEngine');
 
-/**
- * Pick a message based on weight (probability)
- * @param {Array} messages - Array of { weight: number, text: string }
- * @param {string} name - Guest name to inject
- */
 function pickWeightedMessage(messages, name) {
-    // Calculate total weight
     const totalWeight = messages.reduce((sum, m) => sum + (m.weight || 1), 0);
-
-    // Generate random number between 0 and totalWeight
     let random = Math.random() * totalWeight;
-
-    // Find which message this random falls into
     for (const msg of messages) {
         random -= (msg.weight || 1);
         if (random <= 0) {
             return msg.text.replace('[الاسم]', name);
         }
     }
-
-    // Fallback to first message
     return messages[0].text.replace('[الاسم]', name);
 }
 
 const xlsx = require('xlsx');
 
-/**
- * Smart column detector — maps ANY file columns to { Name, Phone }
- * Works by: (1) known name/phone synonyms (case-insensitive), (2) positional fallback
- */
 function normalizeContactColumns(rows) {
     if (!rows || rows.length === 0) return [];
 
@@ -56,20 +40,18 @@ function normalizeContactColumns(rows) {
         'phone number', 'mobile number', 'contact'
     ]);
 
-    // Find by known synonyms (case-insensitive)
     const nameKey = keys.find(k => nameSynonyms.has(k.toLowerCase().trim())) || keys[0];
     const phoneKey = keys.find(k => phoneSynonyms.has(k.toLowerCase().trim())) || (keys.length > 1 ? keys[1] : keys[0]);
 
     return rows.map(row => ({
         Name: (row[nameKey] !== undefined && row[nameKey] !== null) ? row[nameKey].toString().trim() : '',
         Phone: (row[phoneKey] !== undefined && row[phoneKey] !== null) ? row[phoneKey].toString().trim() : '',
-    })).filter(r => r.Phone !== ''); // Remove rows with empty phone
+    })).filter(r => r.Phone !== '');
 }
 
 async function loadContacts(customFilePath = null) {
-    // If a custom file path is provided from the campaign, use it. Otherwise fallback to the old default.
     const filePath = customFilePath || path.resolve(__dirname, '../data/data - Sheet1.csv');
-    
+
     return new Promise((resolve, reject) => {
         try {
             const ext = filePath.toLowerCase().split('.').pop();
@@ -95,19 +77,21 @@ async function loadContacts(customFilePath = null) {
     });
 }
 
-/**
- * Process a batch of contacts
- * @param {Array} contacts - Full list of contacts
- * @param {number} startRow - 1-based start row index
- * @param {number} endRow - 1-based end row index
- * @param {Array} messages - Array of {text, weight} templates
- * @param {number} campaignId - Optional ID for deduplication
- * @param {boolean} hasTemplate - Has Image Template
- * @param {Function} onLog - Callback for logs (message, type)
- * @param {string} templatePath - Optional Image Path
- * @param {Object} canvasConfig - Optional Image Layout config
- * @param {number} tenantId - The tenant's ID
- */
+function getSaudiErrorMessage(name, error) {
+    const msg = (error || '').toLowerCase();
+
+    if (msg.includes('not registered') || msg.includes('not on whatsapp') || msg.includes('not a valid whatsapp number')) {
+        return `الرقم مو مسجل في الواتساب 🚫`;
+    }
+    if (msg.includes('disconnected') || msg.includes('session closed') || msg.includes('page crashed') || msg.includes('lost connection')) {
+        return `انقطع الاتصال، جرّب تعيد الربط 🔌`;
+    }
+    if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('stuck')) {
+        return `ما وصلت الرسالة لـ ${name} ⚠️`;
+    }
+    return `صارت مشكلة غير متوقعة 🛑`;
+}
+
 async function processBatch(contacts, startRow, endRow, messages, campaignId = null, hasTemplate = false, onLog = console.log, templatePath = null, canvasConfig = null, tenantId) {
     const subset = contacts.slice(startRow - 1, endRow);
     onLog(`\nProcessing ${subset.length} contacts (Rows ${startRow} to ${endRow})...\n`, 'INFO');
@@ -115,24 +99,21 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
     WhatsAppManager.updateActivity(tenantId);
     const client = await WhatsAppManager.getClient(tenantId);
 
-    // Provide MessageMedia from whatsapp-web.js directly just to create files if needed
     const { MessageMedia } = require('whatsapp-web.js');
 
     for (const [index, contact] of subset.entries()) {
-        WhatsAppManager.updateActivity(tenantId); // Prevent SleepMonitor from killing active campaign
+        WhatsAppManager.updateActivity(tenantId);
 
-        // Use per-tenant Stop flag
         if (global.stopBatchRequested && global.stopBatchRequested[tenantId]) {
             onLog('⏹️ تم إيقاف الإرسال بنجاح.', 'WARN');
             break;
         }
 
         const rawName = contact.Name || contact['الإسم'] || contact['name'] || 'ضيف';
-        const name = await processName(rawName); // Auto-Translate Name
+        const name = await processName(rawName);
         const rawPhone = contact.Phone || contact['رقم الجوال'] || contact['phone'];
         const currentRow = startRow + index;
 
-        // 1. Normalize Phone (Smart Engine)
         const normalizedPhone = normalizePhone(rawPhone);
 
         if (!normalizedPhone) {
@@ -141,9 +122,11 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             continue;
         }
 
-        // 2. Cross-Campaign Deduplication
         if (campaignId) {
-            const alreadySentRes = await db.query('SELECT id FROM sent_logs WHERE campaign_id = $1 AND phone = $2', [campaignId, normalizedPhone]);
+            const alreadySentRes = await db.query(
+                "SELECT id FROM sent_logs WHERE campaign_id = $1 AND phone = $2 AND (status IS NULL OR status = 'success')",
+                [campaignId, normalizedPhone]
+            );
             const alreadySent = alreadySentRes.rows[0];
             if (alreadySent) {
                 onLog(`Skipping ${name}: Already sent in this campaign (Deduplicated) 🛡️`, 'WARN');
@@ -157,7 +140,6 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
 
             const validChatId = `${normalizedPhone}@c.us`;
 
-            // Timeout wrapper to prevent hanging permanently
             const withTimeout = (promise, ms = 30000) => {
                 let timeoutId;
                 const timeoutPr = new Promise((_, reject) => {
@@ -166,12 +148,20 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                 return Promise.race([promise, timeoutPr]).finally(() => clearTimeout(timeoutId));
             };
 
-            // Check if number is registered on WhatsApp FIRST (prevents 25s timeout waste)
             try {
                 const isRegistered = await withTimeout(client.isRegisteredUser(validChatId), 10000);
                 if (!isRegistered) {
                     await logResult(normalizedPhone, name, 'SKIP', 'Number not on WhatsApp');
-                    onLog(`Skipping ${name}: الرقم مو مسجل بالواتساب ⚠️`, 'WARN');
+                    const saudiMsg = `الرقم مو مسجل في الواتساب 🚫`;
+                    onLog(`Skipping ${name}: ${saudiMsg}`, 'WARN');
+                    WhatsAppManager.emitToTenant(tenantId, 'log', { message: saudiMsg, type: 'WARN' });
+                    if (campaignId) {
+                        await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(() => {});
+                        await db.query(
+                            'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name, status, failed_at) VALUES ($1, $2, $3, $4, $5, NOW())',
+                            [campaignId, tenantId, normalizedPhone, name, 'failed']
+                        ).catch(() => {});
+                    }
                     continue;
                 }
             } catch (regErr) {
@@ -179,36 +169,48 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             }
 
             if (hasTemplate && templatePath) {
-                // Campaign HAS image template: Generate image and send with caption
                 const imagePath = await generateImage(name, normalizedPhone, templatePath, canvasConfig);
                 const media = MessageMedia.fromFilePath(imagePath);
-                await withTimeout(client.sendMessage(validChatId, media, { caption: message }), 60000); // 60s timeout for media
-                await fs.remove(imagePath); // Cleanup
+                await withTimeout(client.sendMessage(validChatId, media, { caption: message }), 60000);
+                await fs.remove(imagePath);
             } else {
-                // Campaign has NO image: Send text-only message
-                await withTimeout(client.sendMessage(validChatId, message), 30000); // 30s timeout for text
+                await withTimeout(client.sendMessage(validChatId, message), 30000);
             }
 
-            // Log Success and Update Progress
             if (campaignId) {
                 await db.query(
                     'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name) VALUES ($1, $2, $3, $4)',
                     [campaignId, tenantId, normalizedPhone, name]
                 );
-                // Update last_sent_row per contact processed
                 await db.query('UPDATE campaigns SET last_sent_row = $1 WHERE id = $2', [currentRow, campaignId]);
             }
+
+            // Increment messages_used quota counter
+            if (tenantId) {
+                await db.query('UPDATE tenants SET messages_used = messages_used + 1 WHERE id = $1', [tenantId]);
+            }
+
             await logResult(normalizedPhone, name, 'SUCCESS', 'Invitation Sent');
             onLog(`Success: Invitation sent to ${name}`, 'SUCCESS');
 
-            // Anti-Ban Delay (Random)
             if (index < subset.length - 1) {
                 await AntiBanEngine.applyDelay(config.whatsapp.minDelay, config.whatsapp.maxDelay, onLog);
             }
 
         } catch (error) {
             await logResult(normalizedPhone, name, 'FAIL', error.message);
-            onLog(`Failed: ${name} - ${error.message}`, 'ERROR');
+
+            const saudiMsg = getSaudiErrorMessage(name, error.message);
+            onLog(`Failed: ${name} - ${saudiMsg}`, 'ERROR');
+            WhatsAppManager.emitToTenant(tenantId, 'log', { message: saudiMsg, type: 'ERROR' });
+
+            if (campaignId) {
+                await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(() => {});
+                await db.query(
+                    'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name, status, failed_at) VALUES ($1, $2, $3, $4, $5, NOW())',
+                    [campaignId, tenantId, normalizedPhone, name, 'failed']
+                ).catch(() => {});
+            }
         }
     }
 
