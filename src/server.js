@@ -129,10 +129,10 @@ process.on('unhandledRejection', (reason) => {
 
 // --- UI ROUTES (DYNAMIC EJS) ---
 
-// 1. Landing Page (Public)
+// 1. Landing Page (Public) — served from taqreerk React build
+app.use('/taqreerk', express.static(path.join(__dirname, '../taqreerk/dist')));
 app.get('/', (req, res) => {
-    // For now, still serving static landing but could be EJS
-    res.sendFile(path.join(__dirname, '../public/landing.html'));
+    res.sendFile(path.join(__dirname, '../taqreerk/dist/index.html'));
 });
 
 // 2. Login Page (Public EJS)

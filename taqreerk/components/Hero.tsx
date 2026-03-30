@@ -252,7 +252,8 @@ export const Hero = () => {
 
                 {/* CTA — animated separately for the "pop" feel */}
                 <div ref={ctaRef}>
-                  <button
+                  <a
+                    href="/register"
                     className="
                       group relative inline-flex items-center gap-3
                       bg-digital-teal hover:bg-digital-teal-light
@@ -273,7 +274,7 @@ export const Hero = () => {
                     >
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l-5 5m0 0l5 5m-5-5h12" />
                     </svg>
-                  </button>
+                  </a>
                   <p className="text-zinc-600 text-xs mt-3">
                     بدون بطاقة ائتمان · إلغاء في أي وقت
                   </p>
