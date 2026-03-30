@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Tajawal", ui-sans-serif, system-ui, sans-serif;
+  --color-digital-teal: #10b981;
+  --color-digital-teal-dark: #059669;
+  --color-digital-teal-light: #34d399;
+  --color-bg-dark: #09090b;
+  --color-bg-card: #18181b;
+}
+
+@layer base {
+  body {
+    @apply font-sans bg-bg-dark text-zinc-50 antialiased selection:bg-digital-teal selection:text-white;
+  }
+}
+
+/* Smooth scrolling for anchor links */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-dark);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-digital-teal);
+}
+

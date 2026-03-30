@@ -1,0 +1,41 @@
+Act as an Awwwards-winning Senior Creative Developer and Motion Graphics Expert.
+
+Task 1: Sync Repository & Locate Assets
+
+Please pull the latest changes from our Git repository (branch: taqreerk-landpage).
+
+I have just pushed two new image files to the repository. Please locate them in the assets/images directory:
+
+hero-human.jpg (Start State - Saudi Businessman)
+
+Gemini_Generated_Image_meid75meid75meid.jpg (End State - AI Robot)
+
+Task 2: The HumbleOps Scroll-Morph Implementation
+Rebuild the Hero.tsx component (and integrate the next section if needed for a sticky wrapper) to create a seamless, high-performance, sticky scroll-morph experience using GSAP ScrollTrigger and Lenis (which is already configured in App.tsx).
+
+Copy & Localization (ar-SA B2B):
+
+Primary Header (Sticky): جهد موظفيك. بأتمتة ذكية.
+
+Text Block 1 (syncs with Man image): AutoInvite تقلب الموازين. حوّل ساعات العمل اليدوية لإرسال الدعوات والتواصل إلى ثوانٍ معدودة بضغطة زر.
+
+Text Block 2 (syncs with Robot image): ودع التشغيل اليدوي. استعن بـ 'تقريرك'، عميل الذكاء الاصطناعي الذي ينجز العمل بدقة، سرعة، وبلا حظر.
+
+Call to Action (syncs with Robot image): أطلق قواك الخفية (Button).
+
+Detailed Motion Specification:
+
+Set a tall scroll height for the section (e.g., 300vh).
+
+Use a strict sticky container (position: sticky; top: 0;) to pin the layout during the scroll.
+
+Image Morph: Implement a silky-smooth crossfade. As the user scrolls down, the opacity of hero-human.jpg fades to 0, while the Robot image fades to 1.
+
+Text Scroll: Text Block 1 should enter from the bottom and exit to the top as the user scrolls. Text Block 2 should then enter from the bottom as the robot image stabilizes.
+
+Background: Enhance the background with subtle, pulsing Teal (#10b981) radial glows that intensify when the robot appears.
+
+Constraint:
+The motion must be tied directly to the user's scroll position for a perfectly synchronized, scrubbing feel. Do not break the existing Tailwind v4 or React 19 setup.
+
+Please execute this, commit the changes to a new branch, and let me know when it's ready to preview!"
