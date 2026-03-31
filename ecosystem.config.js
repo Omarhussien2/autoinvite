@@ -19,15 +19,16 @@ module.exports = {
             //   3. Sessions are now stored in PostgreSQL so restarts are safe
             instances: 1,
             exec_mode: 'fork',
+            node_args: '--max-old-space-size=4096',
 
             // ── Environment ────────────────────────────────────────────────
             env: {
                 NODE_ENV: 'development',
-                PORT: 5000,
+                PORT: 3000,
             },
             env_production: {
                 NODE_ENV: 'production',
-                PORT: 5000,
+                PORT: 3000,
             },
 
             // ── Restart Policy ─────────────────────────────────────────────
@@ -40,7 +41,7 @@ module.exports = {
             // Puppeteer + Chromium is the biggest memory consumer.
             // Each WhatsApp session ≈ 200-400MB RAM.
             // MAX_TOTAL_CLIENTS=3 on a 2GB VPS is recommended.
-            max_memory_restart: '900M',  // Restart if Node process exceeds 900MB
+            max_memory_restart: '4G',    // Restart if exceeds 4GB (safe for 8GB VPS)
 
             // ── Logging ────────────────────────────────────────────────────
             out_file: './logs/pm2-out.log',

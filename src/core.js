@@ -179,8 +179,8 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
 
             if (campaignId) {
                 await db.query(
-                    'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name) VALUES ($1, $2, $3, $4)',
-                    [campaignId, tenantId, normalizedPhone, name]
+                    'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name, status) VALUES ($1, $2, $3, $4, $5)',
+                    [campaignId, tenantId, normalizedPhone, name, 'success']
                 );
                 await db.query('UPDATE campaigns SET last_sent_row = $1 WHERE id = $2', [currentRow, campaignId]);
             }

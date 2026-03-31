@@ -4,6 +4,7 @@ const { tenantScope } = require('../middleware/tenantScope');
 const { quotaGuard } = require('../middleware/quotaGuard');
 const BackgroundQueue = require('../core/BackgroundQueue');
 const { WhatsAppManager, loadContacts } = require('../core');
+const { normalizePhone } = require('../utils/dataProcessor');
 const db = require('../database/pg-client');
 
 const router = express.Router();
@@ -105,13 +106,22 @@ router.post('/test', quotaGuard, async (req, res) => {
         const { phone } = req.body;
         const tenantId = req.tenantId;
 
-        let targetPhone = phone.replace(/\D/g, '');
-        if (targetPhone.startsWith('01')) {
-            targetPhone = '20' + targetPhone.substring(1);
+        if (!phone || !phone.trim()) {
+            return res.status(400).json({ success: false, message: 'يرجى إدخال رقم الجوال' });
+        }
+
+        const targetPhone = normalizePhone(phone.trim());
+        if (!targetPhone) {
+            return res.status(400).json({ success: false, message: 'صيغة الرقم غير صحيحة. استخدم مثلاً: 05xxxxxxxx' });
         }
 
         const chatId = `${targetPhone}@c.us`;
         const client = await WhatsAppManager.getClient(tenantId);
+
+        const isRegistered = await client.isRegisteredUser(chatId);
+        if (!isRegistered) {
+            return res.status(400).json({ success: false, message: 'هذا الرقم غير مسجل في الواتساب' });
+        }
 
         await client.sendMessage(chatId, 'تجربة أوتو إنفايت: هلا والله! النظام شغال 🚀');
         res.json({ success: true, message: 'Test message sent' });
