@@ -1,30 +1,49 @@
 <div>
 
     <%
-        var safeColor = quota.safetyLevel === 'safe'    ? '#00C853' :
-                        quota.safetyLevel === 'warning'  ? '#F59E0B' : '#EF4444';
+        var healthLabel, healthDesc, healthColor, healthBg, healthBorder, healthIcon;
+        if (quota.safetyLevel === 'safe') {
+            healthLabel = 'ممتاز';
+            healthDesc  = 'وصولك اليوم في أفضل حالاته';
+            healthColor = '#00C853';
+            healthBg    = 'bg-green-50';
+            healthBorder= 'border-green-100';
+            healthIcon  = '✦';
+        } else if (quota.safetyLevel === 'warning') {
+            healthLabel = 'جيد';
+            healthDesc  = 'الإرسال يسير بشكل طبيعي';
+            healthColor = '#F59E0B';
+            healthBg    = 'bg-amber-50';
+            healthBorder= 'border-amber-100';
+            healthIcon  = '◈';
+        } else {
+            healthLabel = 'مرتفع';
+            healthDesc  = 'يُنصح بالتوقف قليلاً للحفاظ على سلامة حسابك';
+            healthColor = '#EF4444';
+            healthBg    = 'bg-red-50';
+            healthBorder= 'border-red-100';
+            healthIcon  = '▲';
+        }
     %>
 
-    <!-- AntiBan Daily Bar -->
-    <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-5 shadow-sm">
-        <div class="flex items-center justify-between text-xs text-gray-500 mb-2">
-            <span class="font-medium text-gray-700">🛡️ مقياس الأمان اليومي</span>
-            <span style="color:<%= safeColor %>">
-                الحد الموصى به: <%= quota.dailySafe %> رسالة/يوم
-            </span>
-        </div>
-        <div class="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-            <div class="h-2.5 rounded-full transition-all duration-700"
-                 style="width:<%= quota.dailyPct %>%; background:<%= safeColor %>;">
+    <!-- Daily Reach Health Meter -->
+    <div class="<%= healthBg %> rounded-2xl border <%= healthBorder %> p-4 mb-5 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-semibold text-gray-700">مؤشر صحة الوصول اليومي</span>
+            </div>
+            <div class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold"
+                 style="background: <%= healthColor %>18; color: <%= healthColor %>; border: 1px solid <%= healthColor %>33;">
+                <span><%= healthIcon %></span>
+                <span><%= healthLabel %></span>
             </div>
         </div>
-        <div class="flex items-center justify-between text-xs mt-1.5">
-            <span class="text-gray-400">0</span>
-            <span class="font-medium" style="color:<%= safeColor %>">
-                <%= quota.dailyCount %> / <%= quota.dailySafe %> رسالة اليوم
-            </span>
-            <span class="text-gray-400"><%= quota.dailySafe %></span>
+        <div class="w-full bg-white/70 rounded-full h-2 overflow-hidden">
+            <div class="h-2 rounded-full transition-all duration-700"
+                 style="width:<%= quota.dailyPct %>%; background:<%= healthColor %>;">
+            </div>
         </div>
+        <p class="text-[11px] mt-2" style="color: <%= healthColor %>"><%= healthDesc %></p>
     </div>
 
     <!-- Search + Table Card -->
