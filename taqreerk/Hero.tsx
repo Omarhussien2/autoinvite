@@ -13,21 +13,21 @@ export const Hero = () => {
         className="max-w-5xl z-10"
       >
         <h1 className="text-6xl md:text-8xl lg:text-[120px] font-black leading-[0.9] tracking-tight mb-8">
-          جهد 3 موظفين.<br />
-          <span className="text-digital-teal">يُنجز بضغطة زر.</span>
+          قائمة أسماء.<br />
+          <span className="text-digital-teal">آلاف الدعوات — في دقائق.</span>
         </h1>
-        
+
         <p className="text-xl md:text-3xl text-zinc-400 max-w-2xl mb-12 leading-relaxed font-light">
-          أوتو انفيت يستبدل النسخ واللصق بذكاء واحد. ينظف قوائمك، يصمم دعواتك، ويرسلها بأمان تام.
+          أوتو إنفايت ينظف بياناتك، يصمم دعواتك الشخصية، ويرسلها بأمان تام — بدون أن تلمس لوحة المفاتيح.
         </p>
-        
+
         <div className="flex flex-wrap gap-4">
-          <button className="bg-digital-teal hover:bg-digital-teal-light text-bg-dark text-lg md:text-xl font-bold py-4 px-8 rounded-full transition-all hover:scale-105">
-            ابدأ الآن بـ 44 ريال
-          </button>
-          <button className="bg-zinc-800 hover:bg-zinc-700 text-white text-lg md:text-xl font-medium py-4 px-8 rounded-full transition-all">
+          <a href="/register" className="bg-digital-teal hover:bg-digital-teal-light text-bg-dark text-lg md:text-xl font-bold py-4 px-8 rounded-full transition-all hover:scale-105">
+            جرّب مجاناً — بدون بطاقة
+          </a>
+          <a href="#how-it-works" className="bg-zinc-800 hover:bg-zinc-700 text-white text-lg md:text-xl font-medium py-4 px-8 rounded-full transition-all">
             كيف يعمل؟
-          </button>
+          </a>
         </div>
       </motion.div>
     </section>

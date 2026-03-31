@@ -230,8 +230,8 @@ export const Timeline = () => {
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-24">
           <h2 className="text-4xl md:text-6xl font-bold text-zinc-100 mb-6 tracking-tight">
-            كيف تبدو التجربة <br />
-            <span className="text-zinc-500">مع أوتو انفيت</span>
+            من القائمة إلى الدعوة —<br />
+            <span className="text-zinc-500">في 4 خطوات فقط</span>
           </h2>
         </div>
 

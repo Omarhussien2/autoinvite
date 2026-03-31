@@ -155,8 +155,8 @@ export const FeaturesBento = () => {
     <section className="py-32 px-6 md:px-12 lg:px-24 border-t border-zinc-800/50 bg-bg-dark overflow-hidden">
       <div className="max-w-5xl mx-auto">
         <h2 className="text-4xl md:text-6xl font-bold text-zinc-100 mb-20 tracking-tight text-center">
-          كل حساب في أوتو انفيت <br />
-          <span className="text-zinc-500">يتضمن الآتي:</span>
+          كل ما تحتاجه في أوتو إنفايت <br />
+          <span className="text-zinc-500">— من الرفع إلى التسليم</span>
         </h2>
 
         <div className="relative">
@@ -211,7 +211,7 @@ export const FeaturesBento = () => {
                   <div className="absolute top-1/2 right-0 w-32 h-32 bg-digital-teal/10 rounded-full blur-3xl -translate-y-1/2 pointer-events-none"></div>
                   
                   <div className="flex-1 border-r-2 border-digital-teal pr-6 md:pr-8 relative z-10">
-                    <h4 className="text-2xl font-bold text-digital-teal mb-4">مع أوتو انفيت</h4>
+                    <h4 className="text-2xl font-bold text-digital-teal mb-4">مع أوتو إنفايت</h4>
                     <p className="text-zinc-100 text-lg md:text-xl leading-relaxed">
                       {tabs[activeTab].withUs}
                     </p>
@@ -227,7 +227,7 @@ export const FeaturesBento = () => {
           {/* Decorative Bottom Tab */}
           <div className="flex justify-center -mt-px z-0 relative">
             <div className="bg-zinc-950 border-b border-r border-l border-zinc-800 rounded-b-2xl px-12 py-3 text-zinc-600 font-medium text-sm shadow-inner">
-              جداول الإكسل والعمل اليدوي
+              الطريقة القديمة المُرهِقة
             </div>
           </div>
         </div>

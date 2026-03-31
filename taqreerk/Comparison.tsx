@@ -41,14 +41,14 @@ export const Comparison = () => {
 
       <div className="max-w-7xl mx-auto relative z-10">
         <div className="text-center mb-20">
-          <motion.h2 
+          <motion.h2
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             className="text-4xl md:text-6xl font-bold text-zinc-100 mb-6 tracking-tight"
           >
-            لماذا أوتو انفيت؟ <br />
-            <span className="text-zinc-500">مقارنة مع البدائل</span>
+            لماذا يختار أصحاب الأعمال<br />
+            <span className="text-zinc-500">أوتو إنفايت؟</span>
           </motion.h2>
         </div>
 
@@ -64,7 +64,7 @@ export const Comparison = () => {
                 <div className="w-12 h-12 mb-4 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md shadow-inner">
                   <Zap className="text-white w-6 h-6" fill="currentColor" />
                 </div>
-                <h3 className="text-2xl font-bold">أوتو انفيت</h3>
+                <h3 className="text-2xl font-bold">أوتو إنفايت</h3>
                 <div className="absolute -bottom-px left-0 right-0 h-px bg-emerald-600"></div>
               </div>
 

@@ -107,7 +107,7 @@ export const Hero = () => {
                 width: '6px', height: '6px', borderRadius: '50%',
                 background: '#10b981', animation: 'heroPulse 2s infinite', flexShrink: 0,
               }} />
-              Made in KSA · أتمتة واتساب
+              صُنع في السعودية · شريكك في التسويق الذكي
             </span>
           </div>
 
@@ -116,10 +116,10 @@ export const Hero = () => {
             fontWeight: 900, lineHeight: 1.06,
             letterSpacing: '-0.02em', marginBottom: '1.5rem', color: '#fafafa',
           }}>
-            جهد 3 موظفين.
+            حوّل قائمة أسماء
             <br />
             <span style={{ color: '#10b981', textShadow: '0 0 40px rgba(16,185,129,0.35)' }}>
-              يُنجز بضغطة زر.
+              إلى آلاف الدعوات — في دقائق.
             </span>
           </h1>
 
@@ -135,7 +135,7 @@ export const Hero = () => {
               onMouseEnter={(e) => { e.currentTarget.style.background = '#34d399'; e.currentTarget.style.transform = 'scale(1.04)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = '#10b981'; e.currentTarget.style.transform = 'scale(1)'; }}
             >
-              ابدأ مجاناً
+              ابدأ تجربتك مجاناً
               <svg width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l-5 5m0 0l5 5m-5-5h12" />
               </svg>
@@ -157,7 +157,7 @@ export const Hero = () => {
             </a>
           </div>
           <p style={{ color: '#52525b', fontSize: '11.5px', marginTop: '14px' }}>
-            بدون بطاقة ائتمان · إلغاء في أي وقت
+            بدون بطاقة ائتمان · نتائج من أول حملة · إلغاء متى شئت
           </p>
         </div>
       </div>
@@ -178,7 +178,7 @@ export const Hero = () => {
               fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em',
             }}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-              الأتمتة الذكية
+              التسويق الذكي عبر واتساب
             </span>
           </div>
 
@@ -187,18 +187,18 @@ export const Hero = () => {
             fontWeight: 900, lineHeight: 1.12,
             letterSpacing: '-0.02em', marginBottom: '1.2rem', color: '#fafafa',
           }}>
-            أوتو انفيت يستبدل{' '}
-            <span style={{ color: '#10b981' }}>النسخ واللصق</span>
-            {' '}بذكاء واحد.
+            أوتو إنفايت —{' '}
+            <span style={{ color: '#10b981' }}>شريكك التسويقي</span>
+            {' '}الأذكى على واتساب.
           </h2>
 
           <p style={{
             fontSize: 'clamp(0.92rem, 1.5vw, 1.1rem)',
             color: '#a1a1aa', lineHeight: 1.8, fontWeight: 300, marginBottom: '1.8rem',
           }}>
-            ينظّف قوائمك، يصمّم دعواتك، ويرسلها بأمان تام.
+            أرسل آلاف الدعوات الشخصية تلقائياً — دون أن تخاطر بحسابك.
             <br />
-            <span style={{ color: '#71717a' }}>بدون أخطاء، بدون تعب، بنتائج تفوق توقعاتك.</span>
+            <span style={{ color: '#71717a' }}>بدون جهد، بدون أخطاء، بنتائج قابلة للقياس.</span>
           </p>
 
           <a href="/register" style={{
@@ -212,7 +212,7 @@ export const Hero = () => {
             onMouseEnter={(e) => { e.currentTarget.style.background = '#34d399'; e.currentTarget.style.transform = 'scale(1.04)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = '#10b981'; e.currentTarget.style.transform = 'scale(1)'; }}
           >
-            جرّب الآن مجاناً
+            ابدأ تجربتك المجانية
             <svg width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l-5 5m0 0l5 5m-5-5h12" />
             </svg>
