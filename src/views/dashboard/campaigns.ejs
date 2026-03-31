@@ -1,49 +1,38 @@
 <div>
 
     <%
-        var healthLabel, healthDesc, healthColor, healthBg, healthBorder, healthIcon;
-        if (quota.safetyLevel === 'safe') {
-            healthLabel = 'ممتاز';
-            healthDesc  = 'وصولك اليوم في أفضل حالاته';
-            healthColor = '#00C853';
-            healthBg    = 'bg-green-50';
-            healthBorder= 'border-green-100';
-            healthIcon  = '✦';
-        } else if (quota.safetyLevel === 'warning') {
-            healthLabel = 'جيد';
-            healthDesc  = 'الإرسال يسير بشكل طبيعي';
-            healthColor = '#F59E0B';
-            healthBg    = 'bg-amber-50';
-            healthBorder= 'border-amber-100';
-            healthIcon  = '◈';
-        } else {
-            healthLabel = 'مرتفع';
-            healthDesc  = 'يُنصح بالتوقف قليلاً للحفاظ على سلامة حسابك';
-            healthColor = '#EF4444';
-            healthBg    = 'bg-red-50';
-            healthBorder= 'border-red-100';
-            healthIcon  = '▲';
-        }
+        var safeColor = quota.safetyLevel === 'safe'    ? '#00C853' :
+                        quota.safetyLevel === 'warning'  ? '#F59E0B' : '#EF4444';
     %>
 
-    <!-- Daily Reach Health Meter -->
-    <div class="<%= healthBg %> rounded-2xl border <%= healthBorder %> p-4 mb-5 shadow-sm">
-        <div class="flex items-center justify-between mb-3">
+    <!-- AntiBan Daily Bar (Qualitative Health Meter) -->
+    <div class="bg-white rounded-2xl border border-gray-100 p-5 mb-6 shadow-sm">
+        <div class="flex items-center justify-between text-xs mb-3">
             <div class="flex items-center gap-2">
-                <span class="text-sm font-semibold text-gray-700">مؤشر صحة الوصول اليومي</span>
+                <span class="p-1 px-2 rounded-lg bg-brand-light text-brand-dark font-bold">🛡️ مؤشر صحة الوصول اليومي</span>
             </div>
-            <div class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold"
-                 style="background: <%= healthColor %>18; color: <%= healthColor %>; border: 1px solid <%= healthColor %>33;">
-                <span><%= healthIcon %></span>
-                <span><%= healthLabel %></span>
+            <% 
+                var healthStatus = quota.safetyLevel === 'safe' ? 'ممتاز — حسابك في أعلى درجات الأمان' : 
+                                   quota.safetyLevel === 'warning' ? 'جيد — ننصح بجدولة الرسائل المتبقية لتفادي الحظر' : 
+                                   'مكثف — يفضل التوقف حالياً لضمان استقرار حسابك';
+            %>
+            <span class="font-bold uppercase tracking-wider" style="color:<%= safeColor %>">
+                <%= healthStatus %>
+            </span>
+        </div>
+        <div class="w-full bg-gray-100 rounded-full h-3 overflow-hidden shadow-inner">
+            <div class="h-3 rounded-full transition-all duration-1000 ease-out"
+                 style="width:<%= quota.dailyPct %>%; background:<%= safeColor %>; box-shadow: 0 0 10px <%= safeColor %>44;">
             </div>
         </div>
-        <div class="w-full bg-white/70 rounded-full h-2 overflow-hidden">
-            <div class="h-2 rounded-full transition-all duration-700"
-                 style="width:<%= quota.dailyPct %>%; background:<%= healthColor %>;">
+        <div class="flex items-center justify-between text-[10px] text-gray-400 mt-2 font-medium">
+            <span>بداية اليوم</span>
+            <div class="flex items-center gap-1.5 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
+                <span class="w-1.5 h-1.5 rounded-full animate-pulse" style="background:<%= safeColor %>"></span>
+                <span class="text-gray-500">معدل نشاط الحساب مستقر</span>
             </div>
+            <span>الحد اليومي الآمن</span>
         </div>
-        <p class="text-[11px] mt-2" style="color: <%= healthColor %>"><%= healthDesc %></p>
     </div>
 
     <!-- Search + Table Card -->
@@ -132,26 +121,36 @@
                                             </span>
                                         </td>
                                         <td class="px-5 py-4">
-                                            <div class="flex items-center gap-2">
-                                                <a href="/campaigns/<%= c.id %>/run"
-                                                    class="inline-flex items-center gap-1.5 bg-teal-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-teal-700 transition shadow-sm">
-                                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                                        <path d="M8 5v14l11-7z" />
-                                                    </svg>
-                                                    بدء الإرسال
-                                                </a>
+                                            <div class="flex items-center gap-1.5">
+                                                <% if (c.status !== 'running' && c.status !== 'completed') { %>
+                                                    <a href="/campaigns/<%= c.id %>/run" title="تشغيل"
+                                                        class="w-9 h-9 rounded-lg bg-brand-light text-brand-dark flex items-center justify-center transition hover:bg-brand-green hover:text-white shadow-sm">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                    </a>
+                                                <% } else { %>
+                                                    <span class="w-9 h-9 rounded-lg flex items-center justify-center text-gray-300 cursor-not-allowed bg-gray-50 border border-gray-100" title="الحملة <%= statusLabels[c.status] %>">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                            <path d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                    </span>
+                                                <% } %>
+
                                                 <a href="/campaigns/<%= c.id %>/edit" title="تعديل"
-                                                    class="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center transition text-gray-400 hover:text-gray-700">
-                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor"
-                                                        stroke-width="2" viewBox="0 0 24 24">
+                                                    class="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center transition text-gray-400 hover:text-gray-700 border border-gray-100">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round"
                                                             d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                                     </svg>
                                                 </a>
+
                                                 <button onclick="deleteCampaign('<%= c.id %>')" title="حذف"
-                                                    class="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center transition text-gray-400 hover:text-red-500">
-                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor"
-                                                        stroke-width="2" viewBox="0 0 24 24">
+                                                    class="w-9 h-9 rounded-lg hover:bg-red-50 flex items-center justify-center transition text-gray-400 hover:text-red-500 border border-gray-100">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round"
                                                             d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                     </svg>
