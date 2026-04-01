@@ -37,6 +37,9 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
+// Trust nginx reverse proxy (required for secure cookies + correct IP behind SSL)
+app.set('trust proxy', 1);
+
 // --- VIEW ENGINE SETUP (EJS) ---
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));

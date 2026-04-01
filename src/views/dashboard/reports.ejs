@@ -47,25 +47,6 @@
         </button>
     </div>
 
-    <% const successLogs = logs.filter(l => l.status !== 'failed'); %>
-    <% const failedLogs = logs.filter(l => l.status === 'failed'); %>
-
-    <!-- Success/Fail Summary -->
-    <div class="grid grid-cols-3 gap-4 mb-6">
-        <div class="bg-white rounded-xl border border-gray-100 p-4 text-center">
-            <p class="text-2xl font-bold text-gray-900"><%= logs.length %></p>
-            <p class="text-[10px] text-gray-400">إجمالي</p>
-        </div>
-        <div class="bg-white rounded-xl border border-gray-100 p-4 text-center">
-            <p class="text-2xl font-bold text-green-600"><%= successLogs.length %></p>
-            <p class="text-[10px] text-gray-400">نجاح</p>
-        </div>
-        <div class="bg-white rounded-xl border border-gray-100 p-4 text-center">
-            <p class="text-2xl font-bold text-red-500"><%= failedLogs.length %></p>
-            <p class="text-[10px] text-gray-400">فشل</p>
-        </div>
-    </div>
-
     <% if (logs && logs.length> 0) { %>
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -96,11 +77,9 @@
                                 <%= l.phone %>
                             </td>
                             <td class="px-5 py-4">
-                                <% if (l.status === 'failed') { %>
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">فشل ✗</span>
-                                <% } else { %>
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">نجاح ✓</span>
-                                <% } %>
+                                <span
+                                    class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">نجاح
+                                    ✓</span>
                             </td>
                         </tr>
                         <% }); %>

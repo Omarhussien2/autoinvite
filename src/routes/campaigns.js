@@ -116,12 +116,7 @@ router.get('/:id/stats', isAuthenticated, tenantScope, async (req, res) => {
             [campaignId, tenantId, 'success']
         );
         const sentCount = parseInt(sentRes.rows[0].count);
-
-        const failedRes = await db.query(
-            "SELECT COUNT(*) FROM sent_logs WHERE campaign_id = $1 AND tenant_id = $2 AND status = 'failed'",
-            [campaignId, tenantId]
-        );
-        const failedCount = parseInt(failedRes.rows[0].count);
+        const failedCount = parseInt(campaign.failed_count || 0);
 
         res.json({
             success: true,
