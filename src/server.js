@@ -155,7 +155,7 @@ if (!fs.existsSync(landingIndexPath)) {
     }
 }
 
-app.use('/landing-autoinvite', express.static(landingDistPath));
+app.use(express.static(landingDistPath));
 app.get('/', (req, res) => {
     if (fs.existsSync(landingIndexPath)) {
         res.sendFile(landingIndexPath);

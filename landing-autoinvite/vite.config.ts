@@ -15,7 +15,7 @@ export default defineConfig(({mode}) => {
         '@': path.resolve(__dirname, '.'),
       },
     },
-    base: '/taqreerk/',
+    base: '/',
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
       port: 3000,
