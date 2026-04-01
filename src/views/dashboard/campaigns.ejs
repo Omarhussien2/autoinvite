@@ -9,7 +9,7 @@
     <div class="bg-white rounded-2xl border border-gray-100 p-5 mb-6 shadow-sm">
         <div class="flex items-center justify-between text-xs mb-3">
             <div class="flex items-center gap-2">
-                <span class="p-1 px-2 rounded-lg bg-brand-light text-brand-dark font-bold">🛡️ مؤشر صحة الوصول اليومي</span>
+                <span class="p-1 px-2 rounded-lg bg-brand-light text-brand-dark font-bold">مؤشر صحة الوصول اليومي</span>
             </div>
             <% 
                 var healthStatus = quota.safetyLevel === 'safe' ? 'ممتاز — حسابك في أعلى درجات الأمان' : 
@@ -51,7 +51,7 @@
             </div>
         </div>
 
-        <% if (campaigns && campaigns.length> 0) { %>
+        <% if (campaigns && campaigns.length > 0) { %>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                     <thead>
@@ -69,14 +69,15 @@
                     <tbody class="divide-y divide-gray-50" id="campaigns-tbody">
                         <% campaigns.forEach(function(c) { %>
                             <% const statusColors={ active: 'bg-green-50 text-green-700 border-green-100' ,
-                                running: 'bg-blue-50 text-blue-700 border-blue-100' ,
-                                completed: 'bg-gray-100 text-gray-600 border-gray-200' ,
+                                running: 'bg-green-500/10 text-green-600 border-green-200' ,
+                                completed: 'bg-blue-50 text-blue-700 border-blue-100' ,
                                 paused: 'bg-amber-50 text-amber-700 border-amber-100' ,
                                 failed: 'bg-red-50 text-red-700 border-red-100' }; %>
                                 <% const statusLabels={ active: 'نشطة' , running: 'جارية' , completed: 'مكتملة' ,
                                     paused: 'متوقفة' , failed: 'فشلت' }; %>
                                     <tr class="hover:bg-gray-50/50 transition campaign-row"
-                                        data-name="<%= c.name.toLowerCase() %>">
+                                        data-name="<%= c.name.toLowerCase() %>"
+                                        data-status="<%= c.status %>">
                                         <td class="px-5 py-4">
                                             <div class="flex items-center gap-3">
                                                 <div
@@ -113,11 +114,13 @@
                                         </td>
                                         <td class="px-5 py-4">
                                             <span
-                                                class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium border <%= statusColors[c.status] || 'bg-gray-100 text-gray-600 border-gray-200' %>">
-                                                <% if (c.status==='running' ) { %><span
-                                                        class="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1 animate-pulse"></span>
-                                                    <% } %>
-                                                        <%= statusLabels[c.status] || 'مسودة' %>
+                                                class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border <%= statusColors[c.status] || 'bg-gray-100 text-gray-600 border-gray-200' %>">
+                                                <% if (c.status === 'running') { %>
+                                                    <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                                                <% } else if (c.status === 'completed') { %>
+                                                    <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                                <% } %>
+                                                <%= statusLabels[c.status] || 'مسودة' %>
                                             </span>
                                         </td>
                                         <td class="px-5 py-4">
@@ -164,19 +167,31 @@
             </div>
 
             <% } else { %>
-                <!-- Empty State -->
-                <div class="py-20 text-center">
-                    <div class="w-16 h-16 mx-auto mb-4 text-gray-200">
-                        <svg fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                        </svg>
+                <!-- Premium Empty State -->
+                <div class="py-16 text-center relative overflow-hidden">
+                    <div class="absolute inset-0 bg-gradient-to-b from-brand-light/30 to-transparent"></div>
+                    <div class="relative z-10">
+                        <div class="w-24 h-24 mx-auto mb-6 relative">
+                            <svg class="w-24 h-24 text-brand-green/20" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+                            </svg>
+                            <div class="absolute -top-1 -right-1 w-6 h-6 bg-brand-green rounded-full flex items-center justify-center animate-pulse">
+                                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                                </svg>
+                            </div>
+                        </div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-2">لم تبدأ أي حملة بعد</h3>
+                        <p class="text-gray-500 text-sm mb-6 max-w-sm mx-auto leading-relaxed">أطلق حملتك الأولى الآن لتصل إلى عملائك بذكاء عبر الواتساب.</p>
+                        <a href="/campaigns/new"
+                            class="inline-flex items-center gap-2 bg-brand-green text-white px-8 py-3.5 rounded-xl text-sm font-bold hover:bg-brand-dark transition-all duration-300 shadow-lg shadow-brand-green/20 hover:shadow-brand-green/30 animate-pulse">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                            </svg>
+                            إنشاء حملة جديدة
+                        </a>
                     </div>
-                    <p class="text-gray-600 font-medium mb-1">لا توجد لديك حملات</p>
-                    <p class="text-gray-400 text-sm mb-5">أنشئ حملتك الأولى لبدء إرسال الدعوات عبر الواتساب.</p>
-                    <a href="/campaigns/new"
-                        class="inline-flex items-center gap-2 bg-brand-dark text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:opacity-90 transition shadow-sm">إنشاء
-                        حملة</a>
                 </div>
                 <% } %>
     </div>
@@ -196,8 +211,14 @@
         try {
             const res = await fetch('/api/campaigns/' + id, { method: 'DELETE' });
             const data = await res.json();
-            if (data.success) window.location.reload();
-            else alert('فشل الحذف: ' + data.message);
-        } catch (e) { alert('حدث خطأ.'); }
+            if (data.success) {
+                showToast('success', 'تم حذف الحملة بنجاح');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast('error', 'فشل الحذف: ' + data.message);
+            }
+        } catch (e) {
+            showToast('error', 'حدث خطأ أثناء الحذف');
+        }
     }
 </script>

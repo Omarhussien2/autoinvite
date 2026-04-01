@@ -39,17 +39,40 @@
         const imgInput = document.getElementById('imgUpload');
         if (imgInput) imgInput.addEventListener('change', onImageUpload);
 
-        // Contacts file upload — show filename feedback
+        // Contacts file upload — show filename feedback + CSV header validation
         const contactsInput = document.getElementById('contactsUpload');
         const contactsLabel = document.getElementById('contactsUploadLabel');
         if (contactsInput && contactsLabel) {
             contactsInput.addEventListener('change', function () {
                 if (this.files && this.files[0]) {
-                    const fileName = this.files[0].name;
-                    const fileSize = (this.files[0].size / 1024).toFixed(0);
+                    const file = this.files[0];
+                    const fileName = file.name;
+                    const fileSize = (file.size / 1024).toFixed(0);
+                    const ext = fileName.split('.').pop().toLowerCase();
+
+                    // Basic feedback
                     contactsLabel.textContent = '✅ ' + fileName + ' (' + fileSize + ' KB)';
                     contactsLabel.classList.remove('text-gray-500', 'border-gray-300');
                     contactsLabel.classList.add('text-brand-green', 'border-brand-green');
+
+                    // CSV Header Validation
+                    if (ext === 'csv') {
+                        const reader = new FileReader();
+                        reader.onload = function (e) {
+                            const firstLine = e.target.result.split('\n')[0].toLowerCase();
+                            const hasName = /name|الاسم|اسم|fullname|full_name/.test(firstLine);
+                            const hasPhone = /phone|mobile|رقم|جوال|هاتف|telephone|number/.test(firstLine);
+
+                            if (!hasName || !hasPhone) {
+                                showToast('⚠️ الملف لا يحتوي على الأعمدة المطلوبة (الاسم، الجوال)!', 'error');
+                                contactsLabel.textContent = '❌ تنسيق غير صالح';
+                                contactsLabel.classList.remove('text-brand-green', 'border-brand-green');
+                                contactsLabel.classList.add('text-red-500', 'border-red-300');
+                                contactsInput.value = '';
+                            }
+                        };
+                        reader.readAsText(file.slice(0, 2048)); // Read first 2KB for headers
+                    }
                 }
             });
         }

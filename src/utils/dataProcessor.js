@@ -5,6 +5,11 @@
 
 const SAUDI_PREFIX = '966';
 
+const fs = require('fs-extra');
+const path = require('path');
+const csv = require('csv-parser');
+const xlsx = require('xlsx');
+
 const { translate } = require('google-translate-api-x');
 
 // In-memory translation cache — prevents hammering Google Translate API with duplicate names
@@ -136,6 +141,60 @@ function normalizePhone(rawPhone) {
     return null;
 }
 
+function normalizeContactColumns(rows) {
+    if (!rows || rows.length === 0) return [];
+
+    const keys = Object.keys(rows[0]);
+
+    const nameSynonyms = new Set([
+        'name', 'الاسم', 'الإسم', 'اسم', 'fullname', 'full_name',
+        'customer_name', 'client_name', 'الأسماء', 'الأسم', 'العميل',
+        'الاسم الكامل', 'اسم العميل', 'الشخص'
+    ]);
+    const phoneSynonyms = new Set([
+        'phone', 'mobile', 'رقم الجوال', 'رقم', 'جوال', 'موبايل',
+        'هاتف', 'telephone', 'tel', 'number', 'الهاتف', 'الجوال',
+        'رقم الهاتف', 'رقم الموبايل', 'رقم التليفون', 'تليفون',
+        'phone number', 'mobile number', 'contact'
+    ]);
+
+    const nameKey = keys.find(k => nameSynonyms.has(k.toLowerCase().trim())) || keys[0];
+    const phoneKey = keys.find(k => phoneSynonyms.has(k.toLowerCase().trim())) || (keys.length > 1 ? keys[1] : keys[0]);
+
+    return rows.map(row => ({
+        Name: (row[nameKey] !== undefined && row[nameKey] !== null) ? row[nameKey].toString().trim() : '',
+        Phone: (row[phoneKey] !== undefined && row[phoneKey] !== null) ? row[phoneKey].toString().trim() : '',
+    })).filter(r => r.Phone !== '');
+}
+
+async function loadContacts(customFilePath = null) {
+    const filePath = customFilePath || path.resolve(__dirname, '../../data/data - Sheet1.csv');
+
+    return new Promise((resolve, reject) => {
+        try {
+            const ext = filePath.toLowerCase().split('.').pop();
+
+            if (ext === 'csv' || ext === 'txt') {
+                const rows = [];
+                fs.createReadStream(filePath)
+                    .pipe(csv())
+                    .on('data', (data) => rows.push(data))
+                    .on('end', () => resolve(normalizeContactColumns(rows)))
+                    .on('error', (err) => reject(err));
+            } else if (ext === 'xlsx' || ext === 'xls') {
+                const workbook = xlsx.readFile(filePath, { cellText: false, cellDates: true });
+                const sheetName = workbook.SheetNames[0];
+                const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+                resolve(normalizeContactColumns(rows));
+            } else {
+                reject(new Error(`نوع الملف غير مدعوم: ${ext}. المدعوم: CSV, XLSX, XLS`));
+            }
+        } catch (e) {
+            reject(e);
+        }
+    });
+}
+
 /**
  * Cleaning pipeline for a batch of contacts.
  * @param {Array} contacts - Array of objects { Name, Phone, ... }
@@ -176,4 +235,4 @@ function processContacts(contacts) {
     return result;
 }
 
-module.exports = { normalizePhone, processContacts, processName };
+module.exports = { normalizePhone, processContacts, processName, loadContacts };

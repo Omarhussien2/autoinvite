@@ -1,4 +1,4 @@
-const { processBatch } = require('../core');
+const { processBatch } = require('./processBatch');
 const db = require('../database/pg-client');
 
 class BackgroundQueue {
