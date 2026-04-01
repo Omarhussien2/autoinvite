@@ -37,13 +37,20 @@
                     <% } }); %>
         </select>
 
+        <select id="status-filter"
+            class="bg-gray-50 border border-gray-200 text-gray-500 text-xs rounded-xl px-4 py-2.5 outline-none focus:border-brand-green">
+            <option value="all">كل الحالات</option>
+            <option value="success">نجاح ✓</option>
+            <option value="failed">فشل ✗</option>
+        </select>
+
         <button onclick="window.print()"
             class="mr-auto inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-4 py-2.5 rounded-xl text-xs font-medium hover:bg-gray-50 transition">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                     d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2-2v4a2 2 0 002 2z" />
             </svg>
-            طباعة التقرير
+            طباعة
         </button>
     </div>
 
@@ -62,8 +69,10 @@
                 <tbody class="divide-y divide-gray-50" id="reports-tbody">
                     <% logs.forEach(function(l) { %>
                         <tr class="hover:bg-gray-50/50 transition report-row"
-                            data-name="<%= l.name ? l.name.toLowerCase() : '' %>" data-phone="<%= l.phone %>"
-                            data-camp="<%= l.campaign_name %>">
+                            data-name="<%= l.name ? l.name.toLowerCase() : '' %>" 
+                            data-phone="<%= l.phone %>"
+                            data-camp="<%= l.campaign_name %>"
+                            data-status="<%= l.status || 'success' %>">
                             <td class="px-5 py-4 text-gray-400 text-xs">
                                 <%= new Date(l.sent_at).toLocaleString('ar-SA') %>
                             </td>
@@ -77,9 +86,12 @@
                                 <%= l.phone %>
                             </td>
                             <td class="px-5 py-4">
-                                <span
-                                    class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">نجاح
-                                    ✓</span>
+                                <% const logStatus = l.status || 'success'; %>
+                                <% const logStatusColors = { success: 'bg-green-100 text-green-700', failed: 'bg-red-100 text-red-700' }; %>
+                                <% const logStatusLabels = { success: 'نجاح ✓', failed: 'فشل ✗' }; %>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold <%= logStatusColors[logStatus] || logStatusColors.success %>">
+                                    <%= logStatusLabels[logStatus] || logStatus %>
+                                </span>
                             </td>
                         </tr>
                         <% }); %>
@@ -103,19 +115,24 @@
 <script>
     const reportSearch = document.getElementById('report-search');
     const campaignFilter = document.getElementById('campaign-filter');
+    const statusFilter = document.getElementById('status-filter');
     const reportRows = document.querySelectorAll('.report-row');
 
     function filterReports() {
         const query = reportSearch.value.toLowerCase();
         const camp = campaignFilter.value;
+        const status = statusFilter.value;
 
         reportRows.forEach(row => {
             const textMatch = row.dataset.name.includes(query) || row.dataset.phone.includes(query);
             const campMatch = camp === 'all' || row.dataset.camp === camp;
-            row.style.display = (textMatch && campMatch) ? '' : 'none';
+            const statusMatch = status === 'all' || row.dataset.status === status;
+            
+            row.style.display = (textMatch && campMatch && statusMatch) ? '' : 'none';
         });
     }
 
     reportSearch.addEventListener('input', filterReports);
     campaignFilter.addEventListener('change', filterReports);
+    statusFilter.addEventListener('change', filterReports);
 </script>

@@ -19,7 +19,7 @@ router.post('/login', authLimiter, async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-        return res.status(400).json({ success: false, message: 'Username and password required' });
+        return res.status(400).json({ success: false, message: 'يرجى إدخال اسم المستخدم وكلمة المرور' });
     }
 
     try {
@@ -37,9 +37,17 @@ router.post('/login', authLimiter, async (req, res) => {
             req.session.tenantName = tenant.name;
             req.session.tenantRole = tenant.role || 'user';
             const redirect = (tenant.role === 'admin') ? '/admin/dashboard' : '/dashboard';
-            return req.session.save(err => {
-                if (err) console.error('Session save error:', err);
-                res.json({ success: true, redirect });
+
+            // CRITICAL: Force-save session to PostgreSQL BEFORE sending the response.
+            // Without this, the browser receives the redirect before the session is
+            // persisted, so the next request to /dashboard finds NO session → 401 redirect loop.
+            req.session.save((saveErr) => {
+                if (saveErr) {
+                    console.error('❌ Session save failed:', saveErr);
+                    return res.status(500).json({ success: false, message: 'فشل في حفظ الجلسة، حاول مرة أخرى' });
+                }
+                console.log(`✅ Session saved for tenant: ${tenant.username} (role: ${tenant.role || 'user'})`);
+                return res.json({ success: true, redirect });
             });
         } else {
             return res.status(401).json({ success: false, message: 'بيانات الدخول غير صحيحة' });
@@ -50,8 +58,8 @@ router.post('/login', authLimiter, async (req, res) => {
     }
 });
 
-// Register Endpoint (for new Tenants)
-router.post('/register', async (req, res) => {
+// Register Endpoint — rate limited to prevent mass account creation
+router.post('/register', authLimiter, async (req, res) => {
     const { name, username, password } = req.body;
 
     if (!name || !username || !password) {
@@ -84,8 +92,13 @@ router.post('/register', async (req, res) => {
         req.session.tenantName = newTenant.name;
         req.session.tenantRole = 'user';
 
-        req.session.save(err => {
-            if (err) console.error('Session save error:', err);
+        // CRITICAL: Force-save session to PostgreSQL BEFORE sending the response.
+        req.session.save((saveErr) => {
+            if (saveErr) {
+                console.error('❌ Session save failed (register):', saveErr);
+                return res.status(500).json({ success: false, message: 'تم إنشاء الحساب لكن فشل تسجيل الدخول تلقائياً. حاول تسجيل الدخول يدوياً.' });
+            }
+            console.log(`✅ Session saved for new tenant: ${newTenant.name}`);
             res.json({ success: true, redirect: '/dashboard' });
         });
     } catch (err) {
@@ -113,5 +126,29 @@ router.get('/me', (req, res) => {
         res.json({ loggedIn: false });
     }
 });
+
+// Diagnostic endpoint — ONLY available in development to prevent leakage in prod
+if (process.env.NODE_ENV !== 'production') {
+    router.get('/debug', (req, res) => {
+        res.json({
+            sessionExists: !!req.session,
+            tenantId: req.session?.tenantId || null,
+            tenantName: req.session?.tenantName || null,
+            tenantRole: req.session?.tenantRole || null,
+            sessionId: req.sessionID || null,
+            cookieHeader: req.headers.cookie ? 'present' : 'MISSING',
+            userAgent: req.headers['user-agent'],
+            trustProxy: req.app.get('trust proxy'),
+            secure: req.secure,
+            protocol: req.protocol,
+            xForwardedProto: req.headers['x-forwarded-proto'] || null,
+            xForwardedFor: req.headers['x-forwarded-for'] || null,
+            env: {
+                NODE_ENV: process.env.NODE_ENV || 'not set',
+                COOKIE_SECURE: process.env.COOKIE_SECURE || 'not set (defaults to true in prod)'
+            }
+        });
+    });
+}
 
 module.exports = router;

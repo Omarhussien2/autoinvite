@@ -106,8 +106,16 @@ router.post('/test', quotaGuard, async (req, res) => {
         const tenantId = req.tenantId;
 
         let targetPhone = phone.replace(/\D/g, '');
-        if (targetPhone.startsWith('01')) {
+        // Strip leading 00 or + if present (already stripped by \D)
+        if (targetPhone.startsWith('00')) targetPhone = targetPhone.substring(2);
+
+        // Egyptian: 01x → 201x
+        if (targetPhone.startsWith('01') && targetPhone.length === 11) {
             targetPhone = '20' + targetPhone.substring(1);
+        }
+        // Saudi: 05x → 9665x
+        else if (targetPhone.startsWith('05') && targetPhone.length === 10) {
+            targetPhone = '966' + targetPhone.substring(1);
         }
 
         const chatId = `${targetPhone}@c.us`;

@@ -37,15 +37,18 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-// Trust nginx reverse proxy (required for secure cookies + correct IP behind SSL)
-app.set('trust proxy', 1);
-
 // --- VIEW ENGINE SETUP (EJS) ---
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
+// --- TRUST PROXY (CRITICAL for reverse-proxy/Nginx deployments) ---
+// Without this, Express ignores X-Forwarded-Proto from Nginx.
+// When cookie.secure=true in production, sessions silently fail
+// because Express thinks the connection is HTTP (Nginx→Node is plain HTTP).
+app.set('trust proxy', 1);
+
 WhatsAppManager.setIo(io);
-WhatsAppManager.startSleepMonitor(15 * 60 * 1000); // 15 mins idle sleep
+WhatsAppManager.startSleepMonitor(15 * 60 * 1000);
 
 const PORT = process.env.PORT || 5000;
 
@@ -57,17 +60,29 @@ app.use(express.urlencoded({ extended: true }));
 app.use(i18nMiddleware.handle(i18next));
 
 // Session Setup — persistent via PostgreSQL
+const isProduction = process.env.NODE_ENV === 'production';
+// SAFE DEFAULT: Only set secure=true when explicitly confirmed via env.
+// This prevents silent session failures on HTTP-only proxy setups.
+const cookieSecure = process.env.COOKIE_SECURE === 'true';
+
+const PgStore = new PgSession({
+    pool: db.pool,
+    tableName: 'user_sessions',
+    createTableIfMissing: true
+});
+
+// Log PgSession errors so we can catch silent DB failures
+PgStore.on('error', (err) => {
+    console.error('❌ [PgSession Store Error]:', err.message || err);
+});
+
 const sessionMiddleware = session({
-    store: new PgSession({
-        pool: db.pool,
-        tableName: 'user_sessions',
-        createTableIfMissing: true
-    }),
+    store: PgStore,
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: process.env.NODE_ENV === 'production',
+        secure: cookieSecure,
         httpOnly: true,
         sameSite: 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000
@@ -142,8 +157,8 @@ process.on('unhandledRejection', (reason) => {
 
 // --- UI ROUTES (DYNAMIC EJS) ---
 
-// 1. Landing Page (Public) — served from landing-autoinvite React build
-const landingDistPath = path.join(__dirname, '../landing-autoinvite/dist');
+// 1. Landing Page (Public) — served from taqreerk React build
+const landingDistPath = path.join(__dirname, '../taqreerk/dist');
 const landingIndexPath = path.join(landingDistPath, 'index.html');
 
 // Auto-build landing page if dist doesn't exist
@@ -151,14 +166,14 @@ if (!fs.existsSync(landingIndexPath)) {
     console.log('⚙️ Landing page dist not found, attempting build...');
     try {
         const { execSync } = require('child_process');
-        execSync('cd landing-autoinvite && npm install && npm run build', { stdio: 'inherit', cwd: path.join(__dirname, '..') });
+        execSync('cd taqreerk && npm install && npm run build', { stdio: 'inherit', cwd: path.join(__dirname, '..') });
         console.log('✅ Landing page built successfully.');
     } catch (buildErr) {
         console.warn('⚠️ Landing page build failed:', buildErr.message);
     }
 }
 
-app.use(express.static(landingDistPath));
+app.use('/taqreerk', express.static(landingDistPath));
 app.get('/', (req, res) => {
     if (fs.existsSync(landingIndexPath)) {
         res.sendFile(landingIndexPath);
@@ -417,6 +432,8 @@ io.on('connection', async (socket) => {
         socket.emit('ready', { phone: state.phone });
     }
 });
+
+console.log(`🔧 Session config: trustProxy=1 | cookie.secure=${cookieSecure} | env=${process.env.NODE_ENV || 'development'}`);
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 SaaS Platform running on http://localhost:${PORT}`);
