@@ -1,7 +1,15 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'TSNAS Bold';
+  src: url('/assets/fonts/TSNAS-BOLD.OTF') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
-  --font-sans: "Tajawal", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "TSNAS Bold", ui-sans-serif, system-ui, sans-serif;
   --color-digital-teal: #10b981;
   --color-digital-teal-dark: #059669;
   --color-digital-teal-light: #34d399;

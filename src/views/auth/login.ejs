@@ -7,8 +7,15 @@
     <title>تسجيل الدخول - أوتو إنفايت</title>
     <meta name="description" content="سجّل دخولك إلى منصة أوتو إنفايت للدعوات الذكية عبر الواتساب">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap"
-        rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: 'TSNAS Bold';
+            src: url('/assets/fonts/TSNAS-BOLD.OTF') format('opentype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+    </style>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -17,7 +24,7 @@
                     colors: {
                         brand: { green: '#00C853', dark: '#0A3D2E', light: '#E8FAF0' }
                     },
-                    fontFamily: { sans: ['"IBM Plex Sans Arabic"', 'sans-serif'] }
+                    fontFamily: { sans: ['"TSNAS Bold"', 'sans-serif'] }
                 }
             }
         }
@@ -28,7 +35,7 @@
         }
 
         body {
-            font-family: 'IBM Plex Sans Arabic', sans-serif;
+            font-family: 'TSNAS Bold', sans-serif;
         }
 
         input:focus {

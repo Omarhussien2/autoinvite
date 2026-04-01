@@ -6,10 +6,16 @@
   <title><%= typeof pageTitle !== 'undefined' ? pageTitle + ' - ' : '' %>أوتو إنفايت</title>
   <meta name="description" content="منصة دعوات الواتساب الذكية">
 
-  <!-- Google Fonts: IBM Plex Sans Arabic -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- TSNAS Bold Font -->
+  <style>
+    @font-face {
+      font-family: 'TSNAS Bold';
+      src: url('/assets/fonts/TSNAS-BOLD.OTF') format('opentype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: swap;
+    }
+  </style>
 
   <!-- Tailwind CSS (CDN for now, replace with compiled output in production) -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -27,7 +33,7 @@
             surface: { white: '#FFFFFF', gray: '#F7F8FA' },
           },
           fontFamily: {
-            sans: ['"IBM Plex Sans Arabic"', 'sans-serif'],
+            sans: ['"TSNAS Bold"', 'sans-serif'],
             mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
           },
         }
@@ -47,7 +53,7 @@
 
   <style>
     * { box-sizing: border-box; }
-    body { font-family: 'IBM Plex Sans Arabic', sans-serif; }
+    body { font-family: 'TSNAS Bold', sans-serif; }
 
     /* Scrollbar */
     ::-webkit-scrollbar { width: 5px; height: 5px; }
