@@ -38,6 +38,8 @@ test_output.txt
 *.jpeg
 *.png
 !public/assets/images/
+!public/assets/template.xlsx
+!public/assets/template.csv
 !assets/
 
 # ── AI Agent Config ──────────────────────────────────
