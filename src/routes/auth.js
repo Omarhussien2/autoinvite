@@ -37,7 +37,10 @@ router.post('/login', authLimiter, async (req, res) => {
             req.session.tenantName = tenant.name;
             req.session.tenantRole = tenant.role || 'user';
             const redirect = (tenant.role === 'admin') ? '/admin/dashboard' : '/dashboard';
-            return res.json({ success: true, redirect });
+            return req.session.save(err => {
+                if (err) console.error('Session save error:', err);
+                res.json({ success: true, redirect });
+            });
         } else {
             return res.status(401).json({ success: false, message: 'بيانات الدخول غير صحيحة' });
         }
@@ -81,7 +84,10 @@ router.post('/register', async (req, res) => {
         req.session.tenantName = newTenant.name;
         req.session.tenantRole = 'user';
 
-        res.json({ success: true, redirect: '/dashboard' });
+        req.session.save(err => {
+            if (err) console.error('Session save error:', err);
+            res.json({ success: true, redirect: '/dashboard' });
+        });
     } catch (err) {
         console.error('Register Error:', err);
         res.status(500).json({ success: false, message: 'فشل إنشاء الحساب' });
