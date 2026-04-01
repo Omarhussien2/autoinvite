@@ -139,8 +139,8 @@ process.on('unhandledRejection', (reason) => {
 
 // --- UI ROUTES (DYNAMIC EJS) ---
 
-// 1. Landing Page (Public) — served from taqreerk React build
-const landingDistPath = path.join(__dirname, '../taqreerk/dist');
+// 1. Landing Page (Public) — served from landing-autoinvite React build
+const landingDistPath = path.join(__dirname, '../landing-autoinvite/dist');
 const landingIndexPath = path.join(landingDistPath, 'index.html');
 
 // Auto-build landing page if dist doesn't exist
@@ -148,14 +148,14 @@ if (!fs.existsSync(landingIndexPath)) {
     console.log('⚙️ Landing page dist not found, attempting build...');
     try {
         const { execSync } = require('child_process');
-        execSync('cd taqreerk && npm install && npm run build', { stdio: 'inherit', cwd: path.join(__dirname, '..') });
+        execSync('cd landing-autoinvite && npm install && npm run build', { stdio: 'inherit', cwd: path.join(__dirname, '..') });
         console.log('✅ Landing page built successfully.');
     } catch (buildErr) {
         console.warn('⚠️ Landing page build failed:', buildErr.message);
     }
 }
 
-app.use('/taqreerk', express.static(landingDistPath));
+app.use('/landing-autoinvite', express.static(landingDistPath));
 app.get('/', (req, res) => {
     if (fs.existsSync(landingIndexPath)) {
         res.sendFile(landingIndexPath);

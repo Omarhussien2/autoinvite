@@ -5,18 +5,19 @@ node_modules/
 .env
 .env.production
 .env.local
+.env.*.local
 
 # ── WhatsApp Session Data ────────────────────────────
 .wwebjs_auth/
 .wwebjs_cache/
 storage/
 
-# ── Logs ─────────────────────────────────────────────
+# ── Tenant Uploads ───────────────────────────────────
+uploads/
+
+# ── Logs & Temp ──────────────────────────────────────
 logs/*.log
 temp/
-
-# ── Test Artifacts ────────────────────────────────────
-test_output.txt
 *.log
 
 # ── OS Files ─────────────────────────────────────────
@@ -27,12 +28,29 @@ Thumbs.db
 database.db
 
 # ── React Landing Page Build Output ──────────────────
-taqreerk/dist/
-taqreerk/node_modules/
+landing-autoinvite/dist/
+landing-autoinvite/node_modules/
 
-# ── Large test files in project root ─────────────────
-grid_test.png
-template.png
+# ── Test/Data Files ──────────────────────────────────
+test_output.txt
+*.csv
+*.xlsx
+*.jpeg
+*.png
+!public/assets/images/
+!assets/
 
-# ── Attached assets (prompt dumps, auto-generated images) ──
-attached_assets/*.txt
+# ── AI Agent Config ──────────────────────────────────
+.agents/
+.claude/
+.gemini/
+
+# ── Replit Legacy ────────────────────────────────────
+.replit
+replit.md
+replit.nix
+
+# ── Python ───────────────────────────────────────────
+__pycache__/
+*.pyc
+.pytest_cache/

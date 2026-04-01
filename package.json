@@ -8,10 +8,7 @@
     "db:init": "node src/database/init_saas.js",
     "db:migrate": "node src/database/migrate_saas.js",
     "db:seed-admin": "node src/database/seed_admin.js",
-    "prod": "pm2 start ecosystem.config.js --env production",
-    "prod:stop": "pm2 stop autoinvite",
-    "prod:restart": "pm2 restart autoinvite",
-    "prod:logs": "pm2 logs autoinvite",
+    "build:landing": "cd landing-autoinvite && npm install && npm run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
