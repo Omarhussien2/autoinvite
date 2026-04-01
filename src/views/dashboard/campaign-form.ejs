@@ -109,30 +109,33 @@
 
         <!-- Left Col: Editor (5 cols) -->
         <div class="lg:col-span-5 space-y-6">
-            <div class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm sticky top-24">
-                <h3 class="text-sm font-semibold text-gray-800 mb-4">المصمم الذكي 🎨</h3>
+            <div class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm sticky top-24 relative">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-semibold text-gray-800">المصمم الذكي</h3>
+                    <span class="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">قريباً</span>
+                </div>
                 <p class="text-[11px] text-gray-400 mb-4 text-center">ارفع الصورة ثم اسحب "الاسم" للمكان المناسب</p>
 
                 <div id="canvas-container"
-                    class="aspect-[4/5] bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center overflow-hidden relative">
+                    class="aspect-[4/5] bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center overflow-hidden relative opacity-50 pointer-events-none">
                     <p id="placeholder-text" class="text-xs text-gray-300">في انتظار رفع الصورة...</p>
                     <canvas id="previewCanvas" class="max-w-full max-h-full cursor-move shadow-md hidden"></canvas>
                 </div>
 
                 <!-- Canvas Controls -->
-                <div class="grid grid-cols-2 gap-4 mt-4">
+                <div class="grid grid-cols-2 gap-4 mt-4 opacity-50 pointer-events-none">
                     <div>
                         <label class="block text-[10px] font-medium text-gray-500 mb-1">حجم الخط</label>
                         <% let cfgFontSize=60; let cfgFontColor='#000000' ; if (campaign && campaign.canvas_config) {
                             try { const cc=JSON.parse(campaign.canvas_config); cfgFontSize=cc.fontSize || 60;
                             cfgFontColor=cc.color || '#000000' ; } catch(e) {} } %>
                             <input type="number" id="fontSize" value="<%= cfgFontSize %>"
-                                class="w-full px-3 py-1.5 rounded-lg border border-gray-200 text-sm">
+                                class="w-full px-3 py-1.5 rounded-lg border border-gray-200 text-sm" disabled>
                     </div>
                     <div>
                         <label class="block text-[10px] font-medium text-gray-500 mb-1">اللون</label>
                         <input type="color" id="fontColor" value="<%= cfgFontColor %>"
-                            class="w-full h-8 p-0 rounded-lg border border-gray-200 cursor-pointer overflow-hidden">
+                            class="w-full h-8 p-0 rounded-lg border border-gray-200 cursor-pointer overflow-hidden" disabled>
                     </div>
                 </div>
             </div>
