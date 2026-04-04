@@ -17,6 +17,7 @@ uploads/
 
 # ── Logs & Temp ──────────────────────────────────────
 logs/*.log
+logs/*.txt
 temp/
 *.log
 
@@ -26,6 +27,13 @@ Thumbs.db
 
 # ── SQLite (legacy — replaced by PostgreSQL) ─────────
 database.db
+
+# ── Windows Developer Binaries ───────────────────────
+*.exe
+
+# ── AI / Design Session Artifacts ───────────────────
+attached_assets/
+grid_test.*
 
 # ── React Landing Page Build Output ──────────────────
 landing-autoinvite/dist/
