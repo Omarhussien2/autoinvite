@@ -29,7 +29,30 @@ async function migrate() {
             ADD COLUMN IF NOT EXISTS failed_count INTEGER NOT NULL DEFAULT 0
         `);
 
-        console.log('✅ Migration complete: tenants.role, tenants.message_quota, tenants.messages_used, sent_logs.failed_at, campaigns.failed_count');
+        // Messages table for Live Inbox
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS messages (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+                remote_phone TEXT NOT NULL,
+                sender TEXT NOT NULL DEFAULT 'them',
+                direction TEXT NOT NULL DEFAULT 'inbound',
+                body TEXT,
+                whatsapp_timestamp TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        await db.query(`
+            CREATE INDEX IF NOT EXISTS idx_messages_tenant_phone
+            ON messages (tenant_id, remote_phone, created_at DESC)
+        `);
+
+        // WhatsApp session tracking columns on tenants
+        await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS whatsapp_status TEXT DEFAULT 'disconnected'`);
+        await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS whatsapp_phone TEXT`);
+
+        console.log('✅ Migration complete: tenants.role, tenants.message_quota, tenants.messages_used, sent_logs.failed_at, campaigns.failed_count, messages table, tenants.whatsapp_status/whatsapp_phone');
     } catch (err) {
         console.error('❌ Migration failed:', err);
         process.exit(1);

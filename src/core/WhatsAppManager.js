@@ -1,13 +1,14 @@
-const { LocalAuth, Client } = require('whatsapp-web.js');
+const wppconnect = require('@wppconnect-team/wppconnect');
 const path = require('path');
 const fs = require('fs');
+const db = require('../database/pg-client');
 
 class WhatsAppManager {
     constructor() {
-        this.clients = new Map(); // tenantId -> client
+        this.clients = new Map(); // tenantId -> wppconnect client
         this.states = new Map(); // tenantId -> { status, lastQr, lastActive, phone }
         this.io = null;
-        this.MAX_TOTAL_CLIENTS = process.env.MAX_TOTAL_CLIENTS || 5; // Default to 5 browsers for SaaS safety
+        this.MAX_TOTAL_CLIENTS = process.env.MAX_TOTAL_CLIENTS || 5;
     }
 
     setIo(io) {
@@ -27,7 +28,6 @@ class WhatsAppManager {
             return client;
         }
 
-        // Check global capacity
         if (this.clients.size >= this.MAX_TOTAL_CLIENTS) {
             throw new Error('النظام استنفد كامل طاقته حالياً. يرجى المحاولة لاحقاً (Server at capacity)');
         }
@@ -47,115 +47,207 @@ class WhatsAppManager {
     }
 
     async initializeClient(tenantId) {
-        const authDir = path.join(process.env.DATA_DIR || path.join(__dirname, '../../'), 'storage', `tenant_${tenantId}`, 'auth_session');
-        if (!fs.existsSync(authDir)) {
-            fs.mkdirSync(authDir, { recursive: true });
+        const tokenDir = path.join(
+            process.env.DATA_DIR || path.join(__dirname, '../../'),
+            'storage', `tenant_${tenantId}`, 'wpp_tokens'
+        );
+        if (!fs.existsSync(tokenDir)) {
+            fs.mkdirSync(tokenDir, { recursive: true });
         }
 
-        // Resolve Chromium path for Linux VPS / NixOS / Replit environments
-        let executablePath;
-        if (process.env.CHROMIUM_PATH) {
-            executablePath = process.env.CHROMIUM_PATH;
-        } else {
-            try {
-                const { execSync } = require('child_process');
-                executablePath = execSync(
-                    'which chromium 2>/dev/null || which chromium-browser 2>/dev/null || which google-chrome 2>/dev/null || echo ""'
-                ).toString().trim() || undefined;
-            } catch (_) {
-                executablePath = undefined;
-            }
-        }
-
-        const puppeteerConfig = {
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--disable-software-rasterizer',
-                '--disable-extensions',
-                '--no-zygote',                      // Saves ~50MB RAM per session on VPS
-                '--disable-background-networking',
-                '--disable-default-apps',
-                '--disable-sync',
-                '--disable-translate',
-                '--hide-scrollbars',
-                '--metrics-recording-only',
-                '--mute-audio',
-                '--safebrowsing-disable-auto-update',
-                '--disable-features=site-per-process'
-            ]
-        };
-        if (executablePath) puppeteerConfig.executablePath = executablePath;
-
-        const client = new Client({
-            authStrategy: new LocalAuth({ clientId: `tenant_${tenantId}`, dataPath: authDir }),
-            puppeteer: puppeteerConfig
-        });
-
-        this.clients.set(tenantId, client);
         this.states.set(tenantId, { status: 'INITIALIZING', lastQr: null, lastActive: Date.now(), phone: null });
+        this.emitToTenant(tenantId, 'status', 'جاري تهيئة جلسة الواتساب...');
 
-        client.on('qr', (qr) => {
-            const state = this.states.get(tenantId);
-            if (state) {
-                state.status = 'QUERY_QR';
-                state.lastQr = qr;
-                this.updateActivity(tenantId);
-            }
-            this.emitToTenant(tenantId, 'qr', qr);
-            this.emitToTenant(tenantId, 'status', 'يا هلا! امسح الباركود عشان نربط الواتساب');
-        });
+        try {
+            const client = await wppconnect.create({
+                session: `tenant_${tenantId}`,
+                tokenStore: 'file',
+                folderNameToken: tokenDir,
+                headless: true,
+                useChrome: false,
+                autoClose: 0, // Never auto-close
+                puppeteerOptions: {
+                    args: [
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-gpu',
+                        '--disable-software-rasterizer',
+                        '--disable-extensions',
+                        '--no-zygote',
+                        '--disable-background-networking',
+                        '--disable-default-apps',
+                        '--disable-sync',
+                        '--disable-translate',
+                        '--hide-scrollbars',
+                        '--metrics-recording-only',
+                        '--mute-audio',
+                        '--safebrowsing-disable-auto-update',
+                    ]
+                },
+                catchQR: (base64Qrimg, asciiQR, attempts, urlCode) => {
+                    const state = this.states.get(tenantId);
+                    if (state) {
+                        state.status = 'QUERY_QR';
+                        state.lastQr = base64Qrimg; // Already base64 data URI from WPPConnect
+                        this.updateActivity(tenantId);
+                    }
+                    // Emit the base64 QR directly — frontend expects a data URI
+                    this.emitToTenant(tenantId, 'qr', base64Qrimg);
+                    this.emitToTenant(tenantId, 'status', 'يا هلا! امسح الباركود عشان نربط الواتساب');
+                },
+                statusFind: (statusSession, session) => {
+                    console.log(`[Tenant ${tenantId}] WPPConnect status: ${statusSession}`);
+                    this._handleStatusChange(tenantId, statusSession);
+                },
+            });
 
-        client.on('ready', () => {
+            // Session is now connected
+            this.clients.set(tenantId, client);
+
             const state = this.states.get(tenantId);
             if (state) {
                 state.status = 'READY';
                 state.lastQr = null;
-                const phone = client.info ? client.info.wid.user : 'Unknown';
-                state.phone = phone;
                 this.updateActivity(tenantId);
             }
-            this.emitToTenant(tenantId, 'ready', { phone: state?.phone });
-            this.emitToTenant(tenantId, 'status', `الواتساب جاهز ومتصل بالرقم (966${state?.phone?.substring(3) || ''})`);
-            console.log(`[Tenant ${tenantId}] Client is ready!`);
-        });
 
-        client.on('authenticated', () => {
-            this.emitToTenant(tenantId, 'status', 'تم التوثيق بنجاح! جاري التحميل...');
-            this.updateActivity(tenantId);
-        });
+            // Get connected phone number
+            const hostDevice = await client.getHostDevice();
+            const phone = hostDevice && hostDevice.wid ? hostDevice.wid.user : 'Unknown';
+            if (state) state.phone = phone;
 
-        client.on('disconnected', (reason) => {
-            console.log(`[Tenant ${tenantId}] WhatsApp disconnected:`, reason);
-            this.stopClient(tenantId);
-        });
+            this.emitToTenant(tenantId, 'ready', { phone });
+            this.emitToTenant(tenantId, 'status', `الواتساب جاهز ومتصل بالرقم (${phone})`);
+            console.log(`[Tenant ${tenantId}] WPPConnect client is ready!`);
 
-        // Initialize and catch errors — always destroy before removing to prevent zombie Chromium
-        client.initialize().catch(async err => {
-            console.error(`[Tenant ${tenantId}] WhatsApp Init Error:`, err.message);
-            try {
-                await client.destroy();
-            } catch (_) {
-                // If destroy fails, attempt to kill the underlying browser process directly
-                try { client.pupBrowser && client.pupBrowser.process() && client.pupBrowser.process().kill('SIGKILL'); } catch (_2) {}
-            }
-            this.clients.delete(tenantId);
+            // Update tenant status in DB
+            await db.query(
+                'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = $2 WHERE id = $3',
+                ['connected', phone, tenantId]
+            ).catch(() => {}); // Column may not exist yet
+
+            // Listen for disconnect
+            client.onStateChange((state) => {
+                console.log(`[Tenant ${tenantId}] State changed: ${state}`);
+                if (state === 'CONFLICT' || state === 'UNPAIRED' || state === 'UNLAUNCHED') {
+                    this.stopClient(tenantId);
+                }
+            });
+
+            // ── Live Inbox: Listen for incoming messages ──
+            client.onMessage(async (message) => {
+                try {
+                    // Skip status/broadcast/group messages
+                    if (message.isGroupMsg || message.from === 'status@broadcast') return;
+
+                    const from = message.from; // e.g. "966501234567@c.us"
+                    const body = message.body || '';
+                    const timestamp = message.t || Math.floor(Date.now() / 1000);
+                    const senderPhone = from.replace('@c.us', '');
+
+                    // Get sender name (contact or pushname)
+                    let senderName = message.sender?.pushname || message.sender?.formattedName || senderPhone;
+
+                    // Persist to messages table
+                    await db.query(
+                        `INSERT INTO messages (tenant_id, remote_phone, sender, direction, body, whatsapp_timestamp)
+                         VALUES ($1, $2, $3, $4, $5, to_timestamp($6))`,
+                        [tenantId, senderPhone, 'them', 'inbound', body, timestamp]
+                    ).catch(err => console.error(`[Tenant ${tenantId}] Failed to save inbound message:`, err.message));
+
+                    // Push to frontend via Socket.io
+                    this.emitToTenant(tenantId, 'new_whatsapp_message', {
+                        from: senderPhone,
+                        name: senderName,
+                        body,
+                        timestamp,
+                        direction: 'inbound',
+                    });
+
+                    // Mark as read on WhatsApp
+                    await client.sendSeen(from).catch(() => {});
+
+                    console.log(`[Tenant ${tenantId}] Inbox: ${senderName} (${senderPhone}): ${body.substring(0, 50)}`);
+                } catch (err) {
+                    console.error(`[Tenant ${tenantId}] onMessage error:`, err.message);
+                }
+            });
+
+            return client;
+        } catch (err) {
+            console.error(`[Tenant ${tenantId}] WPPConnect Init Error:`, err.message);
             this.states.set(tenantId, { status: 'ERROR', error: err.message });
-        });
+            this.emitToTenant(tenantId, 'status', `خطأ في الاتصال: ${err.message}`);
 
-        return client;
+            // Update tenant status in DB
+            await db.query(
+                'UPDATE tenants SET whatsapp_status = $1 WHERE id = $2',
+                ['error', tenantId]
+            ).catch(() => {});
+
+            throw err;
+        }
+    }
+
+    /**
+     * Handle WPPConnect statusFind callbacks and update DB accordingly.
+     */
+    async _handleStatusChange(tenantId, statusSession) {
+        const state = this.states.get(tenantId);
+
+        switch (statusSession) {
+            case 'isLogged':
+            case 'inChat':
+                if (state) state.status = 'READY';
+                this.emitToTenant(tenantId, 'status', 'تم التوثيق بنجاح! جاري التحميل...');
+                await db.query(
+                    'UPDATE tenants SET whatsapp_status = $1 WHERE id = $2',
+                    ['connected', tenantId]
+                ).catch(() => {});
+                break;
+
+            case 'notLogged':
+            case 'browserClose':
+            case 'desconnectedMobile':
+            case 'deleteToken':
+                if (state) {
+                    state.status = 'DISCONNECTED';
+                    state.phone = null;
+                    state.lastQr = null;
+                }
+                this.emitToTenant(tenantId, 'status', 'تم قطع الاتصال بالواتساب.');
+                this.clients.delete(tenantId);
+                await db.query(
+                    'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = NULL WHERE id = $2',
+                    ['disconnected', tenantId]
+                ).catch(() => {});
+                break;
+
+            case 'qrReadSuccess':
+                this.emitToTenant(tenantId, 'status', 'تم مسح الباركود بنجاح! جاري الربط...');
+                break;
+
+            case 'autoClose':
+                console.log(`[Tenant ${tenantId}] Session auto-closed.`);
+                this.stopClient(tenantId);
+                break;
+
+            case 'qrReadFail':
+                this.emitToTenant(tenantId, 'status', 'فشل في قراءة الباركود، حاول مرة أخرى.');
+                break;
+        }
     }
 
     async stopClient(tenantId) {
         const client = this.clients.get(tenantId);
         if (client) {
             try {
-                await client.destroy();
+                await client.close();
             } catch (e) {
-                console.error(`Error destroying client for tenant ${tenantId}:`, e.message);
+                console.error(`Error closing client for tenant ${tenantId}:`, e.message);
+                // Try to kill browser process if close fails
+                try { await client.killServiceWorker(); } catch (_) {}
             }
             this.clients.delete(tenantId);
         }
@@ -166,9 +258,14 @@ class WhatsAppManager {
             state.lastQr = null;
         }
         this.emitToTenant(tenantId, 'status', 'تم إيقاف الجلسة. يمكنك إعادة الاتصال.');
+
+        await db.query(
+            'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = NULL WHERE id = $2',
+            ['disconnected', tenantId]
+        ).catch(() => {});
     }
 
-    // Session Sleep system: cron task to sweep inactive sessions every mins
+    // Session Sleep system: sweep inactive sessions to save RAM
     startSleepMonitor(idleMs = 15 * 60 * 1000) {
         setInterval(() => {
             const now = Date.now();
@@ -178,7 +275,7 @@ class WhatsAppManager {
                     this.stopClient(tenantId);
                 }
             }
-        }, 60000); // Check every minute
+        }, 60000);
     }
 }
 

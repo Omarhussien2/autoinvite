@@ -1,4 +1,5 @@
 const fs = require('fs-extra');
+const path = require('path');
 const { normalizePhone, processName } = require('../utils/dataProcessor');
 const config = require('../config/settings');
 const { generateImage } = require('../utils/generator');
@@ -22,7 +23,7 @@ function pickWeightedMessage(messages, name) {
 function getSaudiErrorMessage(name, error) {
     const msg = (error || '').toLowerCase();
 
-    if (msg.includes('not registered') || msg.includes('not on whatsapp') || msg.includes('not a valid whatsapp number')) {
+    if (msg.includes('not registered') || msg.includes('not on whatsapp') || msg.includes('not a valid whatsapp number') || msg.includes('no whatsapp')) {
         return `الرقم مو مسجل في الواتساب`;
     }
     if (msg.includes('disconnected') || msg.includes('session closed') || msg.includes('page crashed') || msg.includes('lost connection')) {
@@ -40,8 +41,6 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
 
     WhatsAppManager.updateActivity(tenantId);
     const client = await WhatsAppManager.getClient(tenantId);
-
-    const { MessageMedia } = require('whatsapp-web.js');
 
     for (const [index, contact] of subset.entries()) {
         WhatsAppManager.updateActivity(tenantId);
@@ -69,8 +68,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                 "SELECT id FROM sent_logs WHERE campaign_id = $1 AND phone = $2 AND (status IS NULL OR status = 'success')",
                 [campaignId, normalizedPhone]
             );
-            const alreadySent = alreadySentRes.rows[0];
-            if (alreadySent) {
+            if (alreadySentRes.rows[0]) {
                 onLog(`Skipping ${name}: Already sent in this campaign (Deduplicated)`, 'WARN');
                 continue;
             }
@@ -80,20 +78,13 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             const message = pickWeightedMessage(messages, name);
             onLog(`[${index + 1}/${subset.length}] Processing: ${name} (${normalizedPhone})`, 'INFO');
 
-            const validChatId = `${normalizedPhone}@c.us`;
+            const chatId = `${normalizedPhone}@c.us`;
 
-            const withTimeout = (promise, ms = 30000) => {
-                let timeoutId;
-                const timeoutPr = new Promise((_, reject) => {
-                    timeoutId = setTimeout(() => reject(new Error('WhatsApp Web is stuck (Timeout)')), ms);
-                });
-                return Promise.race([promise, timeoutPr]).finally(() => clearTimeout(timeoutId));
-            };
-
+            // ── Step 1: Validate number is on WhatsApp ──────────────────────
             try {
-                const isRegistered = await withTimeout(client.isRegisteredUser(validChatId), 10000);
-                if (!isRegistered) {
-                    await logResult(normalizedPhone, name, 'SKIP', 'Number not on WhatsApp');
+                const numberStatus = await client.checkNumberStatus(chatId);
+                if (!numberStatus || numberStatus.status !== 200 || !numberStatus.numberExists) {
+                    await logResult(normalizedPhone, name, 'SKIP', 'Failed - No WhatsApp');
                     const saudiMsg = `الرقم مو مسجل في الواتساب`;
                     onLog(`Skipping ${name}: ${saudiMsg}`, 'WARN');
                     WhatsAppManager.emitToTenant(tenantId, 'log', { message: saudiMsg, type: 'WARN' });
@@ -110,14 +101,28 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                 onLog(`تعذر التحقق من الرقم ${normalizedPhone}, سنحاول الإرسال مباشرة...`, 'WARN');
             }
 
+            // ── Step 2: Typing simulation ───────────────────────────────────
+            // Show typing indicator for a duration based on message length
+            // (50ms per character, capped at 3 seconds), then send.
+            try {
+                await client.startTyping(chatId);
+                const typingDelay = Math.min(message.length * 50, 3000);
+                onLog(`[HumanBehavior] Typing for ${(typingDelay / 1000).toFixed(1)}s (${message.length} chars)...`, 'INFO');
+                await AntiBanEngine.sleep(typingDelay);
+                await client.stopTyping(chatId);
+            } catch (_) {}
+
+            // ── Step 3: Send the message ────────────────────────────────────
             if (hasTemplate && templatePath) {
                 const imagePath = await generateImage(name, normalizedPhone, templatePath, canvasConfig);
-                const media = MessageMedia.fromFilePath(imagePath);
-                await withTimeout(client.sendMessage(validChatId, media, { caption: message }), 60000);
+                await client.sendImage(chatId, imagePath, 'invitation', message);
                 await fs.remove(imagePath);
             } else {
-                await withTimeout(client.sendMessage(validChatId, message), 30000);
+                await client.sendText(chatId, message);
             }
+
+            // ── Step 6: Record sent & apply inter-message anti-ban delay ───
+            AntiBanEngine.recordSent(tenantId);
 
             if (campaignId) {
                 await db.query(
@@ -134,11 +139,19 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             await logResult(normalizedPhone, name, 'SUCCESS', 'Invitation Sent');
             onLog(`Success: Invitation sent to ${name}`, 'SUCCESS');
 
+            // Apply inter-message delay (skip after the very last message)
             if (index < subset.length - 1) {
-                await AntiBanEngine.applyDelay(config.whatsapp.minDelay, config.whatsapp.maxDelay, onLog);
+                await AntiBanEngine.applyDelay(
+                    config.whatsapp.minDelay,
+                    config.whatsapp.maxDelay,
+                    onLog,
+                    tenantId
+                );
             }
 
         } catch (error) {
+            try { await client.stopTyping(`${normalizedPhone}@c.us`); } catch (_) {}
+
             await logResult(normalizedPhone, name, 'FAIL', error.message);
 
             const saudiMsg = getSaudiErrorMessage(name, error.message);

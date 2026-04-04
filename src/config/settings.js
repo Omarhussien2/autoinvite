@@ -17,8 +17,8 @@ module.exports = {
     // WhatsApp Automation Config
     whatsapp: {
         typingDelay: 2000,
-        minDelay: 20000, // 20 ثانية حد أدنى
-        maxDelay: 45000  // 45 ثانية حد أقصى
+        minDelay: 30000, // 30 ثانية حد أدنى
+        maxDelay: 60000  // 60 ثانية حد أقصى
     },
 
     // Paths

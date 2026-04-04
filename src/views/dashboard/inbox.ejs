@@ -1,0 +1,322 @@
+<!-- Live Inbox: Two-Pane Layout -->
+<div class="flex h-[calc(100vh-140px)] bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+
+    <!-- ===== RIGHT PANE: Contact List ===== -->
+    <div id="contact-list-pane" class="w-80 flex-shrink-0 border-l border-gray-100 flex flex-col bg-white">
+
+        <!-- Search -->
+        <div class="p-4 border-b border-gray-50">
+            <div class="relative">
+                <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <input id="contact-search" type="text" placeholder="ابحث في المحادثات..."
+                    class="w-full pr-10 pl-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-green/30 focus:border-brand-green transition">
+            </div>
+        </div>
+
+        <!-- Conversations -->
+        <div id="conversations-list" class="flex-1 overflow-y-auto custom-scrollbar">
+            <% if (conversations.length === 0) { %>
+                <div class="flex flex-col items-center justify-center h-full text-gray-400 px-6 text-center">
+                    <svg class="w-12 h-12 mb-3 text-gray-200" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                    </svg>
+                    <p class="text-sm font-medium">لا توجد محادثات بعد</p>
+                    <p class="text-xs mt-1">الرسائل الواردة ستظهر هنا تلقائياً</p>
+                </div>
+            <% } else { %>
+                <% conversations.forEach(function(conv) { %>
+                    <div class="conversation-item cursor-pointer px-4 py-3.5 border-b border-gray-50 hover:bg-gray-50/80 transition-all duration-150"
+                         data-phone="<%= conv.remote_phone %>"
+                         onclick="openConversation('<%= conv.remote_phone %>')">
+                        <div class="flex items-center gap-3">
+                            <!-- Avatar -->
+                            <div class="w-10 h-10 rounded-full bg-brand-light flex items-center justify-center flex-shrink-0">
+                                <span class="text-brand-dark font-bold text-sm"><%= conv.remote_phone.slice(-2) %></span>
+                            </div>
+                            <!-- Info -->
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm font-bold text-gray-900 truncate"><%= conv.sender === 'them' ? conv.remote_phone : conv.remote_phone %></span>
+                                    <span class="text-[10px] text-gray-400 flex-shrink-0"><%= conv.created_at ? new Date(conv.created_at).toLocaleDateString('ar-SA', { month: 'short', day: 'numeric' }) : '' %></span>
+                                </div>
+                                <p class="text-xs text-gray-500 truncate mt-0.5">
+                                    <% if (conv.direction === 'outbound') { %><span class="text-brand-green">أنت:</span> <% } %>
+                                    <%= (conv.body || '').substring(0, 50) %>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                <% }); %>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- ===== LEFT PANE: Chat Window ===== -->
+    <div id="chat-pane" class="flex-1 flex flex-col bg-surface-gray">
+
+        <!-- Empty state (shown when no conversation is selected) -->
+        <div id="chat-empty" class="flex-1 flex flex-col items-center justify-center text-gray-400">
+            <svg class="w-20 h-20 mb-4 text-gray-200" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+            </svg>
+            <p class="text-sm font-medium">اختر محادثة للبدء</p>
+            <p class="text-xs mt-1">اضغط على أي جهة اتصال من القائمة</p>
+        </div>
+
+        <!-- Active chat (hidden initially) -->
+        <div id="chat-active" class="flex-1 flex flex-col hidden">
+
+            <!-- Chat header -->
+            <div id="chat-header" class="px-6 py-4 bg-white border-b border-gray-100 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-brand-dark flex items-center justify-center flex-shrink-0">
+                    <span id="chat-avatar" class="text-white font-bold text-sm"></span>
+                </div>
+                <div>
+                    <p id="chat-phone" class="text-sm font-bold text-gray-900"></p>
+                    <p class="text-[10px] text-gray-400">محادثة مباشرة عبر الواتساب</p>
+                </div>
+            </div>
+
+            <!-- Messages area -->
+            <div id="chat-messages" class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-3">
+                <!-- Messages populated dynamically -->
+            </div>
+
+            <!-- Reply input -->
+            <div class="p-4 bg-white border-t border-gray-100">
+                <form id="reply-form" class="flex items-center gap-3" onsubmit="sendReply(event)">
+                    <input id="reply-input" type="text" placeholder="اكتب ردك هنا..."
+                        autocomplete="off"
+                        class="flex-1 px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-green/30 focus:border-brand-green transition">
+                    <button type="submit" id="reply-btn"
+                        class="bg-brand-dark text-white px-5 py-3 rounded-xl text-sm font-medium hover:opacity-90 transition flex items-center gap-2 flex-shrink-0">
+                        <span>إرسال</span>
+                        <svg class="w-4 h-4 rotate-180" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                        </svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+let activePhone = null;
+const socket = io();
+
+// ── Open a conversation ────────────────────────────────────────────
+async function openConversation(phone) {
+    activePhone = phone;
+
+    // Highlight active contact
+    document.querySelectorAll('.conversation-item').forEach(el => {
+        el.classList.toggle('bg-brand-light/50', el.dataset.phone === phone);
+        el.classList.toggle('border-r-2', el.dataset.phone === phone);
+        el.classList.toggle('border-brand-green', el.dataset.phone === phone);
+    });
+
+    // Show chat pane
+    document.getElementById('chat-empty').classList.add('hidden');
+    document.getElementById('chat-active').classList.remove('hidden');
+    document.getElementById('chat-phone').textContent = phone;
+    document.getElementById('chat-avatar').textContent = phone.slice(-2);
+    document.getElementById('chat-messages').innerHTML = `
+        <div class="flex justify-center py-8">
+            <div class="w-6 h-6 border-2 border-brand-green border-t-transparent rounded-full animate-spin"></div>
+        </div>
+    `;
+
+    // Fetch messages
+    try {
+        const res = await fetch('/api/inbox/' + phone + '/messages');
+        const data = await res.json();
+        if (data.success) {
+            renderMessages(data.messages);
+        }
+    } catch (e) {
+        console.error('Failed to load messages:', e);
+    }
+
+    // Focus reply input
+    document.getElementById('reply-input').focus();
+}
+
+// ── Render messages ────────────────────────────────────────────────
+function renderMessages(messages) {
+    const container = document.getElementById('chat-messages');
+    if (messages.length === 0) {
+        container.innerHTML = `
+            <div class="flex justify-center py-8 text-gray-400 text-sm">لا توجد رسائل بعد</div>
+        `;
+        return;
+    }
+
+    container.innerHTML = messages.map(msg => messageBubble(msg)).join('');
+    container.scrollTop = container.scrollHeight;
+}
+
+function messageBubble(msg) {
+    const isMe = msg.direction === 'outbound';
+    const time = msg.whatsapp_timestamp
+        ? new Date(msg.whatsapp_timestamp).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })
+        : '';
+
+    if (isMe) {
+        return `
+            <div class="flex justify-start">
+                <div class="max-w-[75%] bg-brand-dark text-white px-4 py-2.5 rounded-2xl rounded-bl-sm shadow-sm">
+                    <p class="text-sm leading-relaxed whitespace-pre-wrap">${escapeHtml(msg.body || '')}</p>
+                    <p class="text-[10px] text-white/50 mt-1 text-left">${time}</p>
+                </div>
+            </div>
+        `;
+    } else {
+        return `
+            <div class="flex justify-end">
+                <div class="max-w-[75%] bg-white px-4 py-2.5 rounded-2xl rounded-br-sm shadow-sm border border-gray-100">
+                    <p class="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">${escapeHtml(msg.body || '')}</p>
+                    <p class="text-[10px] text-gray-400 mt-1">${time}</p>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// ── Send reply ─────────────────────────────────────────────────────
+async function sendReply(e) {
+    e.preventDefault();
+    const input = document.getElementById('reply-input');
+    const body = input.value.trim();
+    if (!body || !activePhone) return;
+
+    const btn = document.getElementById('reply-btn');
+    btn.disabled = true;
+    btn.classList.add('opacity-50');
+    input.value = '';
+
+    try {
+        const res = await fetch('/api/inbox/' + activePhone + '/reply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ body }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            // Append outbound message bubble immediately
+            appendMessage({
+                direction: 'outbound',
+                body,
+                whatsapp_timestamp: new Date().toISOString(),
+            });
+        } else {
+            showToast('error', data.message || 'فشل إرسال الرد');
+        }
+    } catch (err) {
+        showToast('error', 'خطأ في الاتصال');
+    } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50');
+        input.focus();
+    }
+}
+
+// ── Append a single message ────────────────────────────────────────
+function appendMessage(msg) {
+    const container = document.getElementById('chat-messages');
+    // Remove "no messages" placeholder if present
+    const placeholder = container.querySelector('.text-gray-400');
+    if (placeholder && placeholder.closest('.flex.justify-center')) {
+        placeholder.closest('.flex.justify-center').remove();
+    }
+    container.insertAdjacentHTML('beforeend', messageBubble(msg));
+    container.scrollTop = container.scrollHeight;
+}
+
+// ── Socket.io: Real-time incoming messages ─────────────────────────
+socket.on('new_whatsapp_message', (data) => {
+    // Update conversation list
+    updateConversationList(data);
+
+    // Update badge
+    updateInboxBadge();
+
+    // If this conversation is active, append the message
+    if (data.from === activePhone) {
+        appendMessage({
+            direction: 'inbound',
+            body: data.body,
+            whatsapp_timestamp: new Date(data.timestamp * 1000).toISOString(),
+        });
+    }
+});
+
+function updateConversationList(data) {
+    const list = document.getElementById('conversations-list');
+    const existingItem = list.querySelector(`[data-phone="${data.from}"]`);
+
+    const snippet = data.body ? data.body.substring(0, 50) : '';
+    const now = new Date().toLocaleDateString('ar-SA', { month: 'short', day: 'numeric' });
+
+    const newHtml = `
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-brand-light flex items-center justify-center flex-shrink-0">
+                <span class="text-brand-dark font-bold text-sm">${data.from.slice(-2)}</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-bold text-gray-900 truncate">${data.name || data.from}</span>
+                    <span class="text-[10px] text-gray-400 flex-shrink-0">${now}</span>
+                </div>
+                <p class="text-xs text-gray-500 truncate mt-0.5">${escapeHtml(snippet)}</p>
+            </div>
+            ${data.from !== activePhone ? '<div class="w-2.5 h-2.5 bg-brand-green rounded-full flex-shrink-0 status-pulse"></div>' : ''}
+        </div>
+    `;
+
+    if (existingItem) {
+        existingItem.innerHTML = newHtml;
+        // Move to top
+        list.prepend(existingItem);
+    } else {
+        // Remove empty state if present
+        const emptyState = list.querySelector('.flex.flex-col.items-center');
+        if (emptyState) emptyState.remove();
+
+        const div = document.createElement('div');
+        div.className = 'conversation-item cursor-pointer px-4 py-3.5 border-b border-gray-50 hover:bg-gray-50/80 transition-all duration-150';
+        div.dataset.phone = data.from;
+        div.setAttribute('onclick', `openConversation('${data.from}')`);
+        div.innerHTML = newHtml;
+        list.prepend(div);
+    }
+}
+
+function updateInboxBadge() {
+    const badge = document.getElementById('inbox-badge');
+    if (badge) {
+        const current = parseInt(badge.textContent || '0');
+        badge.textContent = current + 1;
+        badge.classList.remove('hidden');
+    }
+}
+
+// ── Contact search filter ──────────────────────────────────────────
+document.getElementById('contact-search').addEventListener('input', function() {
+    const query = this.value.toLowerCase();
+    document.querySelectorAll('.conversation-item').forEach(el => {
+        const phone = el.dataset.phone || '';
+        const text = el.textContent.toLowerCase();
+        el.style.display = (phone.includes(query) || text.includes(query)) ? '' : 'none';
+    });
+});
+</script>

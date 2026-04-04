@@ -19,7 +19,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
 const fs = require('fs');
-const QRCode = require('qrcode');
+// QRCode no longer needed — WPPConnect provides base64 QR directly
 const session = require('express-session');
 const connectPgSimple = require('connect-pg-simple');
 const db = require('./database/pg-client');
@@ -371,7 +371,77 @@ app.get('/reports', isAuthenticated, async (req, res) => {
     }
 });
 
-// 8. Registration Page (Public)
+// 8. Live Inbox View
+app.get('/inbox', isAuthenticated, async (req, res) => {
+    try {
+        const tenantId = req.session.tenantId;
+
+        // Get distinct conversations with latest message
+        const conversationsRes = await db.query(`
+            SELECT DISTINCT ON (remote_phone)
+                remote_phone, sender, body, direction, whatsapp_timestamp, created_at
+            FROM messages
+            WHERE tenant_id = $1
+            ORDER BY remote_phone, created_at DESC
+        `, [tenantId]);
+
+        res.renderPage('dashboard/inbox', {
+            pageTitle: 'صندوق الردود',
+            pageSubtitle: 'آخر الرسائل الواردة',
+            activePage: 'inbox',
+            useSocket: true,
+            tenantName: req.session.tenantName || 'العميل',
+            conversations: conversationsRes.rows,
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error loading inbox');
+    }
+});
+
+// Inbox API: Get messages for a specific conversation
+app.get('/api/inbox/:phone/messages', isAuthenticated, async (req, res) => {
+    try {
+        const result = await db.query(
+            `SELECT * FROM messages WHERE tenant_id = $1 AND remote_phone = $2 ORDER BY created_at ASC LIMIT 200`,
+            [req.session.tenantId, req.params.phone]
+        );
+        res.json({ success: true, messages: result.rows });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// Inbox API: Send a reply
+app.post('/api/inbox/:phone/reply', isAuthenticated, async (req, res) => {
+    try {
+        const tenantId = req.session.tenantId;
+        const phone = req.params.phone;
+        const { body } = req.body;
+
+        if (!body || typeof body !== 'string' || body.trim().length === 0) {
+            return res.status(400).json({ success: false, message: 'الرسالة فارغة' });
+        }
+
+        const client = await WhatsAppManager.getClient(tenantId);
+        const chatId = `${phone}@c.us`;
+
+        await client.sendText(chatId, body.trim());
+
+        // Save outbound message
+        await db.query(
+            `INSERT INTO messages (tenant_id, remote_phone, sender, direction, body, whatsapp_timestamp)
+             VALUES ($1, $2, $3, $4, $5, NOW())`,
+            [tenantId, phone, 'me', 'outbound', body.trim()]
+        );
+
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// 9. Registration Page (Public)
 app.get('/register', (req, res) => {
     if (req.session.tenantId) return res.redirect('/dashboard');
     res.render('auth/register');
@@ -427,7 +497,8 @@ io.on('connection', async (socket) => {
 
     const state = WhatsAppManager.getTenantState(tenantId);
     if (state.status === 'QUERY_QR' && state.lastQr) {
-        QRCode.toDataURL(state.lastQr, (err, url) => { if (!err) socket.emit('qr', url); });
+        // WPPConnect catchQR already provides base64 data URI — emit directly
+        socket.emit('qr', state.lastQr);
     } else if (state.status === 'READY') {
         socket.emit('ready', { phone: state.phone });
     }
