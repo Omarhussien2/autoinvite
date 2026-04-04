@@ -52,7 +52,8 @@ class BackgroundQueue {
                 if (state) state.status = 'READY';
 
                 WhatsAppManager.emitToTenant(tenantId, 'working_state', false);
-                WhatsAppManager.emitToTenant(tenantId, 'log', { msg: `Error: ${error.message}`, type: 'ERROR' });
+                console.error(`[BackgroundQueue] Job failed for tenant ${tenantId}:`, error);
+                WhatsAppManager.emitToTenant(tenantId, 'log', { message: `خطأ: ${error && error.message ? error.message : String(error)}`, type: 'ERROR' });
                 this.jobs.delete(tenantId);
 
                 if (campaignId) {

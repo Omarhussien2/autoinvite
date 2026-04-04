@@ -41,6 +41,10 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
 
     WhatsAppManager.updateActivity(tenantId);
     const client = await WhatsAppManager.getClient(tenantId);
+    if (!client) {
+        onLog('خطأ: الواتساب غير متصل. أعد الربط أولاً.', 'ERROR');
+        throw new Error('WhatsApp client not connected');
+    }
 
     for (const [index, contact] of subset.entries()) {
         WhatsAppManager.updateActivity(tenantId);
@@ -159,11 +163,13 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
         } catch (error) {
             try { await client.stopTyping(`${normalizedPhone}@c.us`); } catch (_) {}
 
-            await logResult(normalizedPhone, name, 'FAIL', error.message);
-
-            const saudiMsg = getSaudiErrorMessage(name, error.message);
+            const errMsg = error && error.message ? error.message : String(error);
+            await logResult(normalizedPhone, name, 'FAIL', errMsg);
+            const saudiMsg = getSaudiErrorMessage(name, errMsg);
             onLog(`Failed: ${name} - ${saudiMsg}`, 'ERROR');
+            console.error(`[processBatch] Error for ${name} (${normalizedPhone}):`, error);
             WhatsAppManager.emitToTenant(tenantId, 'log', { message: saudiMsg, type: 'ERROR' });
+            WhatsAppManager.emitToTenant(tenantId, 'log', { message: `[تفاصيل] ${errMsg}`, type: 'WARN' });
 
             if (campaignId) {
                 await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(() => {});
