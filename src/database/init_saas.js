@@ -29,6 +29,7 @@ async function initializeSaaS() {
         contacts_path TEXT,
         message_templates JSONB,
         canvas_config JSONB,
+        voicenote_path TEXT,
         last_sent_row INTEGER DEFAULT 1,
         failed_count INTEGER NOT NULL DEFAULT 0,
         status TEXT DEFAULT 'draft',

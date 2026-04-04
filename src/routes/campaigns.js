@@ -11,21 +11,22 @@ const fs = require('fs');
 const router = express.Router();
 
 // Create Campaign — quota guard applies (uploading contacts is a pre-launch step)
-router.post('/', isAuthenticated, tenantScope, quotaGuard, upload.fields([{ name: 'template' }, { name: 'contacts' }]), async (req, res) => {
+router.post('/', isAuthenticated, tenantScope, quotaGuard, upload.fields([{ name: 'template' }, { name: 'contacts' }, { name: 'voicenote' }]), async (req, res) => {
     try {
         const { name, message_templates, canvas_config } = req.body;
         const templatePath = req.files['template'] ? req.files['template'][0].path : null;
         const contactsPath = req.files['contacts'] ? req.files['contacts'][0].path : null;
+        const voicenotePath = req.files['voicenote'] ? req.files['voicenote'][0].path : null;
 
         if (!name || !message_templates || !contactsPath) {
             return res.status(400).json({ success: false, message: 'Name, Messages, and Contact File are required' });
         }
 
         const result = await db.query(`
-            INSERT INTO campaigns (tenant_id, name, template_path, contacts_path, message_templates, canvas_config, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO campaigns (tenant_id, name, template_path, contacts_path, message_templates, canvas_config, voicenote_path, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
-        `, [req.tenantId, name, templatePath, contactsPath, message_templates, canvas_config || '{}', 'active']);
+        `, [req.tenantId, name, templatePath, contactsPath, message_templates, canvas_config || '{}', voicenotePath, 'active']);
 
         res.json({ success: true, campaignId: result.rows[0].id });
     } catch (error) {
@@ -56,11 +57,12 @@ router.get('/:id', isAuthenticated, tenantScope, async (req, res) => {
 });
 
 // Update Campaign (Edit)
-router.put('/:id', isAuthenticated, tenantScope, upload.fields([{ name: 'template' }, { name: 'contacts' }]), async (req, res) => {
+router.put('/:id', isAuthenticated, tenantScope, upload.fields([{ name: 'template' }, { name: 'contacts' }, { name: 'voicenote' }]), async (req, res) => {
     try {
         const { name, message_templates, canvas_config } = req.body;
         const templatePath = req.files['template'] ? req.files['template'][0].path : null;
         const contactsPath = req.files['contacts'] ? req.files['contacts'][0].path : null;
+        const voicenotePath = req.files['voicenote'] ? req.files['voicenote'][0].path : null;
 
         let query = 'UPDATE campaigns SET name = $1, message_templates = $2, canvas_config = $3';
         const params = [name, message_templates, canvas_config];
@@ -72,6 +74,10 @@ router.put('/:id', isAuthenticated, tenantScope, upload.fields([{ name: 'templat
         if (contactsPath) {
             params.push(contactsPath);
             query += `, contacts_path = $${params.length}`;
+        }
+        if (voicenotePath) {
+            params.push(voicenotePath);
+            query += `, voicenote_path = $${params.length}`;
         }
 
         params.push(req.params.id, req.tenantId);

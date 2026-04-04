@@ -6,7 +6,7 @@ class BackgroundQueue {
         this.jobs = new Map(); // tenantId -> job
     }
 
-    async addJob(tenantId, campaignId, contacts, startRow, endRow, messages, hasTemplate, templatePath, canvasConfig) {
+    async addJob(tenantId, campaignId, contacts, startRow, endRow, messages, hasTemplate, templatePath, canvasConfig, voicenotePath = null) {
         if (this.jobs.has(tenantId)) {
             throw new Error('A job is already running for this tenant.');
         }
@@ -30,7 +30,7 @@ class BackgroundQueue {
         processBatch(contacts, startRow, endRow, messages, campaignId, hasTemplate, (message, type) => {
             const WhatsAppManager = require('./WhatsAppManager');
             WhatsAppManager.emitToTenant(tenantId, 'log', { message, type });
-        }, templatePath, canvasConfig, tenantId)
+        }, templatePath, canvasConfig, tenantId, voicenotePath)
             .then(async () => {
                 const WhatsAppManager = require('./WhatsAppManager');
                 const state = WhatsAppManager.states.get(tenantId);

@@ -9,6 +9,7 @@ const ALLOWED_CONTACT_TYPES = [
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'text/plain'
 ];
+const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/ogg', 'audio/mp4', 'audio/wav', 'audio/webm', 'video/ogg'];
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -42,6 +43,12 @@ function fileFilter(req, file, cb) {
         if (!allowedExts.includes(ext)) {
             return cb(new Error('نوع ملف الأرقام غير مدعوم. المسموح: CSV, XLSX, XLS فقط'), false);
         }
+    } else if (file.fieldname === 'voicenote') {
+        const ext = path.extname(file.originalname).toLowerCase();
+        const allowedExts = ['.mp3', '.ogg', '.m4a', '.wav', '.webm'];
+        if (!allowedExts.includes(ext)) {
+            return cb(new Error('نوع الملف الصوتي غير مدعوم. المسموح: MP3, OGG, M4A, WAV فقط'), false);
+        }
     }
     cb(null, true);
 }
@@ -50,8 +57,8 @@ const upload = multer({
     storage,
     fileFilter,
     limits: {
-        fileSize: 8 * 1024 * 1024,
-        files: 2
+        fileSize: 16 * 1024 * 1024,
+        files: 3
     }
 });
 

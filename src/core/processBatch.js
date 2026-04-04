@@ -35,7 +35,7 @@ function getSaudiErrorMessage(name, error) {
     return `صارت مشكلة غير متوقعة`;
 }
 
-async function processBatch(contacts, startRow, endRow, messages, campaignId = null, hasTemplate = false, onLog = console.log, templatePath = null, canvasConfig = null, tenantId) {
+async function processBatch(contacts, startRow, endRow, messages, campaignId = null, hasTemplate = false, onLog = console.log, templatePath = null, canvasConfig = null, tenantId, voicenotePath = null) {
     const subset = contacts.slice(startRow - 1, endRow);
     onLog(`\nProcessing ${subset.length} contacts (Rows ${startRow} to ${endRow})...\n`, 'INFO');
 
@@ -113,7 +113,14 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             } catch (_) {}
 
             // ── Step 3: Send the message ────────────────────────────────────
-            if (hasTemplate && templatePath) {
+            if (voicenotePath) {
+                // Send as WhatsApp Voice Note (PTT) — appears as recorded audio,
+                // not as a file download. Maximises trust and open rate.
+                await client.sendPtt(chatId, voicenotePath);
+                // Follow with the text caption (personalised with [الاسم]) as a
+                // separate text message so recipients know who sent it.
+                if (message) await client.sendText(chatId, message);
+            } else if (hasTemplate && templatePath) {
                 const imagePath = await generateImage(name, normalizedPhone, templatePath, canvasConfig);
                 await client.sendImage(chatId, imagePath, 'invitation', message);
                 await fs.remove(imagePath);

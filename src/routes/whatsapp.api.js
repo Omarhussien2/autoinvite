@@ -37,9 +37,10 @@ router.post('/start', quotaGuard, async (req, res) => {
         let hasTemplate = false;
         let templatePath = null;
         let canvasConfig = null;
+        let voicenotePath = null;
 
         if (campaignId) {
-            const result = await db.query('SELECT message_templates, template_path, canvas_config, contacts_path FROM campaigns WHERE id = $1 AND tenant_id = $2', [campaignId, tenantId]);
+            const result = await db.query('SELECT message_templates, template_path, canvas_config, contacts_path, voicenote_path FROM campaigns WHERE id = $1 AND tenant_id = $2', [campaignId, tenantId]);
             const campaign = result.rows[0];
             if (campaign) {
                 if (campaign.message_templates) messages = campaign.message_templates;
@@ -49,6 +50,7 @@ router.post('/start', quotaGuard, async (req, res) => {
                     if (campaign.canvas_config) canvasConfig = campaign.canvas_config;
                 }
                 if (campaign.contacts_path) contactsPath = campaign.contacts_path;
+                if (campaign.voicenote_path) voicenotePath = campaign.voicenote_path;
             } else {
                 return res.status(404).json({ success: false, message: 'Campaign not found' });
             }
@@ -82,7 +84,7 @@ router.post('/start', quotaGuard, async (req, res) => {
         }
         WhatsAppManager.emitToTenant(tenantId, 'working_state', true);
 
-        BackgroundQueue.addJob(tenantId, campaignId, contacts, start, end, messages, hasTemplate, templatePath, canvasConfig)
+        BackgroundQueue.addJob(tenantId, campaignId, contacts, start, end, messages, hasTemplate, templatePath, canvasConfig, voicenotePath)
             .catch(console.error);
 
         res.json({ success: true, message: 'Started successfully' });

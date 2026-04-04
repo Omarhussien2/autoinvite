@@ -48,6 +48,9 @@ async function migrate() {
             ON messages (tenant_id, remote_phone, created_at DESC)
         `);
 
+        // Voice note path column on campaigns
+        await db.query(`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS voicenote_path TEXT`);
+
         // Sender name column for inbox display
         await db.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_name TEXT`);
 

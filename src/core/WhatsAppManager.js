@@ -265,6 +265,20 @@ class WhatsAppManager {
         ).catch(() => {});
     }
 
+    /**
+     * Send a voice note (PTT) to a recipient.
+     * WPPConnect's sendPtt() delivers the audio as a WhatsApp voice message
+     * (microphone icon) instead of a file attachment — maximising trust & open rates.
+     *
+     * @param {string|number} tenantId
+     * @param {string} to  — chatId e.g. "966501234567@c.us"
+     * @param {string} audioFilePath — absolute path to .mp3 / .ogg file on disk
+     */
+    async sendVoiceNote(tenantId, to, audioFilePath) {
+        const client = await this.getClient(tenantId);
+        await client.sendPtt(to, audioFilePath);
+    }
+
     // Session Sleep system: sweep inactive sessions to save RAM
     startSleepMonitor(idleMs = 15 * 60 * 1000) {
         setInterval(() => {

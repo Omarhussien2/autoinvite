@@ -328,13 +328,30 @@
             const contactsFile = document.getElementById('contactsUpload').files[0];
             if (contactsFile) formData.append('contacts', contactsFile);
 
-            // Messages
+            // Voice note file (only if voice mode is active)
+            const isVoiceMode = window.CAMPAIGN_MODE === 'voice';
+            const voicenoteFile = document.getElementById('voicenoteUpload')
+                ? document.getElementById('voicenoteUpload').files[0]
+                : null;
+            if (isVoiceMode && voicenoteFile) {
+                formData.append('voicenote', voicenoteFile);
+            }
+
+            // Messages — read from the active tab's list
             const messages = [];
-            document.querySelectorAll('.message-box').forEach(box => {
-                const text = box.querySelector('textarea').value.trim();
-                const weight = box.querySelector('.msg-weight').value;
-                if (text) messages.push({ text, weight: parseInt(weight) });
-            });
+            if (isVoiceMode) {
+                // Voice mode: optional caption from voice message boxes
+                document.querySelectorAll('.message-box-voice').forEach(box => {
+                    const text = box.querySelector('textarea').value.trim();
+                    if (text) messages.push({ text, weight: 3 });
+                });
+            } else {
+                document.querySelectorAll('.message-box').forEach(box => {
+                    const text = box.querySelector('textarea').value.trim();
+                    const weight = box.querySelector('.msg-weight').value;
+                    if (text) messages.push({ text, weight: parseInt(weight) });
+                });
+            }
             formData.append('message_templates', JSON.stringify(messages));
 
             // Canvas config
@@ -348,8 +365,16 @@
                 formData.append('canvas_config', JSON.stringify(canvasConfig));
             }
 
-            // Determine if create or update
+            // Validate: voice mode requires an audio file (create only)
             const campaignData = window.CAMPAIGN_DATA;
+            if (isVoiceMode && !voicenoteFile && !campaignData) {
+                showToast('يرجى رفع ملف صوتي للحملة الصوتية', 'error');
+                btn.textContent = origText;
+                btn.disabled = false;
+                return;
+            }
+
+            // Determine if create or update
             const method = campaignData ? 'PUT' : 'POST';
             const url = campaignData ? `/api/campaigns/${campaignData.id}` : '/api/campaigns';
 
