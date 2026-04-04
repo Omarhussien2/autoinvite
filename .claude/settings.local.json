@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ssh -o StrictHostKeyChecking=no -o BatchMode=yes root@31.97.123.204 'echo connected')"
+      "Bash(ssh -o StrictHostKeyChecking=no -o BatchMode=yes root@31.97.123.204 'echo connected')",
+      "Bash(rm:*)"
     ]
   }
 }
