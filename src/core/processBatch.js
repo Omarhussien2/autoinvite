@@ -126,7 +126,8 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                 if (message) await client.sendText(chatId, message);
             } else if (hasTemplate && templatePath) {
                 const imagePath = await generateImage(name, normalizedPhone, templatePath, canvasConfig);
-                await client.sendImage(chatId, imagePath, 'invitation', message);
+                const imgBase64 = `data:image/png;base64,${fs.readFileSync(imagePath).toString('base64')}`;
+                await client.sendImage(chatId, imgBase64, 'invitation.png', message);
                 await fs.remove(imagePath);
             } else {
                 await client.sendText(chatId, message);
