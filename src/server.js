@@ -376,14 +376,27 @@ app.get('/inbox', isAuthenticated, async (req, res) => {
     try {
         const tenantId = req.session.tenantId;
 
-        // Get distinct conversations with latest message
+        // Get distinct conversations with latest message, sorted by most recent first
         const conversationsRes = await db.query(`
-            SELECT DISTINCT ON (remote_phone)
-                remote_phone, sender, body, direction, whatsapp_timestamp, created_at
-            FROM messages
-            WHERE tenant_id = $1
-            ORDER BY remote_phone, created_at DESC
+            SELECT c.* FROM (
+                SELECT DISTINCT ON (remote_phone)
+                    remote_phone, sender, body, direction, sender_name, whatsapp_timestamp, created_at
+                FROM messages
+                WHERE tenant_id = $1
+                ORDER BY remote_phone, created_at DESC
+            ) c
+            ORDER BY c.created_at DESC
         `, [tenantId]);
+
+        // Unread counts per conversation
+        const unreadRes = await db.query(`
+            SELECT remote_phone, COUNT(*) as unread
+            FROM messages
+            WHERE tenant_id = $1 AND direction = 'inbound' AND is_read = FALSE
+            GROUP BY remote_phone
+        `, [tenantId]);
+        const unreadMap = {};
+        unreadRes.rows.forEach(r => { unreadMap[r.remote_phone] = parseInt(r.unread); });
 
         res.renderPage('dashboard/inbox', {
             pageTitle: 'صندوق الردود',
@@ -392,6 +405,7 @@ app.get('/inbox', isAuthenticated, async (req, res) => {
             useSocket: true,
             tenantName: req.session.tenantName || 'العميل',
             conversations: conversationsRes.rows,
+            unreadMap,
         });
     } catch (err) {
         console.error(err);
@@ -399,13 +413,23 @@ app.get('/inbox', isAuthenticated, async (req, res) => {
     }
 });
 
-// Inbox API: Get messages for a specific conversation
+// Inbox API: Get messages for a specific conversation + mark as read
 app.get('/api/inbox/:phone/messages', isAuthenticated, async (req, res) => {
     try {
+        const tenantId = req.session.tenantId;
+        const phone = req.params.phone;
+
         const result = await db.query(
             `SELECT * FROM messages WHERE tenant_id = $1 AND remote_phone = $2 ORDER BY created_at ASC LIMIT 200`,
-            [req.session.tenantId, req.params.phone]
+            [tenantId, phone]
         );
+
+        // Mark all inbound messages from this phone as read
+        await db.query(
+            `UPDATE messages SET is_read = TRUE WHERE tenant_id = $1 AND remote_phone = $2 AND direction = 'inbound' AND is_read = FALSE`,
+            [tenantId, phone]
+        ).catch(() => {});
+
         res.json({ success: true, messages: result.rows });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });

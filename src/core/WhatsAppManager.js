@@ -151,9 +151,9 @@ class WhatsAppManager {
 
                     // Persist to messages table
                     await db.query(
-                        `INSERT INTO messages (tenant_id, remote_phone, sender, direction, body, whatsapp_timestamp)
-                         VALUES ($1, $2, $3, $4, $5, to_timestamp($6))`,
-                        [tenantId, senderPhone, 'them', 'inbound', body, timestamp]
+                        `INSERT INTO messages (tenant_id, remote_phone, sender, direction, body, sender_name, is_read, whatsapp_timestamp)
+                         VALUES ($1, $2, $3, $4, $5, $6, FALSE, to_timestamp($7))`,
+                        [tenantId, senderPhone, 'them', 'inbound', body, senderName, timestamp]
                     ).catch(err => console.error(`[Tenant ${tenantId}] Failed to save inbound message:`, err.message));
 
                     // Push to frontend via Socket.io

@@ -73,6 +73,8 @@ async function initializeSaaS() {
         sender TEXT NOT NULL DEFAULT 'them',
         direction TEXT NOT NULL DEFAULT 'inbound',
         body TEXT,
+        sender_name TEXT,
+        is_read BOOLEAN DEFAULT FALSE,
         whatsapp_timestamp TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )

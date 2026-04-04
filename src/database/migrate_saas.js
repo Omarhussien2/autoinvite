@@ -48,6 +48,12 @@ async function migrate() {
             ON messages (tenant_id, remote_phone, created_at DESC)
         `);
 
+        // Sender name column for inbox display
+        await db.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_name TEXT`);
+
+        // Unread tracking
+        await db.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE`);
+
         // WhatsApp session tracking columns on tenants
         await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS whatsapp_status TEXT DEFAULT 'disconnected'`);
         await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS whatsapp_phone TEXT`);
