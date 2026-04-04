@@ -119,7 +119,7 @@ autoinvite/
 ├── .env.example               # Environment template
 ├── package.json
 ├── README.md
-└── DEPLOYMENT.md              # VPS deployment guide
+└── docs/DEPLOYMENT.md         # VPS deployment guide
 ```
 
 ---
