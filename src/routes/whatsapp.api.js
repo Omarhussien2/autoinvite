@@ -45,9 +45,15 @@ router.post('/start', quotaGuard, async (req, res) => {
             if (campaign) {
                 if (campaign.message_templates) messages = campaign.message_templates;
                 if (campaign.template_path) {
-                    hasTemplate = true;
-                    templatePath = campaign.template_path;
-                    if (campaign.canvas_config) canvasConfig = campaign.canvas_config;
+                    const fs = require('fs-extra');
+                    const resolvedTpl = require('path').resolve(__dirname, '../../', campaign.template_path);
+                    if (fs.existsSync(resolvedTpl)) {
+                        hasTemplate = true;
+                        templatePath = campaign.template_path;
+                        if (campaign.canvas_config) canvasConfig = campaign.canvas_config;
+                    } else {
+                        console.warn(`[Campaign ${campaignId}] Template file not found: ${resolvedTpl}, sending as text-only`);
+                    }
                 }
                 if (campaign.contacts_path) contactsPath = campaign.contacts_path;
                 if (campaign.voicenote_path) voicenotePath = campaign.voicenote_path;

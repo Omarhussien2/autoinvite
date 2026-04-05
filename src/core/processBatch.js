@@ -127,7 +127,23 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             } else if (hasTemplate && templatePath) {
                 const imagePath = await generateImage(name, normalizedPhone, templatePath, canvasConfig);
                 const imgBase64 = `data:image/png;base64,${fs.readFileSync(imagePath).toString('base64')}`;
-                await client.sendImage(chatId, imgBase64, 'invitation.png', message);
+                // Retry up to 2 times for transient WhatsApp media errors
+                let mediaRetries = 2;
+                while (true) {
+                    try {
+                        await client.sendImage(chatId, imgBase64, 'invitation.png', message);
+                        break;
+                    } catch (mediaErr) {
+                        const errStr = String(mediaErr && mediaErr.message ? mediaErr.message : mediaErr);
+                        if (mediaRetries > 0 && (errStr.includes('InvalidMedia') || errStr.includes('RepairFailed') || errStr.includes('FailedType'))) {
+                            mediaRetries--;
+                            onLog(`[Retry] خطأ مؤقت في الوسائط، إعادة المحاولة بعد 3 ثوانٍ...`, 'WARN');
+                            await AntiBanEngine.sleep(3000);
+                        } else {
+                            throw mediaErr;
+                        }
+                    }
+                }
                 await fs.remove(imagePath);
             } else {
                 await client.sendText(chatId, message);
