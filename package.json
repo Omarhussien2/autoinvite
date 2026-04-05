@@ -9,6 +9,7 @@
     "db:migrate": "node src/database/migrate_saas.js",
     "db:seed-admin": "node src/database/seed_admin.js",
     "build:landing": "cd landing-autoinvite && npm install && npm run build",
+    "postinstall": "npm run build:landing || echo 'Landing page build skipped'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
