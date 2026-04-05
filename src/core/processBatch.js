@@ -7,6 +7,7 @@ const { logResult } = require('../utils/logger');
 const db = require('../database/pg-client');
 const WhatsAppManager = require('./WhatsAppManager');
 const AntiBanEngine = require('./AntiBanEngine');
+const { convertToOggOpus } = require('../utils/audioConverter');
 
 function pickWeightedMessage(messages, name) {
     const totalWeight = messages.reduce((sum, m) => sum + (m.weight || 1), 0);
@@ -44,6 +45,17 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
     if (!client) {
         onLog('خطأ: الواتساب غير متصل. أعد الربط أولاً.', 'ERROR');
         throw new Error('WhatsApp client not connected');
+    }
+
+    // Pre-convert voice note to OGG/Opus once (not per-contact)
+    let pttBase64 = null;
+    let pttOggPath = null;
+    if (voicenotePath) {
+        const absVoicePath = path.resolve(voicenotePath);
+        onLog('[VoiceNote] جاري تحويل الملف الصوتي لصيغة WhatsApp...', 'INFO');
+        pttOggPath = await convertToOggOpus(absVoicePath);
+        pttBase64 = `data:audio/ogg;codecs=opus;base64,${fs.readFileSync(pttOggPath).toString('base64')}`;
+        onLog('[VoiceNote] تم التحويل بنجاح ✓', 'INFO');
     }
 
     for (const [index, contact] of subset.entries()) {
@@ -117,12 +129,10 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             } catch (_) {}
 
             // ── Step 3: Send the message ────────────────────────────────────
-            if (voicenotePath) {
-                // Send as WhatsApp Voice Note (PTT) — appears as recorded audio,
-                // not as a file download. Maximises trust and open rate.
-                await client.sendPtt(chatId, voicenotePath);
-                // Follow with the text caption (personalised with [الاسم]) as a
-                // separate text message so recipients know who sent it.
+            if (voicenotePath && pttBase64) {
+                // Send pre-converted OGG/Opus as base64 PTT
+                await client.sendPttFromBase64(chatId, pttBase64, 'voice.ogg');
+                // Send text caption separately if present
                 if (message) await client.sendText(chatId, message);
             } else if (hasTemplate && templatePath) {
                 const imagePath = await generateImage(name, normalizedPhone, templatePath, canvasConfig);
@@ -197,6 +207,9 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             }
         }
     }
+
+    // Cleanup converted PTT file
+    if (pttOggPath) await fs.remove(pttOggPath).catch(() => {});
 
     onLog('\nBatch processing complete.', 'DONE');
 }
