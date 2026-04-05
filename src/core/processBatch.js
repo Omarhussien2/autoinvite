@@ -190,7 +190,17 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
         } catch (error) {
             try { await client.stopTyping(`${normalizedPhone}@c.us`); } catch (_) {}
 
-            const errMsg = error && error.message ? error.message : String(error);
+            // WPPConnect throws plain objects like { erro: true, text: '...' }
+            let errMsg;
+            if (error && error.message) {
+                errMsg = error.message;
+            } else if (error && error.text) {
+                errMsg = error.text;
+            } else if (typeof error === 'object') {
+                errMsg = JSON.stringify(error);
+            } else {
+                errMsg = String(error);
+            }
             await logResult(normalizedPhone, name, 'FAIL', errMsg);
             const saudiMsg = getSaudiErrorMessage(name, errMsg);
             onLog(`Failed: ${name} - ${saudiMsg}`, 'ERROR');
