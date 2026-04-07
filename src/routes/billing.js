@@ -162,14 +162,19 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const sig = req.headers['stripe-signature'];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
+    if (!webhookSecret) {
+        console.error('[Stripe Webhook] FATAL: STRIPE_WEBHOOK_SECRET is not set — rejecting unverified payload');
+        return res.status(500).send('Webhook secret not configured');
+    }
+
+    if (!sig) {
+        console.error('[Stripe Webhook] Missing stripe-signature header');
+        return res.status(400).send('Missing signature');
+    }
+
     let event;
     try {
-        if (webhookSecret) {
-            event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-        } else {
-            event = JSON.parse(req.body);
-            console.warn('[Stripe Webhook] No STRIPE_WEBHOOK_SECRET set — skipping verification');
-        }
+        event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (err) {
         console.error('[Stripe Webhook] Signature verification failed:', err.message);
         return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -341,6 +346,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         }
     } catch (err) {
         console.error(`[Stripe Webhook] Error processing ${eventType}:`, err.message);
+        return res.status(500).json({ error: 'Webhook processing failed' });
     }
 
     res.json({ received: true });

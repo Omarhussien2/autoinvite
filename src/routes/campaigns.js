@@ -55,6 +55,8 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, upload.fields([{ name
         }
 
         res.json({ success: true, campaignId });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
 

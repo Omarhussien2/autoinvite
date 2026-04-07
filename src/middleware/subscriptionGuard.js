@@ -35,8 +35,9 @@ function subscriptionGuard(redirect = true) {
             if (redirect) return res.redirect('/billing');
             return res.status(402).json({ success: false, error: 'Subscription inactive', code: 'SUBSCRIPTION_INACTIVE' });
         } catch (err) {
-            console.error('[SubscriptionGuard] Error:', err.message);
-            return next();
+            console.error('[SubscriptionGuard] DB error — denying access:', err.message);
+            if (redirect) return res.redirect('/billing');
+            return res.status(503).json({ success: false, error: 'Service unavailable', code: 'SUBSCRIPTION_CHECK_FAILED' });
         }
     };
 }

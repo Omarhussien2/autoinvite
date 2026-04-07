@@ -22,8 +22,11 @@ async function quotaGuard(req, res, next) {
 
         next();
     } catch (err) {
-        console.error('QuotaGuard error:', err);
-        next();
+        console.error('[QuotaGuard] DB error — denying request:', err.message);
+        return res.status(503).json({
+            success: false,
+            message: 'تعذر التحقق من الرصيد، حاول مرة أخرى'
+        });
     }
 }
 

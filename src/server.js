@@ -29,6 +29,7 @@ const authRoutes = require('./routes/auth');
 const campaignRoutes = require('./routes/campaigns');
 const adminRoutes = require('./routes/admin');
 const { isAuthenticated } = require('./middleware/auth');
+const subscriptionGuard = require('./middleware/subscriptionGuard');
 const { i18next, middleware: i18nMiddleware } = require('./config/i18n');
 const ejsLayout = require('./middleware/ejsLayout');
 
@@ -163,10 +164,7 @@ app.put('/api/tenant/password', isAuthenticated, async (req, res) => {
     }
 });
 
-// Tenant General Stats API
-// Contacts API — create + delete
-┄─
-
+// Contacts API — create
 app.post('/api/contacts', isAuthenticated, async (req, res) => {
     try {
         const { name, phone } = req.body;
@@ -175,19 +173,13 @@ app.post('/api/contacts', isAuthenticated, async (req, res) => {
         if (!name || typeof name !== 'string' || name.trim().length === 0) {
             return res.status(400).json({ success: false, message: 'الاسم مطلوب' });
         }
-
         if (!phone || typeof phone !== 'string' || phone.trim().length === 0) {
             return res.status(400).json({ success: false, message: 'رقم الهاتف مطلوب' });
         }
 
-        const result = await db.query('SELECT id FROM contacts WHERE tenant_id = $1 AND id = $2', [tenantId, id]);
-        if (!contact) {
-            return res.status(404).json({ success: false, message: 'جهة اتصال غير موج' });
-        }
-
-        await db.query(
-            'INSERT INTO contacts (tenant_id, name, phone, status) VALUES ($1, $2, $3, $4, $5)',
-            [tenantId, name, phone, 'manual']
+        const result = await db.query(
+            'INSERT INTO contacts (tenant_id, name, phone, status) VALUES ($1, $2, $3, $4) RETURNING id, name, phone',
+            [tenantId, name.trim(), phone.trim(), 'pending']
         );
 
         res.json({ success: true, contact: result.rows[0] });
@@ -197,27 +189,24 @@ app.post('/api/contacts', isAuthenticated, async (req, res) => {
 });
 
 // Contacts API — delete
-┄─
 app.delete('/api/contacts/:id', isAuthenticated, async (req, res) => {
     try {
         const tenantId = req.session.tenantId;
         const contactId = req.params.id;
 
-        await db.query('DELETE FROM contacts WHERE id = $1 AND tenant_id = $2', [contactId, tenantId]);
-        if (!contact) {
-            return res.status(404).json({ success: false, message: 'جهة اتصال غير موج' });
+        const result = await db.query('DELETE FROM contacts WHERE id = $1 AND tenant_id = $2 RETURNING id', [contactId, tenantId]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'جهة اتصال غير موجودة' });
         }
-        await db.query('DELETE FROM contacts WHERE tenant_id = $1 AND campaign_id = $2', [tenantId, campaignId]);
-        if (result.rows.length > 0) {
-            return res.status(404).json({ success: false, message: 'لا يمكن حذف جهات اتصال مرتبطةطة بحملة أخرى (حملة نفس) });
-        }
-        await db.query('DELETE FROM contacts WHERE id = $1 AND tenant_id = $2', [contactId, tenantId]);
 
-        res.json({ success: true, contact: result.rows[0] });
+        res.json({ success: true });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
-}); isAuthenticated, async (req, res) => {
+});
+
+// Tenant General Stats API
+app.get('/api/tenant/stats', isAuthenticated, async (req, res) => {
     try {
         const tenantId = req.session.tenantId;
         const contactsCount = await db.query('SELECT COUNT(*) FROM contacts WHERE tenant_id = $1', [tenantId]);
@@ -318,7 +307,7 @@ app.get('/login', (req, res) => {
 });
 
 // 3. Protected Dashboard Overview
-app.get('/dashboard', isAuthenticated, async (req, res) => {
+app.get('/dashboard', isAuthenticated, subscriptionGuard(), async (req, res) => {
     try {
         const tenantId = req.session.tenantId;
 
@@ -397,7 +386,7 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
 });
 
 // 4. Campaigns List View
-app.get('/campaigns', isAuthenticated, async (req, res) => {
+app.get('/campaigns', isAuthenticated, subscriptionGuard(), async (req, res) => {
     try {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -449,7 +438,7 @@ app.get('/campaigns', isAuthenticated, async (req, res) => {
 });
 
 // 5. Contacts Management View
-app.get('/contacts', isAuthenticated, async (req, res) => {
+app.get('/contacts', isAuthenticated, subscriptionGuard(), async (req, res) => {
     try {
         const result = await db.query(`
             SELECT c.*, camp.name as campaign_name 
@@ -472,7 +461,7 @@ app.get('/contacts', isAuthenticated, async (req, res) => {
 });
 
 // 6. Settings View
-app.get('/settings', isAuthenticated, async (req, res) => {
+app.get('/settings', isAuthenticated, subscriptionGuard(), async (req, res) => {
     try {
         const result = await db.query('SELECT * FROM tenants WHERE id = $1', [req.session.tenantId]);
         const tenant = result.rows[0];
@@ -491,7 +480,7 @@ app.get('/settings', isAuthenticated, async (req, res) => {
 });
 
 // 7. Reports & History View
-app.get('/reports', isAuthenticated, async (req, res) => {
+app.get('/reports', isAuthenticated, subscriptionGuard(), async (req, res) => {
     try {
         const result = await db.query(`
             SELECT sl.*, c.name as campaign_name 
@@ -528,7 +517,7 @@ app.get('/reports', isAuthenticated, async (req, res) => {
 });
 
 // 8. Live Inbox View
-app.get('/inbox', isAuthenticated, async (req, res) => {
+app.get('/inbox', isAuthenticated, subscriptionGuard(), async (req, res) => {
     try {
         const tenantId = req.session.tenantId;
 
@@ -628,18 +617,18 @@ app.get('/register', (req, res) => {
 });
 
 // 9. Create/Edit Campaign View
-app.get('/campaigns/new', isAuthenticated, (req, res) => {
+app.get('/campaigns/new', isAuthenticated, subscriptionGuard(), (req, res) => {
     res.renderPage('dashboard/campaign-form', { pageTitle: 'حملة جديدة', activePage: 'campaigns', breadcrumb: { href: '/campaigns' }, campaign: null, tenantName: req.session.tenantName });
 });
 
-app.get('/campaigns/:id/edit', isAuthenticated, async (req, res) => {
+app.get('/campaigns/:id/edit', isAuthenticated, subscriptionGuard(), async (req, res) => {
     const result = await db.query('SELECT * FROM campaigns WHERE id = $1 AND tenant_id = $2', [req.params.id, req.session.tenantId]);
     if (result.rows.length === 0) return res.status(404).send('Campaign not found');
     res.renderPage('dashboard/campaign-form', { pageTitle: 'تعديل الحملة', activePage: 'campaigns', breadcrumb: { href: '/campaigns' }, campaign: result.rows[0], tenantName: req.session.tenantName });
 });
 
 // 10. Campaign Run/Monitor View
-app.get('/campaigns/:id/run', isAuthenticated, async (req, res) => {
+app.get('/campaigns/:id/run', isAuthenticated, subscriptionGuard(), async (req, res) => {
     const result = await db.query('SELECT * FROM campaigns WHERE id = $1 AND tenant_id = $2', [req.params.id, req.session.tenantId]);
     if (result.rows.length === 0) return res.status(404).send('Campaign not found');
     const campaign = result.rows[0];
