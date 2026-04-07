@@ -144,27 +144,34 @@
 
 ---
 
-## PHASE 3: INFRASTRUCTURE HARDENING
+## PHASE 3: INFRASTRUCTURE HARDENING — DONE
 
-### 3.1 Replace Tailwind CDN with Local Build
-- Build Tailwind CSS locally, serve compiled file
-- Eliminates CDN dependency and improves load time
+### 3.1 Replace Tailwind CDN with Local Build — DONE
+- tailwindcss 3.x installed as devDependency
+- `tailwind.config.js` with brand colors, fonts
+- `src/styles/input.css` with @tailwind directives
+- `npm run build:css` compiles to `public/css/tailwind.css` (minified)
+- CDN script tag replaced with `<link>` in `main.ejs`
+- `postinstall` script runs `build:css` before landing page build
 
-### 3.2 Add Missing Database Indexes
-- `campaigns(tenant_id)`, `campaigns(status)`
-- `sent_logs(tenant_id, campaign_id)`
-- `sent_logs(sent_at)` for date range queries
-- `contacts(tenant_id, phone)` for dedup
+### 3.2 Add Missing Database Indexes — DONE
+- `idx_campaigns_tenant ON campaigns(tenant_id)`
+- `idx_campaigns_status ON campaigns(status)`
+- `idx_sent_logs_tenant ON sent_logs(tenant_id, campaign_id)`
+- `idx_sent_logs_date ON sent_logs(sent_at)`
+- `idx_contacts_tenant_phone ON contacts(tenant_id, phone)`
+- All in `migrate_saas.js` with `IF NOT EXISTS`
 
-### 3.3 Add Proper Error Logging
-- Replace 16+ `.catch(() => {})` patterns with proper error logging
-- Add structured logging (winston or pino)
+### 3.3 Replace Silent Error Swallowing — DONE
+- All 16 `.catch(() => {})` replaced with contextual `console.error` logging
+- Files: server.js, WhatsAppManager.js, processBatch.js, ScheduleManager.js, campaigns.js
 
-### 3.4 Add `dev` Script
-- Add `"dev": "node --watch src/server.js"` to package.json
+### 3.4 Add `dev` Script — DONE
+- `"dev": "node --watch src/server.js"` added to package.json
 
-### 3.5 Graceful Shutdown
-- Handle SIGTERM: close all WhatsApp clients, clear intervals, drain queue
+### 3.5 Graceful Shutdown — DONE
+- SIGTERM/SIGINT handlers already existed (BUG-8 fix from Phase 1)
+- Added `db.pool.end()` to shutdown sequence
 
 ---
 

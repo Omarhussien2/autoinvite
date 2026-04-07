@@ -255,8 +255,11 @@ function gracefulShutdown(signal) {
     // Stop all active WhatsApp clients
     for (const [tenantId] of WhatsAppManager.clients.entries()) {
         console.log(`[Shutdown] Stopping WhatsApp client for tenant ${tenantId}`);
-        WhatsAppManager.stopClient(tenantId).catch(() => {});
+        WhatsAppManager.stopClient(tenantId).catch(err => console.error('[Shutdown] Error stopping WA client:', err.message));
     }
+
+    // Close database pool
+    try { db.pool.end(); } catch (_) {}
 
     // Close HTTP server
     server.close(() => {
@@ -579,7 +582,7 @@ app.get('/api/inbox/:phone/messages', isAuthenticated, async (req, res) => {
         await db.query(
             `UPDATE messages SET is_read = TRUE WHERE tenant_id = $1 AND remote_phone = $2 AND direction = 'inbound' AND is_read = FALSE`,
             [tenantId, phone]
-        ).catch(() => {});
+        ).catch(err => console.error('[Inbox] Failed to mark messages as read:', err.message));
 
         res.json({ success: true, messages: result.rows });
     } catch (e) {

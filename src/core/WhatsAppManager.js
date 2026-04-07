@@ -134,7 +134,7 @@ class WhatsAppManager {
             await db.query(
                 'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = $2 WHERE id = $3',
                 ['connected', phone, tenantId]
-            ).catch(() => {}); // Column may not exist yet
+            ).catch(err => console.error(`[WhatsAppManager] Failed to update tenant status on connect:`, err.message));
 
             // Listen for disconnect
             client.onStateChange((state) => {
@@ -175,7 +175,7 @@ class WhatsAppManager {
                     });
 
                     // Mark as read on WhatsApp
-                    await client.sendSeen(from).catch(() => {});
+                    await client.sendSeen(from).catch(err => console.error(`[WhatsAppManager] Failed to mark as seen:`, err.message));
 
                     console.log(`[Tenant ${tenantId}] Inbox: ${senderName} (${senderPhone}): ${body.substring(0, 50)}`);
                 } catch (err) {
@@ -193,7 +193,7 @@ class WhatsAppManager {
             await db.query(
                 'UPDATE tenants SET whatsapp_status = $1 WHERE id = $2',
                 ['error', tenantId]
-            ).catch(() => {});
+            ).catch(err => console.error(`[WhatsAppManager] Failed to update tenant error status:`, err.message));
 
             throw err;
         }
@@ -213,7 +213,7 @@ class WhatsAppManager {
                 await db.query(
                     'UPDATE tenants SET whatsapp_status = $1 WHERE id = $2',
                     ['connected', tenantId]
-                ).catch(() => {});
+                ).catch(err => console.error(`[WhatsAppManager] Failed to update tenant status (logged in):`, err.message));
                 break;
 
             case 'notLogged':
@@ -230,7 +230,7 @@ class WhatsAppManager {
                 await db.query(
                     'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = NULL WHERE id = $2',
                     ['disconnected', tenantId]
-                ).catch(() => {});
+                ).catch(err => console.error(`[WhatsAppManager] Failed to update tenant status (disconnected):`, err.message));
                 break;
 
             case 'qrReadSuccess':
@@ -271,7 +271,7 @@ class WhatsAppManager {
         await db.query(
             'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = NULL WHERE id = $2',
             ['disconnected', tenantId]
-        ).catch(() => {});
+        ).catch(err => console.error(`[WhatsAppManager] Failed to update tenant status (stop):`, err.message));
     }
 
     /**

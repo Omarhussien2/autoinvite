@@ -46,7 +46,7 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, upload.fields([{ name
                     await db.query(
                         'INSERT INTO contacts (tenant_id, campaign_id, name, phone, status) VALUES ($1, $2, $3, $4, $5)',
                         [req.tenantId, campaignId, rawName, phone, 'pending']
-                    ).catch(() => {});
+                    ).catch(err => console.error('[Contacts] Failed to insert contact:', err.message));
                 }
             console.log(`[Contacts] Imported ${contactList.length} contacts for campaign ${campaignId}`);
             }

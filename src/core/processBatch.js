@@ -138,11 +138,11 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     onLog(`Skipping ${name}: ${saudiMsg}`, 'WARN');
                     WhatsAppManager.emitToTenant(tenantId, 'log', { message: saudiMsg, type: 'WARN' });
                     if (campaignId) {
-                        await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(() => {});
+                        await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(err => console.error('[processBatch] Failed to update failed_count (skip):', err.message));
                         await db.query(
                             'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name, status, failed_at) VALUES ($1, $2, $3, $4, $5, NOW())',
                             [campaignId, tenantId, normalizedPhone, name, 'failed']
-                        ).catch(() => {});
+                        ).catch(err => console.error('[processBatch] Failed to log skipped contact:', err.message));
                     }
                     continue;
                 }
@@ -207,7 +207,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     await txClient.query('UPDATE campaigns SET last_sent_row = $1 WHERE id = $2', [currentRow, campaignId]);
                     await txClient.query('COMMIT');
                 } catch (txErr) {
-                    await txClient.query('ROLLBACK').catch(() => {});
+                    await txClient.query('ROLLBACK').catch(err => console.error('[processBatch] Rollback failed:', err.message));
                     console.error('[processBatch] Transaction failed, rolling back:', txErr.message);
                     throw txErr; // Re-throw so the outer catch handles it as a failure
                 } finally {
@@ -257,17 +257,17 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             failCount++;
 
             if (campaignId) {
-                await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(() => {});
+                await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(err => console.error('[processBatch] Failed to update failed_count (error):', err.message));
                 await db.query(
                     'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name, status, failed_at) VALUES ($1, $2, $3, $4, $5, NOW())',
                     [campaignId, tenantId, normalizedPhone, name, 'failed']
-                ).catch(() => {});
+                ).catch(err => console.error('[processBatch] Failed to log failed contact:', err.message));
             }
         }
     }
 
     // Cleanup converted PTT file
-    if (pttOggPath) await fs.remove(pttOggPath).catch(() => {});
+    if (pttOggPath) await fs.remove(pttOggPath).catch(err => console.error('[processBatch] Failed to cleanup PTT file:', err.message));
 
     onLog(`\nBatch processing complete. Success: ${successCount}, Failed: ${failCount}`, 'DONE');
     return { successCount, failCount };

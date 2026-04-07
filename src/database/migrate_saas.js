@@ -65,7 +65,14 @@ async function migrate() {
         await db.query(`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP DEFAULT NULL`);
         await db.query(`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'Asia/Riyadh'`);
 
-        console.log('✅ Migration complete: tenants.role, tenants.message_quota, tenants.messages_used, sent_logs.failed_at, campaigns.failed_count, messages table, tenants.whatsapp_status/whatsapp_phone, campaigns.scheduled_at/timezone');
+        // Performance indexes
+        await db.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_tenant ON campaigns(tenant_id)`);
+        await db.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status)`);
+        await db.query(`CREATE INDEX IF NOT EXISTS idx_sent_logs_tenant ON sent_logs(tenant_id, campaign_id)`);
+        await db.query(`CREATE INDEX IF NOT EXISTS idx_sent_logs_date ON sent_logs(sent_at)`);
+        await db.query(`CREATE INDEX IF NOT EXISTS idx_contacts_tenant_phone ON contacts(tenant_id, phone)`);
+
+        console.log('✅ Migration complete: tenants.role, tenants.message_quota, tenants.messages_used, sent_logs.failed_at, campaigns.failed_count, messages table, tenants.whatsapp_status/whatsapp_phone, campaigns.scheduled_at/timezone, performance indexes');
     } catch (err) {
         console.error('❌ Migration failed:', err);
         process.exit(1);

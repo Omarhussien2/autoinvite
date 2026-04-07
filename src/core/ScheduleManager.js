@@ -36,7 +36,7 @@ class ScheduleManager {
                     await this._triggerCampaign(campaign);
                 } catch (err) {
                     console.error(`[ScheduleManager] Failed to trigger campaign ${campaign.id}:`, err.message);
-                    await db.query('UPDATE campaigns SET status = $1 WHERE id = $2', ['failed', campaign.id]).catch(() => {});
+                    await db.query('UPDATE campaigns SET status = $1 WHERE id = $2', ['failed', campaign.id]).catch(err => console.error('[ScheduleManager] Failed to mark campaign as failed:', err.message));
                 }
             }
         } catch (err) {

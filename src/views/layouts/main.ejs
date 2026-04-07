@@ -17,29 +17,8 @@
     }
   </style>
 
-  <!-- Tailwind CSS (CDN for now, replace with compiled output in production) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              green: '#00C853',
-              dark: '#0A3D2E',
-              light: '#E8FAF0',
-              medium: '#1B5E20',
-            },
-            surface: { white: '#FFFFFF', gray: '#F7F8FA' },
-          },
-          fontFamily: {
-            sans: ['"TSNAS Bold"', 'sans-serif'],
-            mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
-          },
-        }
-      }
-    }
-  </script>
+  <!-- Tailwind CSS (compiled locally) -->
+  <link rel="stylesheet" href="/css/tailwind.css">
 
   <!-- Chart.js (Conditional) -->
   <% if (typeof activePage !== 'undefined' && activePage === 'dashboard') { %>
