@@ -54,7 +54,7 @@ npm run db:seed-admin
 # Default credentials: admin / admin123 — CHANGE IN PRODUCTION
 
 # 7. (Optional) Build the landing page
-cd taqreerk && npm install && npm run build && cd ..
+cd landing-autoinvite && npm install && npm run build && cd ..
 
 # 8. Start the server
 npm start
@@ -113,7 +113,7 @@ autoinvite/
 │   │   └── seed_admin.js      # Creates default admin account
 │   ├── utils/                 # Data processing, image gen, logger
 │   └── config/                # i18n, settings
-├── taqreerk/                  # React landing page (Vite)
+├── landing-autoinvite/        # React landing page (Vite)
 ├── public/                    # Static assets
 ├── storage/                   # Per-tenant uploads & auth sessions (gitignored)
 ├── .env.example               # Environment template

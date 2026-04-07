@@ -88,6 +88,40 @@
 
 ---
 
+## PHASE 4.1 COMPLETE — Stripe Billing Integration (Part 1 + Part 2)
+
+### Part 1 — Backend & Config (from prior session)
+- Database columns: stripe_customer_id, stripe_subscription_id, subscription_plan, subscription_status, trial_ends_at, current_period_end
+- `src/config/stripe.js`: Plan definitions (free/basic/pro/enterprise) with quotas, price IDs, Arabic names
+- `src/routes/billing.js`: Full billing routes (checkout, portal, webhook)
+- `src/middleware/subscriptionGuard.js`: Blocks expired/canceled subscriptions
+- Webhook: Idempotent via processed_webhooks table
+
+### Part 2 — UI & Integration (this session)
+
+| Task | Status | Details |
+|------|--------|---------|
+| Billing Page Invoice History | Done | Added invoice table to billing.ejs — fetches last 12 Stripe invoices with status badges and PDF download links |
+| Sidebar Plan Badge | Done | Color-coded badge next to billing link: gray (Free), blue (Basic), green (Pro), purple (Enterprise) |
+| Dynamic Trial Banner | Done | main.ejs banner now reads subscription_status from injected data — trialing shows days left (amber), expired shows red warning, past_due shows payment warning, active hides banner. Links to /billing instead of WhatsApp. |
+| ejsLayout Subscription Injection | Done | ejsLayout.js now fetches subscription info from DB (5-min cache) and injects subscriptionPlan, subscriptionStatus, trialEndsAt, currentPeriodEnd into ALL page renders |
+| Registration Stripe Flow | Done | auth.js register: creates Stripe customer (if configured), sets 7-day trial (trial_ends_at), free plan, 50 msg quota. Updates Stripe customer metadata with tenant ID after insert. |
+| Removed hardcoded trialActive | Done | server.js dashboard route no longer passes trialActive: true |
+| Quota auto-reset on invoice.paid | Verified | Webhook handler resets messages_used=0, sets message_quota based on plan tier, updates current_period_end |
+
+### Files Modified in Phase 4.1 Part 2
+
+- `src/middleware/ejsLayout.js` — async renderPage, subscription DB query with cache, injects sub data into all renders
+- `src/views/layouts/main.ejs` — dynamic trial banner based on subscription_status/trialEndsAt
+- `src/views/partials/sidebar.ejs` — plan badge next to billing link
+- `src/views/dashboard/billing.ejs` — invoice history section (table with status badges, PDF links)
+- `src/routes/billing.js` — fetches Stripe invoices list (last 12), passes to template
+- `src/routes/auth.js` — Stripe customer creation + 7-day trial on registration
+- `src/server.js` — removed hardcoded trialActive: true from dashboard route
+- `.planning/STATE_OF_THE_UNION.md` — updated Phase 4.1 status
+
+---
+
 ## Remaining Phases
 
 | Phase | Status | Description |
@@ -96,4 +130,4 @@
 | Phase 2.4 | Pending | Reports upgrade (CSV export, date range, summary cards) |
 | Phase 2.5 | Pending | Admin dashboard enhancement (create/delete tenants, force disconnect, system health) |
 | Phase 3 | Pending | Infrastructure hardening (local Tailwind, indexes, error logging, dev script, graceful shutdown) |
-| Phase 4.1 | Pending | Stripe billing integration |
+| Phase 4.1 | DONE | Stripe billing integration (Part 1 + Part 2) |

@@ -388,8 +388,7 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
             stats,
             campaigns,
             chartLabels: dayLabels,
-            chartData: dayData,
-            trialActive: true
+            chartData: dayData
         });
     } catch (err) {
         console.error(err);

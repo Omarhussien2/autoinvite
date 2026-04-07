@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const rateLimit = require('express-rate-limit');
 const db = require('../database/pg-client');
+const { stripe, PLANS, isStripeConfigured } = require('../config/stripe');
 
 const router = express.Router();
 
@@ -82,12 +83,38 @@ router.post('/register', authLimiter, async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
+        const trialEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const freeQuota = PLANS.free ? PLANS.free.quota : 50;
+
+        let stripeCustomerId = null;
+        if (isStripeConfigured()) {
+            try {
+                const customer = await stripe.customers.create({
+                    email: username,
+                    name: name,
+                    metadata: { tenantId: 'pending' },
+                });
+                stripeCustomerId = customer.id;
+            } catch (stripeErr) {
+                console.error('[Auth] Stripe customer creation failed:', stripeErr.message);
+            }
+        }
+
         const result = await db.query(
-            'INSERT INTO tenants (name, username, password_hash, settings) VALUES ($1, $2, $3, $4) RETURNING id, name',
-            [name, username, hashedPassword, JSON.stringify({ min_delay: 20, max_delay: 60, safe_mode: true })]
+            `INSERT INTO tenants (name, username, password_hash, settings, subscription_plan, subscription_status, message_quota, trial_ends_at, stripe_customer_id)
+             VALUES ($1, $2, $3, $4, 'free', 'trialing', $5, $6, $7) RETURNING id, name`,
+            [name, username, hashedPassword, JSON.stringify({ min_delay: 20, max_delay: 60, safe_mode: true }), freeQuota, trialEnd, stripeCustomerId]
         );
 
         const newTenant = result.rows[0];
+
+        if (stripeCustomerId) {
+            try {
+                await stripe.customers.update(stripeCustomerId, {
+                    metadata: { tenantId: newTenant.id },
+                });
+            } catch (_) {}
+        }
         req.session.tenantId = newTenant.id;
         req.session.tenantName = newTenant.name;
         req.session.tenantRole = 'user';

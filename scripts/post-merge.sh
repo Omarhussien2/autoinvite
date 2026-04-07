@@ -11,9 +11,9 @@ npm install --yes
 echo "→ Running database migration..."
 node src/database/migrate_saas.js
 
-# 3. Build taqreerk landing page
+# 3. Build landing page
 echo "→ Building landing page..."
-cd taqreerk && npm install --yes && npm run build
+cd landing-autoinvite && npm install --yes && npm run build
 cd ..
 
 echo "=== Post-merge setup complete ==="

@@ -108,6 +108,52 @@
     </div>
     <% } %>
 
+    <!-- Invoice History -->
+    <% if (invoices && invoices.length > 0) { %>
+    <div class="mt-8">
+        <h3 class="font-bold text-gray-800 mb-4">سجل الفواتير</h3>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-gray-50 bg-gray-50/50">
+                        <th class="text-right px-5 py-3 text-xs font-medium text-gray-500">الفاتورة</th>
+                        <th class="text-right px-5 py-3 text-xs font-medium text-gray-500">المبلغ</th>
+                        <th class="text-right px-5 py-3 text-xs font-medium text-gray-500">التاريخ</th>
+                        <th class="text-right px-5 py-3 text-xs font-medium text-gray-500">الحالة</th>
+                        <th class="text-right px-5 py-3 text-xs font-medium text-gray-500"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% invoices.forEach(inv => { %>
+                    <tr class="border-b border-gray-50 last:border-b-0 hover:bg-gray-50/30 transition">
+                        <td class="px-5 py-3 font-medium text-gray-700"><%= inv.number || inv.id.slice(0, 12) + '...' %></td>
+                        <td class="px-5 py-3 text-gray-600"><%= inv.amount %></td>
+                        <td class="px-5 py-3 text-gray-500"><%= inv.date %></td>
+                        <td class="px-5 py-3">
+                            <% if (inv.status === 'paid') { %>
+                            <span class="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">مدفوعة</span>
+                            <% } else if (inv.status === 'open') { %>
+                            <span class="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">معلقة</span>
+                            <% } else if (inv.status === 'void') { %>
+                            <span class="text-[10px] font-bold bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">ملغاة</span>
+                            <% } else { %>
+                            <span class="text-[10px] font-bold bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full"><%= inv.status %></span>
+                            <% } %>
+                        </td>
+                        <td class="px-5 py-3">
+                            <% if (inv.pdfUrl) { %>
+                            <a href="<%= inv.pdfUrl %>" target="_blank"
+                               class="text-brand-green hover:underline text-xs font-medium">PDF</a>
+                            <% } %>
+                        </td>
+                    </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <% } %>
+
 </div>
 
 <script>

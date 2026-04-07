@@ -31,6 +31,26 @@ router.get('/', isAuthenticated, async (req, res) => {
             ? new Date(tenant.trial_ends_at).toLocaleDateString('ar-SA')
             : null;
 
+        let invoices = [];
+        if (isStripeConfigured() && tenant.stripe_customer_id) {
+            try {
+                const stripeInvoices = await stripe.invoices.list({
+                    customer: tenant.stripe_customer_id,
+                    limit: 12,
+                });
+                invoices = stripeInvoices.data.map(inv => ({
+                    id: inv.id,
+                    number: inv.number,
+                    amount: inv.currency ? `${(inv.total / 100).toFixed(2)} ${inv.currency.toUpperCase()}` : '',
+                    status: inv.status,
+                    date: inv.created ? new Date(inv.created * 1000).toLocaleDateString('ar-SA') : '',
+                    pdfUrl: inv.invoice_pdf || null,
+                }));
+            } catch (invErr) {
+                console.error('[Billing] Invoice list error:', invErr.message);
+            }
+        }
+
         res.renderPage('dashboard/billing', {
             pageTitle: 'الاشتراك والفوترة',
             activePage: 'billing',
@@ -48,6 +68,7 @@ router.get('/', isAuthenticated, async (req, res) => {
                 customerId: tenant.stripe_customer_id,
             },
             plans: PLANS,
+            invoices,
         });
     } catch (err) {
         console.error('[Billing] Page error:', err.message);

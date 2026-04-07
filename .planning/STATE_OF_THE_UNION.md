@@ -177,14 +177,17 @@
 
 ## PHASE 4: SCALING ROADMAP
 
-### 4.1 Stripe Billing Integration — DONE (Part 1)
+### 4.1 Stripe Billing Integration — DONE (Part 1 + Part 2)
 - Database: 6 Stripe columns added to tenants (stripe_customer_id, stripe_subscription_id, subscription_plan, subscription_status, trial_ends_at, current_period_end)
 - `src/config/stripe.js`: Plan definitions (free/basic/pro/enterprise) with quotas, price IDs, Arabic names
 - `src/routes/billing.js`: Full billing routes — GET `/billing` (EJS page), POST `/billing/checkout` (Stripe Checkout session), POST `/billing/portal` (Stripe Customer Portal), POST `/billing/webhook` (event handler)
 - Webhook: Idempotent via `processed_webhooks` table, handles checkout.session.completed, invoice.paid (resets usage), customer.subscription.updated, customer.subscription.deleted (downgrades to free)
-- `src/views/dashboard/billing.ejs`: Plan comparison cards, usage bar, checkout/portal buttons
+- `src/views/dashboard/billing.ejs`: Plan comparison cards, usage bar, checkout/portal buttons, invoice history table (last 12 invoices with PDF download)
 - `src/middleware/subscriptionGuard.js`: Blocks expired/canceled subscriptions, redirects to billing
-- Sidebar link added for billing page
+- Sidebar: Billing link with color-coded plan badge (gray=Free, blue=Basic, green=Pro, purple=Enterprise)
+- `src/middleware/ejsLayout.js`: Auto-injects subscription data (plan, status, trial_ends_at, current_period_end) into all page renders with 5-min DB cache
+- Trial banner: Dynamic — shows trial days remaining (amber), expired trial (red), past_due payment warning (red), hidden for active subscriptions. Links to /billing.
+- Registration: Creates Stripe customer on signup, sets 7-day free trial (trial_ends_at), sets free plan quota (50 msgs)
 - `.env.example` updated with all Stripe env vars
 - Graceful: if STRIPE_SECRET_KEY is not set, billing page shows "coming soon" and all Stripe calls are skipped
 

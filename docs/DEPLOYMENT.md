@@ -140,8 +140,8 @@ tar --exclude='./node_modules' \
     --exclude='./.git' \
     --exclude='./storage' \
     --exclude='./.env' \
-    --exclude='./taqreerk/node_modules' \
-    --exclude='./taqreerk/dist' \
+    --exclude='./landing-autoinvite/node_modules' \
+    --exclude='./landing-autoinvite/dist' \
     -czf autoinvite.tar.gz .
 
 # Upload to VPS
@@ -199,7 +199,7 @@ cd /var/www/autoinvite
 npm install --omit=dev
 
 # Build the landing page
-cd taqreerk && npm install && npm run build && cd ..
+cd landing-autoinvite && npm install && npm run build && cd ..
 
 # Initialize database schema
 npm run db:init
@@ -389,7 +389,7 @@ npm install --omit=dev
 npm run db:migrate
 
 # Rebuild landing page if changed
-cd taqreerk && npm run build && cd ..
+cd landing-autoinvite && npm run build && cd ..
 
 # Zero-downtime reload
 pm2 reload autoinvite
