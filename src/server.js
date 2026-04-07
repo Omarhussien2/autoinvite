@@ -122,6 +122,42 @@ app.put('/api/tenant/settings', isAuthenticated, async (req, res) => {
     }
 });
 
+// Tenant Password Change API
+app.put('/api/tenant/password', isAuthenticated, async (req, res) => {
+    try {
+        const { current_password, new_password } = req.body;
+        const tenantId = req.session.tenantId;
+
+        if (!current_password || !new_password) {
+            return res.status(400).json({ success: false, message: 'جميع الحقول مطلوبة' });
+        }
+
+        if (new_password.length < 8) {
+            return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' });
+        }
+
+        const bcrypt = require('bcrypt');
+        const result = await db.query('SELECT password_hash FROM tenants WHERE id = $1', [tenantId]);
+        const tenant = result.rows[0];
+
+        if (!tenant) {
+            return res.status(404).json({ success: false, message: 'الحساب غير موجود' });
+        }
+
+        const match = await bcrypt.compare(current_password, tenant.password_hash);
+        if (!match) {
+            return res.status(401).json({ success: false, message: 'كلمة المرور الحالية غير صحيحة' });
+        }
+
+        const hashedPassword = await bcrypt.hash(new_password, 10);
+        await db.query('UPDATE tenants SET password_hash = $1 WHERE id = $2', [hashedPassword, tenantId]);
+
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 // Tenant General Stats API
 app.get('/api/tenant/stats', isAuthenticated, async (req, res) => {
     try {

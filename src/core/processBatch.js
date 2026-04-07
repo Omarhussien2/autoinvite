@@ -50,12 +50,14 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
     // ── Read tenant-specific settings from DB (overrides hardcoded config) ──
     let tenantMinDelay = config.whatsapp.minDelay;
     let tenantMaxDelay = config.whatsapp.maxDelay;
+    let tenantSafeMode = true;
     try {
         const settingsRes = await db.query('SELECT settings FROM tenants WHERE id = $1', [tenantId]);
         const settings = settingsRes.rows[0]?.settings;
         if (settings) {
             if (settings.min_delay != null) tenantMinDelay = settings.min_delay * 1000;
             if (settings.max_delay != null) tenantMaxDelay = settings.max_delay * 1000;
+            if (settings.safe_mode != null) tenantSafeMode = settings.safe_mode;
         }
     } catch (err) {
         console.warn('[processBatch] Could not load tenant settings, using defaults:', err.message);
@@ -227,7 +229,8 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     tenantMinDelay,
                     tenantMaxDelay,
                     onLog,
-                    tenantId
+                    tenantId,
+                    tenantSafeMode
                 );
             }
 

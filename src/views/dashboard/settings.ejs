@@ -79,6 +79,42 @@
             </div>
         </form>
     </div>
+
+    <!-- Password Change -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+        <h2 class="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+            <svg class="w-5 h-5 text-brand-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+            تغيير كلمة المرور
+        </h2>
+
+        <form id="password-form" class="space-y-6">
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1.5">كلمة المرور الحالية</label>
+                <input type="password" name="current_password" required
+                    class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green outline-none">
+            </div>
+            <div class="grid grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1.5">كلمة المرور الجديدة</label>
+                    <input type="password" name="new_password" required minlength="8"
+                        class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1.5">تأكيد كلمة المرور</label>
+                    <input type="password" name="confirm_password" required minlength="8"
+                        class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green outline-none">
+                </div>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" id="change-password-btn"
+                    class="bg-brand-dark text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:opacity-90 transition">
+                    تحديث كلمة المرور
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <script>
@@ -109,6 +145,54 @@
             const result = await res.json();
             if (result.success) {
                 alert('تم حفظ الإعدادات بنجاح! ✨');
+            } else {
+                alert('حدث خطأ: ' + result.message);
+            }
+        } catch (e) {
+            alert('فشل الاتصال بالسيرفر.');
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    });
+
+    const passwordForm = document.getElementById('password-form');
+    passwordForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('change-password-btn');
+        const originalText = btn.textContent;
+        btn.textContent = 'جاري التحديث...';
+        btn.disabled = true;
+
+        const formData = new FormData(passwordForm);
+        const currentPassword = formData.get('current_password');
+        const newPassword = formData.get('new_password');
+        const confirmPassword = formData.get('confirm_password');
+
+        if (newPassword !== confirmPassword) {
+            alert('كلمة المرور الجديدة وتأكيدها غير متطابقتين');
+            btn.textContent = originalText;
+            btn.disabled = false;
+            return;
+        }
+
+        if (newPassword.length < 8) {
+            alert('كلمة المرور يجب أن تكون 8 أحرف على الأقل');
+            btn.textContent = originalText;
+            btn.disabled = false;
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/tenant/password', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+            });
+            const result = await res.json();
+            if (result.success) {
+                alert('تم تغيير كلمة المرور بنجاح ✅');
+                passwordForm.reset();
             } else {
                 alert('حدث خطأ: ' + result.message);
             }

@@ -122,7 +122,7 @@ class AntiBanEngine {
      * @param {function} onLog — Logging callback
      * @param {string|number} tenantId — For per-tenant session tracking
      */
-    async applyDelay(minDelay = 30000, maxDelay = 60000, onLog, tenantId = 'default') {
+    async applyDelay(minDelay = 30000, maxDelay = 60000, onLog, tenantId = 'default', safeMode = true) {
         const session = this._getSession(tenantId);
         const hour = this._currentHour();
 
@@ -151,8 +151,8 @@ class AntiBanEngine {
             if (onLog) onLog(`[HumanBehavior] مرحلة الإحماء (${session.sessionCount + 1}/${this.WARMUP_COUNT}) — تأخير تدريجي`, 'INFO');
         }
 
-        // ── 3. Daily budget guard ───────────────────────────────────────────
-        if (session.sentToday >= this.DAILY_SOFT_LIMIT) {
+        // ── 3. Daily budget guard (only when safe_mode is enabled) ──────────
+        if (safeMode && session.sentToday >= this.DAILY_SOFT_LIMIT) {
             const overBy = session.sentToday - this.DAILY_SOFT_LIMIT;
             const scaleFactor = 1 + Math.min(2.0, overBy / 50); // Up to 3x delay after 100 over limit
             effectiveMin = Math.round(effectiveMin * scaleFactor);
