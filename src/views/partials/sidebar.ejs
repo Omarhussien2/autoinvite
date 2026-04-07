@@ -65,14 +65,13 @@
 
         <div class="h-px bg-gray-50 mx-4 my-4"></div>
 
-        <div class="group flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-300 cursor-not-allowed">
+        <a href="/campaigns"
+            class="group flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-all duration-200 <%= activePage === 'campaigns' ? 'bg-brand-light text-brand-dark' : 'text-gray-500 hover:bg-gray-50 hover:text-brand-green' %>">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             <span>الجدولة الذكية</span>
-            <span class="ml-auto text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">قريباً</span>
-        </div>
+        </a>
 
         <% if (typeof tenantRole !== 'undefined' && tenantRole === 'admin') { %>
         <div class="h-px bg-gray-50 mx-4 my-4"></div>

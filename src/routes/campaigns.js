@@ -13,7 +13,7 @@ const router = express.Router();
 // Create Campaign — quota guard applies (uploading contacts is a pre-launch step)
 router.post('/', isAuthenticated, tenantScope, quotaGuard, upload.fields([{ name: 'template' }, { name: 'contacts' }, { name: 'voicenote' }]), async (req, res) => {
     try {
-        const { name, message_templates, canvas_config } = req.body;
+        const { name, message_templates, canvas_config, scheduled_at } = req.body;
         const templatePath = req.files['template'] ? req.files['template'][0].path : null;
         const contactsPath = req.files['contacts'] ? req.files['contacts'][0].path : null;
         const voicenotePath = req.files['voicenote'] ? req.files['voicenote'][0].path : null;
@@ -22,15 +22,39 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, upload.fields([{ name
             return res.status(400).json({ success: false, message: 'Name, Messages, and Contact File are required' });
         }
 
-        const result = await db.query(`
-            INSERT INTO campaigns (tenant_id, name, template_path, contacts_path, message_templates, canvas_config, voicenote_path, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING id
-        `, [req.tenantId, name, templatePath, contactsPath, message_templates, canvas_config || '{}', voicenotePath, 'active']);
+        const isScheduled = scheduled_at && scheduled_at.trim() !== '';
+        const status = isScheduled ? 'scheduled' : 'active';
 
-        res.json({ success: true, campaignId: result.rows[0].id });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
+        const result = await db.query(`
+            INSERT INTO campaigns (tenant_id, name, template_path, contacts_path, message_templates, canvas_config, voicenote_path, status, scheduled_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING id
+        `, [req.tenantId, name, templatePath, contactsPath, message_templates, canvas_config || '{}', voicenotePath, status, isScheduled ? scheduled_at : null]);
+
+        const campaignId = result.rows[0].id;
+
+        // Parse uploaded contacts file and insert each contact into the contacts table
+        try {
+            const contactList = await loadContacts(contactsPath);
+            if (contactList && contactList.length > 0) {
+                const { normalizePhone } = require('../utils/dataProcessor');
+                for (const c of contactList) {
+                    const rawName = c.Name || c['الإسم'] || c['name'] || '';
+                    const rawPhone = c.Phone || c['رقم الجوال'] || c['phone'] || '';
+                    const phone = normalizePhone(rawPhone);
+                    if (!phone) continue;
+                    await db.query(
+                        'INSERT INTO contacts (tenant_id, campaign_id, name, phone, status) VALUES ($1, $2, $3, $4, $5)',
+                        [req.tenantId, campaignId, rawName, phone, 'pending']
+                    ).catch(() => {});
+                }
+            console.log(`[Contacts] Imported ${contactList.length} contacts for campaign ${campaignId}`);
+            }
+        } catch (contactErr) {
+            console.error('[Contacts] Failed to import contacts:', contactErr.message);
+        }
+
+        res.json({ success: true, campaignId });
     }
 });
 
@@ -59,13 +83,16 @@ router.get('/:id', isAuthenticated, tenantScope, async (req, res) => {
 // Update Campaign (Edit)
 router.put('/:id', isAuthenticated, tenantScope, upload.fields([{ name: 'template' }, { name: 'contacts' }, { name: 'voicenote' }]), async (req, res) => {
     try {
-        const { name, message_templates, canvas_config } = req.body;
+        const { name, message_templates, canvas_config, scheduled_at } = req.body;
         const templatePath = req.files['template'] ? req.files['template'][0].path : null;
         const contactsPath = req.files['contacts'] ? req.files['contacts'][0].path : null;
         const voicenotePath = req.files['voicenote'] ? req.files['voicenote'][0].path : null;
 
-        let query = 'UPDATE campaigns SET name = $1, message_templates = $2, canvas_config = $3';
-        const params = [name, message_templates, canvas_config];
+        const isScheduled = scheduled_at && scheduled_at.trim() !== '';
+        const status = isScheduled ? 'scheduled' : 'active';
+
+        let query = 'UPDATE campaigns SET name = $1, message_templates = $2, canvas_config = $3, status = $4';
+        const params = [name, message_templates, canvas_config, status];
 
         if (templatePath) {
             params.push(templatePath);
@@ -79,6 +106,9 @@ router.put('/:id', isAuthenticated, tenantScope, upload.fields([{ name: 'templat
             params.push(voicenotePath);
             query += `, voicenote_path = $${params.length}`;
         }
+
+        params.push(isScheduled ? scheduled_at : null);
+        query += `, scheduled_at = $${params.length}`;
 
         params.push(req.params.id, req.tenantId);
         query += ` WHERE id = $${params.length - 1} AND tenant_id = $${params.length}`;

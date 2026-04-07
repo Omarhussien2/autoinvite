@@ -61,7 +61,11 @@ async function migrate() {
         await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS whatsapp_status TEXT DEFAULT 'disconnected'`);
         await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS whatsapp_phone TEXT`);
 
-        console.log('✅ Migration complete: tenants.role, tenants.message_quota, tenants.messages_used, sent_logs.failed_at, campaigns.failed_count, messages table, tenants.whatsapp_status/whatsapp_phone');
+        // Smart Scheduling columns on campaigns
+        await db.query(`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP DEFAULT NULL`);
+        await db.query(`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'Asia/Riyadh'`);
+
+        console.log('✅ Migration complete: tenants.role, tenants.message_quota, tenants.messages_used, sent_logs.failed_at, campaigns.failed_count, messages table, tenants.whatsapp_status/whatsapp_phone, campaigns.scheduled_at/timezone');
     } catch (err) {
         console.error('❌ Migration failed:', err);
         process.exit(1);

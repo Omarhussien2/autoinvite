@@ -219,6 +219,43 @@
                 </div><!-- end #content-voice -->
             </div><!-- end card -->
 
+            <!-- Scheduling Section (Step 3) -->
+            <div class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+                <h3 class="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <span class="w-6 h-6 bg-brand-light rounded flex items-center justify-center text-brand-dark">3</span>
+                    توقيت الإرسال
+                </h3>
+                <div class="space-y-4">
+                    <div class="flex gap-1 p-1 bg-gray-100 rounded-xl">
+                        <button type="button" id="schedule-immediate" onclick="setScheduleMode('immediate')"
+                            class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all duration-200 bg-white text-brand-dark shadow-sm">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                            إرسال فوري
+                        </button>
+                        <button type="button" id="schedule-later" onclick="setScheduleMode('later')"
+                            class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all duration-200 text-gray-500 hover:text-gray-700">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            جدولة لوقت لاحق
+                        </button>
+                    </div>
+                    <div id="schedule-datetime-wrap" class="hidden grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1.5">التاريخ</label>
+                            <input type="date" id="schedule-date"
+                                class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green focus:ring-2 focus:ring-brand-green/10 transition">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1.5">الوقت</label>
+                            <input type="time" id="schedule-time"
+                                class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green focus:ring-2 focus:ring-brand-green/10 transition">
+                        </div>
+                    </div>
+                    <p id="schedule-hint" class="text-[10px] text-gray-400 hidden">
+                        سيتم إرسال الحملة تلقائياً في الوقت المحدد (توقيت الرياض).
+                    </p>
+                </div>
+            </div>
+
             <!-- Action Footer -->
             <div class="flex items-center justify-between pt-4">
                 <button type="button" onclick="window.history.back()"
@@ -517,6 +554,40 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // Expose active mode for campaign-editor.js
 window.CAMPAIGN_MODE = 'text';
+
+// ── Schedule Toggle ──────────────────────────────────────────────────
+window.CAMPAIGN_SCHEDULE_MODE = 'immediate';
+
+function setScheduleMode(mode) {
+    window.CAMPAIGN_SCHEDULE_MODE = mode;
+    const isLater = mode === 'later';
+    document.getElementById('schedule-datetime-wrap').classList.toggle('hidden', !isLater);
+    document.getElementById('schedule-datetime-wrap').classList.toggle('grid', isLater);
+    document.getElementById('schedule-hint').classList.toggle('hidden', !isLater);
+
+    const btnImm = document.getElementById('schedule-immediate');
+    const btnLater = document.getElementById('schedule-later');
+    if (isLater) {
+        btnLater.classList.add('bg-white', 'text-brand-dark', 'shadow-sm');
+        btnLater.classList.remove('text-gray-500', 'hover:text-gray-700');
+        btnImm.classList.remove('bg-white', 'text-brand-dark', 'shadow-sm');
+        btnImm.classList.add('text-gray-500', 'hover:text-gray-700');
+    } else {
+        btnImm.classList.add('bg-white', 'text-brand-dark', 'shadow-sm');
+        btnImm.classList.remove('text-gray-500', 'hover:text-gray-700');
+        btnLater.classList.remove('bg-white', 'text-brand-dark', 'shadow-sm');
+        btnLater.classList.add('text-gray-500', 'hover:text-gray-700');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    <% if (campaign && campaign.scheduled_at) { %>
+    setScheduleMode('later');
+    const sd = new Date('<%= new Date(campaign.scheduled_at).toISOString() %>');
+    document.getElementById('schedule-date').value = sd.toISOString().split('T')[0];
+    document.getElementById('schedule-time').value = sd.toTimeString().substring(0, 5);
+    <% } %>
+});
 </script>
 
 <script src="/js/campaign-editor.js"></script>

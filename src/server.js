@@ -24,6 +24,7 @@ const session = require('express-session');
 const connectPgSimple = require('connect-pg-simple');
 const db = require('./database/pg-client');
 const { WhatsAppManager, loadContacts, processBatch } = require('./core');
+const ScheduleManager = require('./core/ScheduleManager');
 const authRoutes = require('./routes/auth');
 const campaignRoutes = require('./routes/campaigns');
 const adminRoutes = require('./routes/admin');
@@ -49,6 +50,7 @@ app.set('trust proxy', 1);
 
 WhatsAppManager.setIo(io);
 WhatsAppManager.startSleepMonitor(15 * 60 * 1000);
+ScheduleManager.start(60000);
 
 const PORT = process.env.PORT || 5000;
 
@@ -159,7 +161,60 @@ app.put('/api/tenant/password', isAuthenticated, async (req, res) => {
 });
 
 // Tenant General Stats API
-app.get('/api/tenant/stats', isAuthenticated, async (req, res) => {
+// Contacts API — create + delete
+┄─
+
+app.post('/api/contacts', isAuthenticated, async (req, res) => {
+    try {
+        const { name, phone } = req.body;
+        const tenantId = req.session.tenantId;
+
+        if (!name || typeof name !== 'string' || name.trim().length === 0) {
+            return res.status(400).json({ success: false, message: 'الاسم مطلوب' });
+        }
+
+        if (!phone || typeof phone !== 'string' || phone.trim().length === 0) {
+            return res.status(400).json({ success: false, message: 'رقم الهاتف مطلوب' });
+        }
+
+        const result = await db.query('SELECT id FROM contacts WHERE tenant_id = $1 AND id = $2', [tenantId, id]);
+        if (!contact) {
+            return res.status(404).json({ success: false, message: 'جهة اتصال غير موج' });
+        }
+
+        await db.query(
+            'INSERT INTO contacts (tenant_id, name, phone, status) VALUES ($1, $2, $3, $4, $5)',
+            [tenantId, name, phone, 'manual']
+        );
+
+        res.json({ success: true, contact: result.rows[0] });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// Contacts API — delete
+┄─
+app.delete('/api/contacts/:id', isAuthenticated, async (req, res) => {
+    try {
+        const tenantId = req.session.tenantId;
+        const contactId = req.params.id;
+
+        await db.query('DELETE FROM contacts WHERE id = $1 AND tenant_id = $2', [contactId, tenantId]);
+        if (!contact) {
+            return res.status(404).json({ success: false, message: 'جهة اتصال غير موج' });
+        }
+        await db.query('DELETE FROM contacts WHERE tenant_id = $1 AND campaign_id = $2', [tenantId, campaignId]);
+        if (result.rows.length > 0) {
+            return res.status(404).json({ success: false, message: 'لا يمكن حذف جهات اتصال مرتبطةطة بحملة أخرى (حملة نفس) });
+        }
+        await db.query('DELETE FROM contacts WHERE id = $1 AND tenant_id = $2', [contactId, tenantId]);
+
+        res.json({ success: true, contact: result.rows[0] });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+}); isAuthenticated, async (req, res) => {
     try {
         const tenantId = req.session.tenantId;
         const contactsCount = await db.query('SELECT COUNT(*) FROM contacts WHERE tenant_id = $1', [tenantId]);
@@ -195,6 +250,7 @@ process.on('unhandledRejection', (reason) => {
 function gracefulShutdown(signal) {
     console.log(`\n ${signal} received — shutting down gracefully...`);
     WhatsAppManager.stopSleepMonitor();
+    ScheduleManager.stop();
 
     // Stop all active WhatsApp clients
     for (const [tenantId] of WhatsAppManager.clients.entries()) {

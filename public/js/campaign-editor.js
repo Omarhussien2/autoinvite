@@ -365,6 +365,15 @@
                 formData.append('canvas_config', JSON.stringify(canvasConfig));
             }
 
+            // Scheduling
+            if (window.CAMPAIGN_SCHEDULE_MODE === 'later') {
+                const dateVal = document.getElementById('schedule-date').value;
+                const timeVal = document.getElementById('schedule-time').value;
+                if (dateVal && timeVal) {
+                    formData.append('scheduled_at', dateVal + 'T' + timeVal + ':00');
+                }
+            }
+
             // Validate: voice mode requires an audio file (create only)
             const campaignData = window.CAMPAIGN_DATA;
             if (isVoiceMode && !voicenoteFile && !campaignData) {

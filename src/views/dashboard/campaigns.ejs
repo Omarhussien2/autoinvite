@@ -71,11 +71,13 @@
                             <% const statusColors={ active: 'bg-green-50 text-green-700 border-green-100' ,
                                 running: 'bg-green-500/10 text-green-600 border-green-200' ,
                                 completed: 'bg-blue-50 text-blue-700 border-blue-100' ,
+                                scheduled: 'bg-purple-50 text-purple-700 border-purple-100' ,
                                 paused: 'bg-amber-50 text-amber-700 border-amber-100' ,
                                 failed: 'bg-red-50 text-red-700 border-red-100' ,
                                 partial_failure: 'bg-orange-50 text-orange-700 border-orange-100' ,
                                 error: 'bg-red-50 text-red-700 border-red-100' }; %>
                                 <% const statusLabels={ active: 'نشطة' , running: 'جارية' , completed: 'مكتملة' ,
+                                    scheduled: 'مجدولة' ,
                                     paused: 'متوقفة' , failed: 'فشلت' , partial_failure: 'أخطاء جزئية' ,
                                     error: 'خطأ' }; %>
                                     <tr class="hover:bg-gray-50/50 transition campaign-row"
@@ -94,6 +96,11 @@
                                                 <span class="font-medium text-gray-800 text-sm">
                                                     <%= c.name %>
                                                 </span>
+                                                <% if (c.status === 'scheduled' && c.scheduled_at) { %>
+                                                    <span class="text-[10px] text-purple-500 font-medium">
+                                                        <%= new Date(c.scheduled_at).toLocaleDateString('ar-SA') %> <%= new Date(c.scheduled_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) %>
+                                                    </span>
+                                                <% } %>
                                             </div>
                                         </td>
                                         <td class="px-5 py-4 text-gray-500 text-xs">
@@ -127,14 +134,15 @@
                                                     <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
                                                 <% } else if (c.status === 'completed') { %>
                                                     <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                                <% } else if (c.status === 'scheduled') { %>
+                                                    <span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
                                                 <% } %>
                                                 <%= statusLabels[c.status] || 'مسودة' %>
                                             </span>
                                         </td>
                                         <td class="px-5 py-4">
                                             <div class="flex items-center gap-1.5">
-                                                <% if (c.status !== 'running' && c.status !== 'completed') { %>
-                                                    <a href="/campaigns/<%= c.id %>/run" title="تشغيل"
+                                                <% if (c.status !== 'running' && c.status !== 'completed') { %>                                                    <a href="/campaigns/<%= c.id %>/run" title="تشغيل"
                                                         class="w-9 h-9 rounded-lg bg-brand-light text-brand-dark flex items-center justify-center transition hover:bg-brand-green hover:text-white shadow-sm">
                                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round"
