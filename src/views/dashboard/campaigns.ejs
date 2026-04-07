@@ -72,9 +72,12 @@
                                 running: 'bg-green-500/10 text-green-600 border-green-200' ,
                                 completed: 'bg-blue-50 text-blue-700 border-blue-100' ,
                                 paused: 'bg-amber-50 text-amber-700 border-amber-100' ,
-                                failed: 'bg-red-50 text-red-700 border-red-100' }; %>
+                                failed: 'bg-red-50 text-red-700 border-red-100' ,
+                                partial_failure: 'bg-orange-50 text-orange-700 border-orange-100' ,
+                                error: 'bg-red-50 text-red-700 border-red-100' }; %>
                                 <% const statusLabels={ active: 'نشطة' , running: 'جارية' , completed: 'مكتملة' ,
-                                    paused: 'متوقفة' , failed: 'فشلت' }; %>
+                                    paused: 'متوقفة' , failed: 'فشلت' , partial_failure: 'أخطاء جزئية' ,
+                                    error: 'خطأ' }; %>
                                     <tr class="hover:bg-gray-50/50 transition campaign-row"
                                         data-name="<%= c.name.toLowerCase() %>"
                                         data-status="<%= c.status %>">

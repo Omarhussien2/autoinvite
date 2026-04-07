@@ -59,48 +59,57 @@ class WhatsAppManager {
         this.emitToTenant(tenantId, 'status', 'جاري تهيئة جلسة الواتساب...');
 
         try {
-            const client = await wppconnect.create({
-                session: `tenant_${tenantId}`,
-                tokenStore: 'file',
-                folderNameToken: tokenDir,
-                headless: true,
-                useChrome: false,
-                autoClose: 0, // Never auto-close
-                puppeteerOptions: {
-                    args: [
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                        '--disable-gpu',
-                        '--disable-software-rasterizer',
-                        '--disable-extensions',
-                        '--no-zygote',
-                        '--disable-background-networking',
-                        '--disable-default-apps',
-                        '--disable-sync',
-                        '--disable-translate',
-                        '--hide-scrollbars',
-                        '--metrics-recording-only',
-                        '--mute-audio',
-                        '--safebrowsing-disable-auto-update',
-                    ]
-                },
-                catchQR: (base64Qrimg, asciiQR, attempts, urlCode) => {
-                    const state = this.states.get(tenantId);
-                    if (state) {
-                        state.status = 'QUERY_QR';
-                        state.lastQr = base64Qrimg; // Already base64 data URI from WPPConnect
-                        this.updateActivity(tenantId);
-                    }
-                    // Emit the base64 QR directly — frontend expects a data URI
-                    this.emitToTenant(tenantId, 'qr', base64Qrimg);
-                    this.emitToTenant(tenantId, 'status', 'يا هلا! امسح الباركود عشان نربط الواتساب');
-                },
-                statusFind: (statusSession, session) => {
-                    console.log(`[Tenant ${tenantId}] WPPConnect status: ${statusSession}`);
-                    this._handleStatusChange(tenantId, statusSession);
-                },
-            });
+            let client;
+            try {
+                client = await wppconnect.create({
+                    session: `tenant_${tenantId}`,
+                    tokenStore: 'file',
+                    folderNameToken: tokenDir,
+                    headless: true,
+                    useChrome: false,
+                    autoClose: 0, // Never auto-close
+                    puppeteerOptions: {
+                        args: [
+                            '--no-sandbox',
+                            '--disable-setuid-sandbox',
+                            '--disable-dev-shm-usage',
+                            '--disable-gpu',
+                            '--disable-software-rasterizer',
+                            '--disable-extensions',
+                            '--no-zygote',
+                            '--disable-background-networking',
+                            '--disable-default-apps',
+                            '--disable-sync',
+                            '--disable-translate',
+                            '--hide-scrollbars',
+                            '--metrics-recording-only',
+                            '--mute-audio',
+                            '--safebrowsing-disable-auto-update',
+                        ]
+                    },
+                    catchQR: (base64Qrimg, asciiQR, attempts, urlCode) => {
+                        const state = this.states.get(tenantId);
+                        if (state) {
+                            state.status = 'QUERY_QR';
+                            state.lastQr = base64Qrimg; // Already base64 data URI from WPPConnect
+                            this.updateActivity(tenantId);
+                        }
+                        // Emit the base64 QR directly — frontend expects a data URI
+                        this.emitToTenant(tenantId, 'qr', base64Qrimg);
+                        this.emitToTenant(tenantId, 'status', 'يا هلا! امسح الباركود عشان نربط الواتساب');
+                    },
+                    statusFind: (statusSession, session) => {
+                        console.log(`[Tenant ${tenantId}] WPPConnect status: ${statusSession}`);
+                        this._handleStatusChange(tenantId, statusSession);
+                    },
+                });
+            } catch (initErr) {
+                // ── BUG-10: Clean up partially-created browser on init failure ──
+                if (client && typeof client.close === 'function') {
+                    try { await client.close(); } catch (_) {}
+                }
+                throw initErr;
+            }
 
             // Session is now connected
             this.clients.set(tenantId, client);
@@ -281,7 +290,7 @@ class WhatsAppManager {
 
     // Session Sleep system: sweep inactive sessions to save RAM
     startSleepMonitor(idleMs = 15 * 60 * 1000) {
-        setInterval(() => {
+        this._sleepMonitorId = setInterval(() => {
             const now = Date.now();
             for (const [tenantId, state] of this.states.entries()) {
                 if (state.lastActive && (now - state.lastActive > idleMs)) {
@@ -290,6 +299,14 @@ class WhatsAppManager {
                 }
             }
         }, 60000);
+    }
+
+    stopSleepMonitor() {
+        if (this._sleepMonitorId) {
+            clearInterval(this._sleepMonitorId);
+            this._sleepMonitorId = null;
+            console.log('[WhatsAppManager] Sleep monitor stopped.');
+        }
     }
 }
 

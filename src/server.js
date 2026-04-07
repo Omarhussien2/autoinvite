@@ -155,6 +155,33 @@ process.on('unhandledRejection', (reason) => {
     console.error('⚠️ Unhandled Rejection (server stays alive):', reason?.message || reason);
 });
 
+// ── BUG-8: Graceful shutdown — clean up WhatsApp clients & intervals on SIGTERM ──
+function gracefulShutdown(signal) {
+    console.log(`\n ${signal} received — shutting down gracefully...`);
+    WhatsAppManager.stopSleepMonitor();
+
+    // Stop all active WhatsApp clients
+    for (const [tenantId] of WhatsAppManager.clients.entries()) {
+        console.log(`[Shutdown] Stopping WhatsApp client for tenant ${tenantId}`);
+        WhatsAppManager.stopClient(tenantId).catch(() => {});
+    }
+
+    // Close HTTP server
+    server.close(() => {
+        console.log('✅ HTTP server closed.');
+        process.exit(0);
+    });
+
+    // Force exit after 10s if cleanup stalls
+    setTimeout(() => {
+        console.error('⚠️ Forced shutdown after 10s timeout.');
+        process.exit(1);
+    }, 10000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
 // --- UI ROUTES (DYNAMIC EJS) ---
 
 // 1. Landing Page (Public) — served from landing-autoinvite React build

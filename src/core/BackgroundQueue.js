@@ -36,7 +36,7 @@ class BackgroundQueue {
             const WhatsAppManager = require('./WhatsAppManager');
             WhatsAppManager.emitToTenant(tenantId, 'log', { message, type });
         }, templatePath, canvasConfig, tenantId, voicenotePath)
-            .then(async () => {
+            .then(async (result) => {
                 const WhatsAppManager = require('./WhatsAppManager');
                 const state = WhatsAppManager.states.get(tenantId);
                 if (state) state.status = 'READY';
@@ -51,8 +51,18 @@ class BackgroundQueue {
                 }
 
                 if (campaignId) {
-                    await db.query('UPDATE campaigns SET last_sent_row = $1, status = $2 WHERE id = $3', [endRow, 'completed', campaignId]);
-                    WhatsAppManager.emitToTenant(tenantId, 'log', { message: `تم إكمال الحملة بنجاح ✅`, type: 'SUCCESS' });
+                    // ── BUG-7: Detect partial failures ──
+                    const { successCount = 0, failCount = 0 } = result || {};
+                    let finalStatus = 'completed';
+                    if (failCount > successCount) {
+                        finalStatus = 'partial_failure';
+                    }
+                    await db.query('UPDATE campaigns SET last_sent_row = $1, status = $2 WHERE id = $3', [endRow, finalStatus, campaignId]);
+                    if (finalStatus === 'partial_failure') {
+                        WhatsAppManager.emitToTenant(tenantId, 'log', { message: `الحملة اكتملت مع أخطاء (${successCount} نجح، ${failCount} فشل)`, type: 'WARN' });
+                    } else {
+                        WhatsAppManager.emitToTenant(tenantId, 'log', { message: `تم إكمال الحملة بنجاح ✅`, type: 'SUCCESS' });
+                    }
                 }
 
             })

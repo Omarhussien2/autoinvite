@@ -72,12 +72,29 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
         onLog('[VoiceNote] تم التحويل بنجاح ✓', 'INFO');
     }
 
+    // ── BUG-7: Track success/fail counts for partial failure detection ──
+    let successCount = 0;
+    let failCount = 0;
+
     for (const [index, contact] of subset.entries()) {
         WhatsAppManager.updateActivity(tenantId);
 
         if (global.stopBatchRequested && global.stopBatchRequested[tenantId]) {
             onLog('تم إيقاف الإرسال بنجاح.', 'WARN');
             break;
+        }
+
+        // ── BUG-9: Quota check before each send ──
+        try {
+            const quotaRes = await db.query('SELECT messages_used, message_quota FROM tenants WHERE id = $1', [tenantId]);
+            const quotaRow = quotaRes.rows[0];
+            if (quotaRow && quotaRow.messages_used >= quotaRow.message_quota) {
+                onLog(`تم استنفاد الحصة (${quotaRow.messages_used}/${quotaRow.message_quota}). أوقف الإرسال.`, 'ERROR');
+                WhatsAppManager.emitToTenant(tenantId, 'log', { message: `تم استنفاد الحصة — توقف الإرسال. تواصل مع الإدارة لزيادة الحصة.`, type: 'ERROR' });
+                break;
+            }
+        } catch (quotaErr) {
+            console.warn('[processBatch] Quota check failed, continuing:', quotaErr.message);
         }
 
         const rawName = contact.Name || contact['الإسم'] || contact['name'] || 'ضيف';
@@ -132,11 +149,11 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             }
 
             // ── Step 2: Typing simulation ───────────────────────────────────
-            // Show typing indicator for a duration based on message length
-            // (50ms per character, capped at 3 seconds), then send.
+            // Use AntiBanEngine's human-like typing duration calculation
+            // (WPM-based with ±20% variance, clamped 1.5s-12s)
             try {
                 await client.startTyping(chatId);
-                const typingDelay = Math.min(message.length * 50, 3000);
+                const typingDelay = AntiBanEngine.typingDuration(message);
                 onLog(`[HumanBehavior] Typing for ${(typingDelay / 1000).toFixed(1)}s (${message.length} chars)...`, 'INFO');
                 await AntiBanEngine.sleep(typingDelay);
                 await client.stopTyping(chatId);
@@ -177,11 +194,23 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             AntiBanEngine.recordSent(tenantId);
 
             if (campaignId) {
-                await db.query(
-                    'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name, status) VALUES ($1, $2, $3, $4, $5)',
-                    [campaignId, tenantId, normalizedPhone, name, 'success']
-                );
-                await db.query('UPDATE campaigns SET last_sent_row = $1 WHERE id = $2', [currentRow, campaignId]);
+                // ── BUG-11: Transactional sent_logs + campaign update ──
+                const txClient = await db.pool.connect();
+                try {
+                    await txClient.query('BEGIN');
+                    await txClient.query(
+                        'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name, status) VALUES ($1, $2, $3, $4, $5)',
+                        [campaignId, tenantId, normalizedPhone, name, 'success']
+                    );
+                    await txClient.query('UPDATE campaigns SET last_sent_row = $1 WHERE id = $2', [currentRow, campaignId]);
+                    await txClient.query('COMMIT');
+                } catch (txErr) {
+                    await txClient.query('ROLLBACK').catch(() => {});
+                    console.error('[processBatch] Transaction failed, rolling back:', txErr.message);
+                    throw txErr; // Re-throw so the outer catch handles it as a failure
+                } finally {
+                    txClient.release();
+                }
             }
 
             if (tenantId) {
@@ -190,6 +219,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
 
             await logResult(normalizedPhone, name, 'SUCCESS', 'Invitation Sent');
             onLog(`Success: Invitation sent to ${name}`, 'SUCCESS');
+            successCount++;
 
             // Apply inter-message delay using tenant-specific settings (skip after the very last message)
             if (index < subset.length - 1) {
@@ -221,6 +251,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             console.error(`[processBatch] Error for ${name} (${normalizedPhone}):`, error);
             WhatsAppManager.emitToTenant(tenantId, 'log', { message: saudiMsg, type: 'ERROR' });
             WhatsAppManager.emitToTenant(tenantId, 'log', { message: `[تفاصيل] ${errMsg}`, type: 'WARN' });
+            failCount++;
 
             if (campaignId) {
                 await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(() => {});
@@ -235,7 +266,8 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
     // Cleanup converted PTT file
     if (pttOggPath) await fs.remove(pttOggPath).catch(() => {});
 
-    onLog('\nBatch processing complete.', 'DONE');
+    onLog(`\nBatch processing complete. Success: ${successCount}, Failed: ${failCount}`, 'DONE');
+    return { successCount, failCount };
 }
 
 module.exports = { processBatch };
