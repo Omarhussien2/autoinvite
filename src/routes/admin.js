@@ -104,7 +104,7 @@ router.post('/tenants', isAuthenticated, isAdmin, async (req, res) => {
         }
 
         const password_hash = await bcrypt.hash(password, 10);
-        const quota = parseInt(message_quota) || 1000;
+        const quota = parseInt(message_quota) || 99;
 
         const result = await db.query(
             'INSERT INTO tenants (name, username, password_hash, role, message_quota, messages_used, settings) VALUES ($1, $2, $3, $4, $5, 0, $6) RETURNING id, name, username, role, message_quota',

@@ -13,7 +13,7 @@ async function initializeSaaS() {
         password_hash TEXT NOT NULL,
         settings JSONB DEFAULT '{}',
         role VARCHAR(20) NOT NULL DEFAULT 'user',
-        message_quota INTEGER NOT NULL DEFAULT 1000,
+        message_quota INTEGER NOT NULL DEFAULT 99,
         messages_used INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )

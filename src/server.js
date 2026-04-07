@@ -214,7 +214,7 @@ app.get('/api/tenant/stats', isAuthenticated, async (req, res) => {
         const sentResult = await db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND (status IS NULL OR status = $2)', [tenantId, 'success']);
         const tenantRes = await db.query('SELECT message_quota, messages_used FROM tenants WHERE id = $1', [tenantId]);
 
-        const tenant = tenantRes.rows[0] || { message_quota: 1000, messages_used: 0 };
+        const tenant = tenantRes.rows[0] || { message_quota: 99, messages_used: 0 };
 
         res.json({
             success: true,
@@ -223,9 +223,9 @@ app.get('/api/tenant/stats', isAuthenticated, async (req, res) => {
                 campaigns: campaignResult.rows.length,
                 messagesSent: parseInt(sentResult.rows[0].count || 0),
                 activeCampaigns: campaignResult.rows.filter(c => c.status === 'active' || c.status === 'running').length,
-                messageQuota: parseInt(tenant.message_quota || 1000),
+                messageQuota: parseInt(tenant.message_quota || 99),
                 messagesUsed: parseInt(tenant.messages_used || 0),
-                quotaRemaining: Math.max(0, parseInt(tenant.message_quota || 1000) - parseInt(tenant.messages_used || 0))
+                quotaRemaining: Math.max(0, parseInt(tenant.message_quota || 99) - parseInt(tenant.messages_used || 0))
             }
         });
     } catch (e) {
@@ -327,16 +327,16 @@ app.get('/dashboard', isAuthenticated, subscriptionGuard(), async (req, res) => 
 
         // Quota data
         const tenantRes = await db.query('SELECT message_quota, messages_used FROM tenants WHERE id = $1', [tenantId]);
-        const tenant = tenantRes.rows[0] || { message_quota: 1000, messages_used: 0 };
+        const tenant = tenantRes.rows[0] || { message_quota: 99, messages_used: 0 };
 
         const stats = {
             contacts: contactsTotal,
             campaigns: campaigns.length,
             messagesSent: sentResult.rows[0].count,
             activeCampaigns: campaigns.filter(c => c.status === 'active' || c.status === 'running').length,
-            messageQuota: parseInt(tenant.message_quota || 1000),
+            messageQuota: parseInt(tenant.message_quota || 99),
             messagesUsed: parseInt(tenant.messages_used || 0),
-            quotaRemaining: Math.max(0, parseInt(tenant.message_quota || 1000) - parseInt(tenant.messages_used || 0))
+            quotaRemaining: Math.max(0, parseInt(tenant.message_quota || 99) - parseInt(tenant.messages_used || 0))
         };
 
         // Real chart data: last 7 days

@@ -11,7 +11,7 @@ async function migrate() {
 
         await db.query(`
             ALTER TABLE tenants
-            ADD COLUMN IF NOT EXISTS message_quota INTEGER NOT NULL DEFAULT 1000
+            ADD COLUMN IF NOT EXISTS message_quota INTEGER NOT NULL DEFAULT 99
         `);
 
         await db.query(`
