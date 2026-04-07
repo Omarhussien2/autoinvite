@@ -120,22 +120,17 @@
   3. Honor safe_mode toggle
   4. Add password change to settings page
 
-### 2.4 Reports Page Upgrade
-- **What exists:** Full table with filters, print button
-- **What's missing:** CSV export, date range filter, summary metrics
-- **Plan:**
-  1. Add CSV export button
-  2. Add date range picker
-  3. Add summary cards (success rate, top campaigns)
+### 2.4 Reports Page Upgrade — DONE
+- CSV export button (exports visible/filtered rows)
+- Date range filter (from/to inputs, client-side filtering)
+- Summary stat cards: total sent, success rate %, failed count, most active campaign
 
-### 2.5 Admin Dashboard Enhancement
-- **What exists:** Tenant list, quota management, usage reset
-- **What's missing:** Create/delete tenants, force disconnect, system health
-- **Plan:**
-  1. Add "Create Tenant" form
-  2. Add "Delete Tenant" with cascade
-  3. Add "Force Disconnect WhatsApp" per tenant
-  4. Add system health indicators (RAM, active instances)
+### 2.5 Admin Dashboard Enhancement — DONE
+- Create Tenant modal (POST `/admin/tenants`) with bcrypt password hashing
+- Delete Tenant with double confirmation (DELETE `/admin/tenants/:id`, manual cascade)
+- Force Disconnect WhatsApp per tenant (POST `/admin/tenants/:id/disconnect`)
+- System health section (GET `/admin/health`): active WA instances, max capacity, uptime, memory RSS
+- Self-delete prevention (checks `req.session.tenantId !== id`)
 
 ### 2.6 Smart Scheduling
 - **What exists:** Sidebar placeholder (disabled, "قريباً")

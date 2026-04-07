@@ -6,12 +6,43 @@
         </div>
 
         <div class="flex items-center gap-3">
-            <div class="bg-brand-light/30 px-4 py-2 rounded-xl border border-brand-green/10 text-center">
-                <p class="text-[10px] text-gray-400 font-medium">إجمالي الإرسال</p>
-                <p class="text-lg font-bold text-brand-dark">
-                    <%= logs.length %>
-                </p>
-            </div>
+            <button onclick="exportReportsCSV()"
+                class="bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-xl text-xs font-medium hover:bg-gray-50 transition shadow-sm flex items-center gap-2">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M7 10l5 5 5-5M12 15V3" />
+                </svg>
+                تصدير CSV
+            </button>
+            <button onclick="window.print()"
+                class="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-4 py-2.5 rounded-xl text-xs font-medium hover:bg-gray-50 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                        d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2-2v4a2 2 0 002 2z" />
+                </svg>
+                طباعة
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Stat Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="bg-brand-light/30 px-4 py-3 rounded-xl border border-brand-green/10 text-center">
+            <p class="text-[10px] text-gray-400 font-medium">إجمالي الإرسال</p>
+            <p class="text-lg font-bold text-brand-dark"><%= reportStats.totalCount %></p>
+        </div>
+        <div class="bg-green-50 px-4 py-3 rounded-xl border border-green-100 text-center">
+            <p class="text-[10px] text-gray-400 font-medium">نسبة النجاح</p>
+            <p class="text-lg font-bold text-green-600"><%= reportStats.successRate %>%</p>
+        </div>
+        <div class="bg-red-50 px-4 py-3 rounded-xl border border-red-100 text-center">
+            <p class="text-[10px] text-gray-400 font-medium">رسائل فاشلة</p>
+            <p class="text-lg font-bold text-red-600"><%= reportStats.failedCount %></p>
+        </div>
+        <div class="bg-blue-50 px-4 py-3 rounded-xl border border-blue-100 text-center">
+            <p class="text-[10px] text-gray-400 font-medium">الحملة الأنشط</p>
+            <p class="text-sm font-bold text-blue-600 truncate" title="<%= reportStats.mostActiveCampaign ? reportStats.mostActiveCampaign[0] : '—' %>">
+                <%= reportStats.mostActiveCampaign ? reportStats.mostActiveCampaign[0] : '—' %>
+            </p>
         </div>
     </div>
 
@@ -44,14 +75,14 @@
             <option value="failed">فشل ✗</option>
         </select>
 
-        <button onclick="window.print()"
-            class="mr-auto inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-4 py-2.5 rounded-xl text-xs font-medium hover:bg-gray-50 transition">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                    d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2-2v4a2 2 0 002 2z" />
-            </svg>
-            طباعة
-        </button>
+        <div class="flex items-center gap-2 text-xs">
+            <span class="text-gray-400">من</span>
+            <input type="date" id="date-from"
+                class="bg-gray-50 border border-gray-200 text-gray-500 text-xs rounded-xl px-3 py-2.5 outline-none focus:border-brand-green">
+            <span class="text-gray-400">إلى</span>
+            <input type="date" id="date-to"
+                class="bg-gray-50 border border-gray-200 text-gray-500 text-xs rounded-xl px-3 py-2.5 outline-none focus:border-brand-green">
+        </div>
     </div>
 
     <% if (logs && logs.length> 0) { %>
@@ -72,7 +103,8 @@
                             data-name="<%= l.name ? l.name.toLowerCase() : '' %>" 
                             data-phone="<%= l.phone %>"
                             data-camp="<%= l.campaign_name %>"
-                            data-status="<%= l.status || 'success' %>">
+                            data-status="<%= l.status || 'success' %>"
+                            data-date="<%= l.sent_at ? new Date(l.sent_at).toISOString().split('T')[0] : '' %>">
                             <td class="px-5 py-4 text-gray-400 text-xs">
                                 <%= new Date(l.sent_at).toLocaleString('ar-SA') %>
                             </td>
@@ -116,23 +148,65 @@
     const reportSearch = document.getElementById('report-search');
     const campaignFilter = document.getElementById('campaign-filter');
     const statusFilter = document.getElementById('status-filter');
+    const dateFrom = document.getElementById('date-from');
+    const dateTo = document.getElementById('date-to');
     const reportRows = document.querySelectorAll('.report-row');
 
     function filterReports() {
         const query = reportSearch.value.toLowerCase();
         const camp = campaignFilter.value;
         const status = statusFilter.value;
+        const from = dateFrom.value;
+        const to = dateTo.value;
 
         reportRows.forEach(row => {
             const textMatch = row.dataset.name.includes(query) || row.dataset.phone.includes(query);
             const campMatch = camp === 'all' || row.dataset.camp === camp;
             const statusMatch = status === 'all' || row.dataset.status === status;
-            
-            row.style.display = (textMatch && campMatch && statusMatch) ? '' : 'none';
+
+            let dateMatch = true;
+            const rowDate = row.dataset.date;
+            if (from && rowDate < from) dateMatch = false;
+            if (to && rowDate > to) dateMatch = false;
+
+            row.style.display = (textMatch && campMatch && statusMatch && dateMatch) ? '' : 'none';
         });
     }
 
     reportSearch.addEventListener('input', filterReports);
     campaignFilter.addEventListener('change', filterReports);
     statusFilter.addEventListener('change', filterReports);
+    dateFrom.addEventListener('change', filterReports);
+    dateTo.addEventListener('change', filterReports);
+
+    function exportReportsCSV() {
+        const visibleRows = Array.from(reportRows).filter(r => r.style.display !== 'none');
+        if (visibleRows.length === 0) return alert('لا توجد بيانات للتصدير');
+
+        let csv = [];
+        csv.push(['الوقت', 'الحملة', 'المستلم', 'الرقم', 'الحالة'].join(','));
+
+        visibleRows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            const time = cells[0].innerText.trim();
+            const campaign = cells[1].innerText.trim();
+            const name = cells[2].innerText.trim();
+            const phone = cells[3].innerText.trim();
+            const status = cells[4].innerText.trim();
+
+            csv.push([`"${time}"`, `"${campaign}"`, `"${name}"`, `"${phone}"`, `"${status}"`].join(','));
+        });
+
+        const csvString = csv.join("\n");
+        const filename = 'reports_export_' + new Date().toISOString().slice(0, 10) + '.csv';
+        const blob = new Blob(["\ufeff", csvString], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+
+        link.setAttribute("href", url);
+        link.setAttribute("download", filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
 </script>

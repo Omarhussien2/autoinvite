@@ -6,20 +6,50 @@
             <h2 class="text-xl font-bold text-gray-900">لوحة تحكم المشرف</h2>
             <p class="text-sm text-gray-400 mt-0.5">إدارة المستخدمين والحصص</p>
         </div>
-        <div class="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded-xl font-medium">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-            وصول المشرف العام
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded-xl font-medium">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                وصول المشرف العام
+            </div>
+            <button onclick="openCreateModal()"
+                class="inline-flex items-center gap-1.5 bg-brand-dark text-white text-xs px-3.5 py-2 rounded-xl font-medium hover:opacity-90 transition shadow-sm">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                </svg>
+                إنشاء مستخدم
+            </button>
+        </div>
+    </div>
+
+    <!-- System Health -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="w-2 h-2 rounded-full bg-brand-green status-pulse"></span>
+                <p class="text-xs text-gray-400 font-medium">واتساب نشط</p>
+            </div>
+            <p class="text-3xl font-bold text-gray-900" id="health-instances">—</p>
+            <p class="text-xs text-gray-400" id="health-capacity">—</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <p class="text-xs text-gray-400 font-medium mb-1">وقت التشغيل</p>
+            <p class="text-lg font-bold text-gray-900" id="health-uptime">—</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <p class="text-xs text-gray-400 font-medium mb-1">استهلاك الذاكرة</p>
+            <p class="text-3xl font-bold text-gray-900" id="health-memory">—</p>
+            <p class="text-xs text-gray-400" id="health-heap">—</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <p class="text-xs text-gray-400 font-medium mb-1">إجمالي المستخدمين</p>
+            <p class="text-3xl font-bold text-gray-900"><%= tenants.length %></p>
         </div>
     </div>
 
     <!-- Summary Stats -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p class="text-3xl font-bold text-gray-900"><%= tenants.length %></p>
-            <p class="text-sm text-gray-500 mt-1">إجمالي المستخدمين</p>
-        </div>
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
             <p class="text-3xl font-bold text-gray-900"><%= tenants.reduce((s, t) => s + parseInt(t.active_campaign_count || 0), 0) %></p>
             <p class="text-sm text-gray-500 mt-1">حملات نشطة</p>
@@ -61,11 +91,12 @@
                     <% const barColor = pct < 60 ? 'bg-brand-green' : pct < 85 ? 'bg-amber-400' : 'bg-red-500'; %>
                     <% const waReady = t.whatsapp_status === 'READY'; %>
                     <% const waWorking = t.whatsapp_status === 'WORKING'; %>
+                    <% const isAdminUser = t.role === 'admin'; %>
                     <tr class="hover:bg-gray-50 transition">
                         <td class="px-5 py-4">
                             <p class="font-medium text-gray-800"><%= t.name %></p>
                             <p class="text-xs text-gray-400">@<%= t.username %></p>
-                            <% if (t.role === 'admin') { %>
+                            <% if (isAdminUser) { %>
                             <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-700 mt-0.5">مشرف</span>
                             <% } %>
                         </td>
@@ -108,8 +139,18 @@
                             <% } %>
                         </td>
                         <td class="px-4 py-4">
-                            <button onclick="resetUsage('<%= t.id %>', '<%= t.name %>')"
-                                class="text-xs text-gray-400 hover:text-red-500 transition">إعادة تعيين</button>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <button onclick="resetUsage('<%= t.id %>', '<%= t.name %>')"
+                                    class="text-xs text-gray-400 hover:text-red-500 transition">إعادة تعيين</button>
+                                <% if (waReady || waWorking) { %>
+                                <button onclick="disconnectWA('<%= t.id %>', '<%= t.name %>')"
+                                    class="text-xs text-amber-500 hover:text-amber-700 transition">قطع واتساب</button>
+                                <% } %>
+                                <% if (!isAdminUser) { %>
+                                <button onclick="deleteTenant('<%= t.id %>', '<%= t.name %>')"
+                                    class="text-xs text-red-400 hover:text-red-600 transition">حذف</button>
+                                <% } %>
+                            </div>
                         </td>
                     </tr>
                     <% }); %>
@@ -142,9 +183,64 @@
     </div>
 </div>
 
+<!-- Create Tenant Modal -->
+<div id="create-modal" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <h3 class="font-bold text-gray-900 mb-1">إنشاء مستخدم جديد</h3>
+        <p class="text-sm text-gray-500 mb-4">أدخل بيانات المستخدم الجديد</p>
+        <div class="space-y-3">
+            <div>
+                <label class="text-xs font-medium text-gray-600 block mb-1">الاسم</label>
+                <input type="text" id="create-name" placeholder="اسم المستخدم"
+                    class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green">
+            </div>
+            <div>
+                <label class="text-xs font-medium text-gray-600 block mb-1">اسم المستخدم (للدخول)</label>
+                <input type="text" id="create-username" placeholder="username"
+                    class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green dir-ltr text-right">
+            </div>
+            <div>
+                <label class="text-xs font-medium text-gray-600 block mb-1">كلمة المرور</label>
+                <input type="password" id="create-password" placeholder="8 أحرف على الأقل"
+                    class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green">
+            </div>
+            <div>
+                <label class="text-xs font-medium text-gray-600 block mb-1">حصة الرسائل</label>
+                <input type="number" id="create-quota" value="1000" min="0" step="100"
+                    class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green">
+            </div>
+        </div>
+        <div class="flex gap-2 mt-5">
+            <button onclick="createTenant()"
+                class="flex-1 bg-brand-dark text-white text-sm py-2.5 rounded-xl font-medium hover:opacity-90 transition">إنشاء</button>
+            <button onclick="closeCreateModal()"
+                class="flex-1 bg-gray-100 text-gray-600 text-sm py-2.5 rounded-xl font-medium hover:bg-gray-200 transition">إلغاء</button>
+        </div>
+    </div>
+</div>
+
 <script>
     let currentTenantId = null;
 
+    // ── System Health ──
+    async function loadHealth() {
+        try {
+            const res = await fetch('/admin/health');
+            const data = await res.json();
+            if (data.success) {
+                const h = data.health;
+                document.getElementById('health-instances').textContent = h.activeInstances;
+                document.getElementById('health-capacity').textContent = 'الحد الأقصى: ' + h.maxCapacity;
+                document.getElementById('health-uptime').textContent = h.uptime;
+                document.getElementById('health-memory').textContent = h.memoryRSS;
+                document.getElementById('health-heap').textContent = 'Heap: ' + h.memoryHeapUsed + ' / ' + h.memoryHeapTotal;
+            }
+        } catch (e) {}
+    }
+    loadHealth();
+    setInterval(loadHealth, 30000);
+
+    // ── Quota Modal ──
     function openQuotaModal(id, name, currentQuota) {
         currentTenantId = id;
         document.getElementById('quota-modal-name').textContent = name;
@@ -171,7 +267,7 @@
             });
             const data = await res.json();
             if (data.success) {
-                showToast('تم تحديث الحصة بنجاح ✅', 'success');
+                showToast('تم تحديث الحصة بنجاح', 'success');
                 closeQuotaModal();
                 setTimeout(() => location.reload(), 800);
             } else {
@@ -182,8 +278,9 @@
         }
     }
 
+    // ── Reset Usage ──
     async function resetUsage(id, name) {
-        if (!confirm(`هل تريد إعادة تعيين عداد الرسائل لـ "${name}"؟`)) return;
+        if (!confirm('هل تريد إعادة تعيين عداد الرسائل لـ "' + name + '"؟')) return;
         try {
             const res = await fetch(`/admin/tenants/${id}/reset-usage`, {
                 method: 'PATCH',
@@ -191,7 +288,7 @@
             });
             const data = await res.json();
             if (data.success) {
-                showToast('تم إعادة التعيين بنجاح ✅', 'success');
+                showToast('تم إعادة التعيين بنجاح', 'success');
                 setTimeout(() => location.reload(), 800);
             } else {
                 showToast(data.message || 'فشل التحديث', 'error');
@@ -201,7 +298,89 @@
         }
     }
 
+    // ── Create Tenant ──
+    function openCreateModal() {
+        document.getElementById('create-name').value = '';
+        document.getElementById('create-username').value = '';
+        document.getElementById('create-password').value = '';
+        document.getElementById('create-quota').value = '1000';
+        document.getElementById('create-modal').classList.remove('hidden');
+    }
+
+    function closeCreateModal() {
+        document.getElementById('create-modal').classList.add('hidden');
+    }
+
+    async function createTenant() {
+        const name = document.getElementById('create-name').value.trim();
+        const username = document.getElementById('create-username').value.trim();
+        const password = document.getElementById('create-password').value;
+        const quota = document.getElementById('create-quota').value;
+
+        if (!name || !username || !password) {
+            showToast('جميع الحقول مطلوبة', 'error');
+            return;
+        }
+
+        try {
+            const res = await fetch('/admin/tenants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, username, password, message_quota: parseInt(quota) || 1000 })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast('تم إنشاء المستخدم بنجاح', 'success');
+                closeCreateModal();
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast(data.message || 'فشل الإنشاء', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ في الاتصال', 'error');
+        }
+    }
+
+    // ── Delete Tenant ──
+    async function deleteTenant(id, name) {
+        if (!confirm('هل أنت متأكد من حذف "' + name + '"؟\nسيتم حذف جميع حملاته وبياناته نهائياً.')) return;
+        if (!confirm('هذا الإجراء لا يمكن التراجع عنه. متابعة؟')) return;
+        try {
+            const res = await fetch(`/admin/tenants/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                showToast('تم حذف المستخدم بنجاح', 'success');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast(data.message || 'فشل الحذف', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ في الاتصال', 'error');
+        }
+    }
+
+    // ── Disconnect WhatsApp ──
+    async function disconnectWA(id, name) {
+        if (!confirm('هل تريد قطع اتصال الواتساب لـ "' + name + '"؟')) return;
+        try {
+            const res = await fetch(`/admin/tenants/${id}/disconnect`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                showToast('تم قطع الاتصال بنجاح', 'success');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast(data.message || 'فشل القطع', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ في الاتصال', 'error');
+        }
+    }
+
+    // ── Modal backdrops ──
     document.getElementById('quota-modal').addEventListener('click', function(e) {
         if (e.target === this) closeQuotaModal();
+    });
+    document.getElementById('create-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeCreateModal();
     });
 </script>

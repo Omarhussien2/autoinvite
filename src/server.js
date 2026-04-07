@@ -496,11 +496,25 @@ app.get('/reports', isAuthenticated, async (req, res) => {
             ORDER BY sl.sent_at DESC
         `, [req.session.tenantId]);
 
+        const logs = result.rows;
+        const totalCount = logs.length;
+        const successCount = logs.filter(l => !l.status || l.status === 'success').length;
+        const failedCount = logs.filter(l => l.status === 'failed').length;
+        const successRate = totalCount > 0 ? ((successCount / totalCount) * 100).toFixed(1) : '0.0';
+
+        const campaignCounts = {};
+        logs.forEach(l => {
+            const name = l.campaign_name || 'حملة محذوفة';
+            campaignCounts[name] = (campaignCounts[name] || 0) + 1;
+        });
+        const mostActiveCampaign = Object.entries(campaignCounts).sort((a, b) => b[1] - a[1])[0];
+
         res.renderPage('dashboard/reports', {
             pageTitle: 'التقارير',
             pageSubtitle: 'تاريخ الإرسال المفصل',
             activePage: 'reports',
-            logs: result.rows,
+            logs,
+            reportStats: { totalCount, successCount, failedCount, successRate, mostActiveCampaign },
             tenantName: req.session.tenantName
         });
     } catch (err) {
