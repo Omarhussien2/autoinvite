@@ -1,0 +1,149 @@
+<div class="max-w-4xl mx-auto">
+
+    <div class="mb-8">
+        <h2 class="text-xl font-bold text-gray-900">الاشتراك والفوترة</h2>
+        <p class="text-sm text-gray-400 mt-0.5">إدارة خطتك ومتابعة الاستخدام</p>
+    </div>
+
+    <!-- Current Plan Card -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h3 class="font-bold text-gray-800">خطتك الحالية</h3>
+                <div class="flex items-center gap-2 mt-1">
+                    <span class="text-lg font-bold text-brand-dark"><%= billing.plan.name %></span>
+                    <% if (billing.status === 'trialing') { %>
+                    <span class="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">فترة تجريبية</span>
+                    <% } else if (billing.status === 'active') { %>
+                    <span class="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">نشط</span>
+                    <% } else if (billing.status === 'past_due') { %>
+                    <span class="text-[10px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">متأخر</span>
+                    <% } else if (billing.status === 'canceled') { %>
+                    <span class="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">ملغي</span>
+                    <% } %>
+                </div>
+            </div>
+            <% if (billing.customerId && billing.stripeEnabled) { %>
+            <button onclick="openPortal()"
+                class="bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-xl text-xs font-medium hover:bg-gray-50 transition shadow-sm flex items-center gap-2">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                إدارة الاشتراك
+            </button>
+            <% } %>
+        </div>
+
+        <!-- Usage Bar -->
+        <div class="mb-3">
+            <div class="flex justify-between text-xs mb-1.5">
+                <span class="text-gray-500">الاستخدام</span>
+                <span class="font-medium text-gray-700"><%= billing.used.toLocaleString('ar-SA') %> / <%= billing.quota.toLocaleString('ar-SA') %> رسالة</span>
+            </div>
+            <div class="flex-1 bg-gray-100 rounded-full h-3">
+                <div class="<%= billing.pct < 60 ? 'bg-brand-green' : billing.pct < 85 ? 'bg-amber-400' : 'bg-red-500' %> h-3 rounded-full transition-all" style="width: <%= billing.pct %>%"></div>
+            </div>
+        </div>
+
+        <div class="flex gap-4 text-xs text-gray-400">
+            <% if (billing.periodEnd) { %>
+            <span>ينتهي في: <%= billing.periodEnd %></span>
+            <% } %>
+            <% if (billing.trialEnd) { %>
+            <span>نهاية التجربة: <%= billing.trialEnd %></span>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Plan Cards -->
+    <% if (billing.stripeEnabled) { %>
+    <h3 class="font-bold text-gray-800 mb-4">خطط الاشتراك</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <% for (const [key, plan] of Object.entries(plans)) { %>
+        <% const isCurrent = billing.planKey === key; %>
+        <div class="bg-white rounded-2xl border <%= isCurrent ? 'border-brand-green ring-2 ring-brand-green/20' : 'border-gray-100' %> shadow-sm p-5 flex flex-col">
+            <div class="mb-3">
+                <h4 class="font-bold text-gray-800"><%= plan.name %></h4>
+                <p class="text-xs text-gray-400"><%= plan.nameEn %></p>
+            </div>
+            <div class="mb-4">
+                <% if (plan.priceLabel) { %>
+                <span class="text-2xl font-bold text-gray-900"><%= plan.priceLabel %></span>
+                <% } else { %>
+                <span class="text-2xl font-bold text-gray-900">مجاني</span>
+                <% } %>
+            </div>
+            <ul class="text-xs text-gray-500 space-y-2 mb-6 flex-1">
+                <% plan.features.forEach(f => { %>
+                <li class="flex items-start gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-brand-green flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span><%= f %></span>
+                </li>
+                <% }); %>
+            </ul>
+            <% if (isCurrent) { %>
+            <button disabled class="w-full bg-gray-100 text-gray-400 text-xs py-2.5 rounded-xl font-medium cursor-not-allowed">
+                الخطه الحالية
+            </button>
+            <% } else if (plan.priceId) { %>
+            <button onclick="startCheckout('<%= key %>')"
+                class="w-full bg-brand-dark text-white text-xs py-2.5 rounded-xl font-medium hover:opacity-90 transition">
+                <%= plan.priceLabel ? 'ترقية' : 'ابدأ مجاناً' %>
+            </button>
+            <% } else { %>
+            <button disabled class="w-full bg-gray-50 text-gray-300 text-xs py-2.5 rounded-xl font-medium cursor-not-allowed">
+                قريباً
+            </button>
+            <% } %>
+        </div>
+        <% }); %>
+    </div>
+    <% } else { %>
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
+        <p class="font-medium mb-1">نظام الدفع غير مفعل حالياً</p>
+        <p class="text-xs text-amber-600">سيتم تفعيل الدفع عبر Stripe قريباً. استمتع بالفترة التجريبية حتى ذلك الحين.</p>
+    </div>
+    <% } %>
+
+</div>
+
+<script>
+    async function startCheckout(planKey) {
+        try {
+            const res = await fetch('/billing/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ planKey })
+            });
+            const data = await res.json();
+            if (data.success && data.url) {
+                window.location.href = data.url;
+            } else {
+                showToast(data.message || 'حدث خطأ', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ في الاتصال', 'error');
+        }
+    }
+
+    async function openPortal() {
+        try {
+            const res = await fetch('/billing/portal', { method: 'POST' });
+            const data = await res.json();
+            if (data.success && data.url) {
+                window.location.href = data.url;
+            } else {
+                showToast(data.message || 'حدث خطأ', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ في الاتصال', 'error');
+        }
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('success')) showToast('تم تفعيل الاشتراك بنجاح!', 'success');
+    if (params.get('canceled')) showToast('تم إلغاء العملية', 'warning');
+</script>

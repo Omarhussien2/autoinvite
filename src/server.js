@@ -104,6 +104,9 @@ app.use('/api/whatsapp', require('./routes/whatsapp.api.js'));
 // --- ADMIN ROUTES ---
 app.use('/admin', adminRoutes);
 
+// --- BILLING ROUTES ---
+app.use('/billing', require('./routes/billing'));
+
 // Tenant Settings API
 app.put('/api/tenant/settings', isAuthenticated, async (req, res) => {
     try {

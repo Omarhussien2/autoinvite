@@ -175,12 +175,18 @@
 
 ---
 
-## PHASE 4: SCALING ROADMAP (Future)
+## PHASE 4: SCALING ROADMAP
 
-### 4.1 Stripe Billing Integration
-- Subscription tiers: Free (50 msg), Basic (500/mo), Pro (2000/mo), Enterprise
-- Stripe Checkout, Webhooks, Customer Portal
-- Auto-quota reset on billing cycle
+### 4.1 Stripe Billing Integration — DONE (Part 1)
+- Database: 6 Stripe columns added to tenants (stripe_customer_id, stripe_subscription_id, subscription_plan, subscription_status, trial_ends_at, current_period_end)
+- `src/config/stripe.js`: Plan definitions (free/basic/pro/enterprise) with quotas, price IDs, Arabic names
+- `src/routes/billing.js`: Full billing routes — GET `/billing` (EJS page), POST `/billing/checkout` (Stripe Checkout session), POST `/billing/portal` (Stripe Customer Portal), POST `/billing/webhook` (event handler)
+- Webhook: Idempotent via `processed_webhooks` table, handles checkout.session.completed, invoice.paid (resets usage), customer.subscription.updated, customer.subscription.deleted (downgrades to free)
+- `src/views/dashboard/billing.ejs`: Plan comparison cards, usage bar, checkout/portal buttons
+- `src/middleware/subscriptionGuard.js`: Blocks expired/canceled subscriptions, redirects to billing
+- Sidebar link added for billing page
+- `.env.example` updated with all Stripe env vars
+- Graceful: if STRIPE_SECRET_KEY is not set, billing page shows "coming soon" and all Stripe calls are skipped
 
 ### 4.2 API Access for Power Users
 - REST API with API key auth

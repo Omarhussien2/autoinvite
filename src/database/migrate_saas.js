@@ -72,7 +72,15 @@ async function migrate() {
         await db.query(`CREATE INDEX IF NOT EXISTS idx_sent_logs_date ON sent_logs(sent_at)`);
         await db.query(`CREATE INDEX IF NOT EXISTS idx_contacts_tenant_phone ON contacts(tenant_id, phone)`);
 
-        console.log('✅ Migration complete: tenants.role, tenants.message_quota, tenants.messages_used, sent_logs.failed_at, campaigns.failed_count, messages table, tenants.whatsapp_status/whatsapp_phone, campaigns.scheduled_at/timezone, performance indexes');
+        // Stripe billing columns
+        await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`);
+        await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT`);
+        await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS subscription_plan TEXT DEFAULT 'free'`);
+        await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS subscription_status TEXT DEFAULT 'trialing'`);
+        await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP DEFAULT NULL`);
+        await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMP DEFAULT NULL`);
+
+        console.log('✅ Migration complete: role, quota, messages, failed_at, failed_count, messages table, whatsapp_status/phone, scheduled_at/timezone, indexes, Stripe billing columns');
     } catch (err) {
         console.error('❌ Migration failed:', err);
         process.exit(1);
