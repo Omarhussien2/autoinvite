@@ -15,6 +15,22 @@
     let fontColor = '#000000';
     let previewName = 'الاسم';
 
+    /* ──────────── Enable canvas UI ──────────── */
+    function enableCanvasUI() {
+        const container = document.getElementById('canvas-container');
+        if (container) {
+            container.classList.remove('opacity-50', 'pointer-events-none');
+        }
+        const controls = document.getElementById('canvas-controls');
+        if (controls) {
+            controls.classList.remove('opacity-50', 'pointer-events-none');
+        }
+        const fsInput = document.getElementById('fontSize');
+        const fcInput = document.getElementById('fontColor');
+        if (fsInput) fsInput.disabled = false;
+        if (fcInput) fcInput.disabled = false;
+    }
+
     /* ──────────── Init ──────────── */
     function initCampaignEditor() {
         canvas = document.getElementById('previewCanvas');
@@ -137,6 +153,7 @@
                 const ph = document.getElementById('placeholder-text');
                 if (ph) ph.classList.add('hidden');
 
+                enableCanvasUI();
                 drawCanvas();
             };
             img.src = ev.target.result;
@@ -154,14 +171,17 @@
             canvas.width = img.width * scale;
             canvas.height = img.height * scale;
 
-            // Load saved position if available
+            // Load saved position — coordinates are stored in full-image space, scale to canvas
+            const scaleDown = canvas.width / img.width;
             if (canvasConfigRaw) {
                 try {
                     const cc = typeof canvasConfigRaw === 'string' ? JSON.parse(canvasConfigRaw) : canvasConfigRaw;
-                    nameX = cc.x || canvas.width / 2;
-                    nameY = cc.y || canvas.height * 0.70;
-                    fontSize = cc.fontSize || fontSize;
+                    nameX = cc.x ? cc.x * scaleDown : canvas.width / 2;
+                    nameY = cc.y ? cc.y * scaleDown : canvas.height * 0.70;
+                    fontSize = cc.fontSize ? Math.round(cc.fontSize * scaleDown) : fontSize;
                     fontColor = cc.color || fontColor;
+                    document.getElementById('fontSize').value = fontSize;
+                    document.getElementById('fontColor').value = fontColor;
                 } catch (e) {
                     nameX = canvas.width / 2;
                     nameY = canvas.height * 0.70;
@@ -175,6 +195,7 @@
             const ph = document.getElementById('placeholder-text');
             if (ph) ph.classList.add('hidden');
 
+            enableCanvasUI();
             drawCanvas();
         };
         img.onerror = () => console.warn('Could not load template image from URL:', url);
@@ -354,23 +375,25 @@
             }
             formData.append('message_templates', JSON.stringify(messages));
 
-            // Canvas config
+            // Canvas config — scale from editor canvas to full image coordinates
             if (bgImage) {
+                const scaleUp = bgImage.width / canvas.width;
                 const canvasConfig = {
-                    x: Math.round(nameX),
-                    y: Math.round(nameY),
-                    fontSize: fontSize,
+                    x: Math.round(nameX * scaleUp),
+                    y: Math.round(nameY * scaleUp),
+                    fontSize: Math.round(fontSize * scaleUp),
                     color: fontColor
                 };
                 formData.append('canvas_config', JSON.stringify(canvasConfig));
             }
 
-            // Scheduling
+            // Scheduling — convert user's local datetime to UTC for server comparison
             if (window.CAMPAIGN_SCHEDULE_MODE === 'later') {
                 const dateVal = document.getElementById('schedule-date').value;
                 const timeVal = document.getElementById('schedule-time').value;
                 if (dateVal && timeVal) {
-                    formData.append('scheduled_at', dateVal + 'T' + timeVal + ':00');
+                    const localDate = new Date(dateVal + 'T' + timeVal);
+                    formData.append('scheduled_at', localDate.toISOString());
                 }
             }
 

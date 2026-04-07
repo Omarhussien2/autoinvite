@@ -19,8 +19,9 @@ if (config.image.fontPath && fs.existsSync(config.image.fontPath)) {
 async function generateImage(name, phone, customTemplatePath = null, customCanvasConfig = null) {
     try {
         const tPath = customTemplatePath ? path.resolve(__dirname, '../../', customTemplatePath) : config.image.templatePath;
-        const cConfig = customCanvasConfig || config.image.textPosition;
-        const fontSize = customCanvasConfig && customCanvasConfig.fontSize ? customCanvasConfig.fontSize : config.image.fontSize;
+        const cConfig = (customCanvasConfig && customCanvasConfig.x != null) ? customCanvasConfig : config.image.textPosition;
+        const rawFontSize = customCanvasConfig && customCanvasConfig.fontSize ? customCanvasConfig.fontSize : config.image.fontSize;
+        const fontSizeStr = typeof rawFontSize === 'number' ? `${rawFontSize}px` : rawFontSize;
         const textColor = customCanvasConfig && customCanvasConfig.color ? customCanvasConfig.color : config.image.textColor;
 
         const image = await loadImage(tPath);
@@ -31,13 +32,15 @@ async function generateImage(name, phone, customTemplatePath = null, customCanva
         ctx.drawImage(image, 0, 0, image.width, image.height);
 
         // Configure Text
-        ctx.font = `${fontSize} "${config.image.fontFamily}"`;
+        ctx.font = `${fontSizeStr} "${config.image.fontFamily}"`;
         ctx.fillStyle = textColor;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // Write Name
-        ctx.fillText(name, cConfig.x, cConfig.y);
+        // Write Name — use config defaults if coordinates are missing
+        const textX = cConfig.x != null ? cConfig.x : config.image.textPosition.x;
+        const textY = cConfig.y != null ? cConfig.y : config.image.textPosition.y;
+        ctx.fillText(name, textX, textY);
 
         // Ensure temp dir exists
         await fs.ensureDir(config.paths.outputDir);

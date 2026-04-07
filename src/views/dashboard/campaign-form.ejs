@@ -282,7 +282,7 @@
                 </div>
 
                 <!-- Canvas Controls -->
-                <div class="grid grid-cols-2 gap-4 mt-4 opacity-50 pointer-events-none">
+                <div id="canvas-controls" class="grid grid-cols-2 gap-4 mt-4 opacity-50 pointer-events-none">
                     <div>
                         <label class="block text-[10px] font-medium text-gray-500 mb-1">حجم الخط</label>
                         <% let cfgFontSize=60; let cfgFontColor='#000000' ; if (campaign && campaign.canvas_config) {
@@ -583,8 +583,13 @@ document.addEventListener('DOMContentLoaded', function () {
     <% if (campaign && campaign.scheduled_at) { %>
     setScheduleMode('later');
     const sd = new Date('<%= new Date(campaign.scheduled_at).toISOString() %>');
-    document.getElementById('schedule-date').value = sd.toISOString().split('T')[0];
-    document.getElementById('schedule-time').value = sd.toTimeString().substring(0, 5);
+    const sdYear = sd.getFullYear();
+    const sdMonth = String(sd.getMonth() + 1).padStart(2, '0');
+    const sdDay = String(sd.getDate()).padStart(2, '0');
+    const sdHours = String(sd.getHours()).padStart(2, '0');
+    const sdMins = String(sd.getMinutes()).padStart(2, '0');
+    document.getElementById('schedule-date').value = sdYear + '-' + sdMonth + '-' + sdDay;
+    document.getElementById('schedule-time').value = sdHours + ':' + sdMins;
     <% } %>
 });
 </script>

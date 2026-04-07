@@ -27,7 +27,7 @@ class ScheduleManager {
 
         try {
             const result = await db.query(
-                `SELECT * FROM campaigns WHERE status = 'scheduled' AND scheduled_at <= NOW()`
+                `SELECT * FROM campaigns WHERE status = 'scheduled' AND scheduled_at <= (NOW() AT TIME ZONE 'UTC')`
             );
 
             for (const campaign of result.rows) {
@@ -68,7 +68,10 @@ class ScheduleManager {
         }
 
         const hasTemplate = !!campaign.template_path;
-        const canvasConfig = campaign.canvas_config || '{}';
+        let canvasConfig = campaign.canvas_config || null;
+        if (typeof canvasConfig === 'string') {
+            try { canvasConfig = JSON.parse(canvasConfig); } catch (e) { canvasConfig = null; }
+        }
 
         await BackgroundQueue.addJob(
             tenantId,
