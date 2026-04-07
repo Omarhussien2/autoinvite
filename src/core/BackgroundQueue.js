@@ -11,6 +11,11 @@ class BackgroundQueue {
             throw new Error('A job is already running for this tenant.');
         }
 
+        // Reset any stale stop flag from a previous job
+        if (global.stopBatchRequested) {
+            global.stopBatchRequested[tenantId] = false;
+        }
+
         const job = {
             tenantId,
             campaignId,
@@ -40,6 +45,11 @@ class BackgroundQueue {
                 WhatsAppManager.emitToTenant(tenantId, 'log', { message: 'Batch processing finished.', type: 'DONE' });
                 this.jobs.delete(tenantId);
 
+                // Clean up global stop flag after normal completion
+                if (global.stopBatchRequested) {
+                    delete global.stopBatchRequested[tenantId];
+                }
+
                 if (campaignId) {
                     await db.query('UPDATE campaigns SET last_sent_row = $1, status = $2 WHERE id = $3', [endRow, 'completed', campaignId]);
                     WhatsAppManager.emitToTenant(tenantId, 'log', { message: `تم إكمال الحملة بنجاح ✅`, type: 'SUCCESS' });
@@ -57,6 +67,11 @@ class BackgroundQueue {
                 WhatsAppManager.emitToTenant(tenantId, 'log', { message: `خطأ: ${bgErrMsg}`, type: 'ERROR' });
                 this.jobs.delete(tenantId);
 
+                // Clean up global stop flag after error
+                if (global.stopBatchRequested) {
+                    delete global.stopBatchRequested[tenantId];
+                }
+
                 if (campaignId) {
                     await db.query('UPDATE campaigns SET status = $1 WHERE id = $2', ['error', campaignId]);
                 }
@@ -65,8 +80,19 @@ class BackgroundQueue {
         return { success: true, message: 'Job started in background' };
     }
 
-    stopJob(tenantId) {
+    async stopJob(tenantId) {
         if (this.jobs.has(tenantId)) {
+            const job = this.jobs.get(tenantId);
+
+            // Update campaign status to 'paused' BEFORE deleting from jobs map
+            if (job && job.campaignId) {
+                try {
+                    await db.query('UPDATE campaigns SET status = $1 WHERE id = $2', ['paused', job.campaignId]);
+                } catch (err) {
+                    console.error(`[BackgroundQueue] Failed to pause campaign ${job.campaignId}:`, err);
+                }
+            }
+
             if (!global.stopBatchRequested) global.stopBatchRequested = {};
             global.stopBatchRequested[tenantId] = true;
             this.jobs.delete(tenantId);

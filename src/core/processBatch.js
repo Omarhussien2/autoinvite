@@ -47,6 +47,20 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
         throw new Error('WhatsApp client not connected');
     }
 
+    // ── Read tenant-specific settings from DB (overrides hardcoded config) ──
+    let tenantMinDelay = config.whatsapp.minDelay;
+    let tenantMaxDelay = config.whatsapp.maxDelay;
+    try {
+        const settingsRes = await db.query('SELECT settings FROM tenants WHERE id = $1', [tenantId]);
+        const settings = settingsRes.rows[0]?.settings;
+        if (settings) {
+            if (settings.min_delay != null) tenantMinDelay = settings.min_delay * 1000;
+            if (settings.max_delay != null) tenantMaxDelay = settings.max_delay * 1000;
+        }
+    } catch (err) {
+        console.warn('[processBatch] Could not load tenant settings, using defaults:', err.message);
+    }
+
     // Pre-convert voice note to OGG/Opus once (not per-contact)
     let pttBase64 = null;
     let pttOggPath = null;
@@ -177,11 +191,11 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             await logResult(normalizedPhone, name, 'SUCCESS', 'Invitation Sent');
             onLog(`Success: Invitation sent to ${name}`, 'SUCCESS');
 
-            // Apply inter-message delay (skip after the very last message)
+            // Apply inter-message delay using tenant-specific settings (skip after the very last message)
             if (index < subset.length - 1) {
                 await AntiBanEngine.applyDelay(
-                    config.whatsapp.minDelay,
-                    config.whatsapp.maxDelay,
+                    tenantMinDelay,
+                    tenantMaxDelay,
                     onLog,
                     tenantId
                 );

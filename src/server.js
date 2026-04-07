@@ -279,12 +279,25 @@ app.get('/campaigns', isAuthenticated, async (req, res) => {
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-        const [campaignRes, totalRes, monthlyRes, dailyRes] = await Promise.all([
+        const [campaignRes, totalRes, monthlyRes, dailyRes, campaignStatsRes] = await Promise.all([
             db.query('SELECT * FROM campaigns WHERE tenant_id = $1 ORDER BY created_at DESC', [req.session.tenantId]),
             db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND (status IS NULL OR status = $2)', [req.session.tenantId, 'success']),
             db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND (status IS NULL OR status = $2) AND sent_at >= $3', [req.session.tenantId, 'success', monthStart]),
             db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND (status IS NULL OR status = $2) AND sent_at >= $3', [req.session.tenantId, 'success', todayStart]),
+            db.query(`SELECT campaign_id,
+                         COUNT(*) FILTER (WHERE status IS NULL OR status = 'success') AS sent_count,
+                         COUNT(*) AS total_count
+                       FROM sent_logs WHERE tenant_id = $1 GROUP BY campaign_id`, [req.session.tenantId]),
         ]);
+
+        // Build a map of campaignId -> { sent, total } for real progress calculation
+        const sentCountMap = {};
+        for (const row of campaignStatsRes.rows) {
+            sentCountMap[row.campaign_id] = {
+                sent: parseInt(row.sent_count || 0),
+                total: parseInt(row.total_count || 0)
+            };
+        }
 
         const DAILY_SAFE = 200;
         const totalDelivered = parseInt(totalRes.rows[0].count || 0);
@@ -298,6 +311,7 @@ app.get('/campaigns', isAuthenticated, async (req, res) => {
             pageSubtitle: 'إضافة وإدارة حملات الواتساب',
             activePage: 'campaigns',
             campaigns: campaignRes.rows,
+            sentCountMap,
             tenantName: req.session.tenantName,
             quota: { totalDelivered, monthlyCount, dailyCount, dailySafe: DAILY_SAFE, dailyPct, safetyLevel },
             topbarActions: `<a href="/campaigns/new" class="inline-flex items-center gap-1.5 bg-brand-dark text-white text-xs px-3.5 py-2 rounded-xl font-medium hover:opacity-90 transition shadow-sm">

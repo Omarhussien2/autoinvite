@@ -98,14 +98,19 @@
                                                 + '...' : '—' %>
                                         </td>
                                         <td class="px-5 py-4 hidden md:table-cell">
-                                            <% const sent=c.last_sent_row || 0; %>
+                                            <%
+                                                const campStats = sentCountMap[c.id] || { sent: 0, total: 0 };
+                                                const campSent = campStats.sent;
+                                                const campTotal = campStats.total;
+                                                const campPct = campTotal > 0 ? Math.round((campSent / campTotal) * 100) : 0;
+                                            %>
                                                 <div class="flex items-center gap-2">
                                                     <div class="flex-1 bg-gray-100 rounded-full h-1.5 w-20">
                                                         <div class="bg-brand-green h-1.5 rounded-full"
-                                                            style="width: <%= Math.min(sent, 100) %>%"></div>
+                                                            style="width: <%= Math.min(campPct, 100) %>%"></div>
                                                     </div>
                                                     <span class="text-xs text-gray-500">
-                                                        <%= sent %>%
+                                                        <%= campSent %>/<%= campTotal %> (<%= campPct %>%)
                                                     </span>
                                                 </div>
                                         </td>
