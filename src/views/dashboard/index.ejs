@@ -201,6 +201,13 @@
                 </div>
                 <p class="text-sm font-semibold text-brand-dark">الواتساب متصل ✓</p>
                 <p id="connected-phone" class="text-xs text-gray-500">جاهز للإرسال</p>
+                <button id="btnDisconnectWa"
+                    class="mt-2 text-red-600 border border-red-200 hover:bg-red-50 hover:border-red-400 text-xs px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    قطع الاتصال وتغيير الرقم
+                </button>
             </div>
 
         </div>
@@ -319,6 +326,32 @@
     async function initWhatsapp() {
         try { await fetch('/api/whatsapp/init', { method: 'POST' }); } catch (e) { console.error(e); }
     }
+
+    document.getElementById('btnDisconnectWa').addEventListener('click', async function () {
+        if (!confirm('هل أنت متأكد من قطع الاتصال؟ ستحتاج لمسح الكود من جديد')) return;
+
+        const btn = this;
+        const originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> جاري القطع...';
+
+        try {
+            setWaStatus('disconnected');
+            const res = await fetch('/api/whatsapp/logout', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                showToast('تم قطع الاتصال — امسح الباركود الجديد', 'success');
+            } else {
+                showToast(data.message || 'حدث خطأ', 'error');
+            }
+        } catch (e) {
+            console.error('Logout failed:', e);
+            showToast('خطأ في الاتصال', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+        }
+    });
 
     // ---- DASHBOARD POLLING ----
     setInterval(async () => {

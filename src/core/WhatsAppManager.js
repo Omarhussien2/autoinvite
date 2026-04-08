@@ -248,6 +248,53 @@ class WhatsAppManager {
         }
     }
 
+    async logoutClient(tenantId) {
+        const client = this.clients.get(tenantId);
+
+        // Step 1: Officially unlink device from WhatsApp servers
+        if (client) {
+            try { await client.logout(); } catch (e) {
+                console.error(`[WhatsAppManager] logout() failed for tenant ${tenantId}:`, e.message);
+            }
+            try { await client.close(); } catch (e) {
+                console.error(`[WhatsAppManager] close() failed for tenant ${tenantId}:`, e.message);
+            }
+            this.clients.delete(tenantId);
+        }
+
+        // Step 2: Delete physical session tokens so it cannot auto-reconnect
+        const tokenDir = path.join(
+            process.env.DATA_DIR || path.join(__dirname, '../../'),
+            'storage', `tenant_${tenantId}`, 'wpp_tokens'
+        );
+        try {
+            if (fs.existsSync(tokenDir)) {
+                fs.rmSync(tokenDir, { recursive: true, force: true });
+                console.log(`[WhatsAppManager] Deleted token folder for tenant ${tenantId}`);
+            }
+        } catch (e) {
+            console.error(`[WhatsAppManager] Failed to delete token folder:`, e.message);
+        }
+
+        // Step 3: Reset state
+        this.states.set(tenantId, { status: 'DISCONNECTED', lastQr: null, lastActive: Date.now(), phone: null });
+        this.emitToTenant(tenantId, 'disconnected');
+
+        // Step 4: Update DB
+        await db.query(
+            'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = NULL WHERE id = $2',
+            ['disconnected', tenantId]
+        ).catch(err => console.error(`[WhatsAppManager] Failed to update tenant status (logout):`, err.message));
+
+        // Step 5: Re-initialize to generate a fresh QR code
+        console.log(`[WhatsAppManager] Re-initializing client for tenant ${tenantId} (fresh QR)`);
+        try {
+            await this.getClient(tenantId);
+        } catch (err) {
+            console.error(`[WhatsAppManager] Re-init after logout failed for tenant ${tenantId}:`, err.message);
+        }
+    }
+
     async stopClient(tenantId) {
         const client = this.clients.get(tenantId);
         if (client) {

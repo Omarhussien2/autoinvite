@@ -153,4 +153,15 @@ router.post('/disconnect', async (req, res) => {
     }
 });
 
+// Deep Logout — unlink device + delete tokens + fresh QR
+router.post('/logout', async (req, res) => {
+    try {
+        await WhatsAppManager.logoutClient(req.tenantId);
+        res.json({ success: true, message: 'تم قطع الاتصال وجاري توليد باركود جديد' });
+    } catch (err) {
+        console.error('[WhatsApp API] Logout error:', err.message);
+        res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
+    }
+});
+
 module.exports = router;
