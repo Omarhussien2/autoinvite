@@ -28,7 +28,7 @@ export const Comparison = () => {
     {
       icon: <DollarSign className="w-5 h-5 text-zinc-400" />,
       label: "التكلفة",
-      autoInvite: { title: "منخفضة (44 ريال)", desc: "تكلفة ثابتة وواضحة" },
+      autoInvite: { title: "منخفضة", desc: "تكلفة ثابتة وواضحة" },
       platforms: { title: "باهظة", desc: "اشتراكات شهرية معقدة" },
       manual: { title: "مخفية", desc: "وقتك الثمين الضائع" }
     }
