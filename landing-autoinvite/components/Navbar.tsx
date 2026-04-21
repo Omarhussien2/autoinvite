@@ -44,7 +44,7 @@ export const Navbar = () => {
           <img
             src={LOGO}
             alt="عزام"
-            style={{ width: '52px', height: '52px', objectFit: 'contain', mixBlendMode: 'screen' }}
+            style={{ width: '52px', height: '52px', objectFit: 'contain' }}
           />
           <span
             style={{
