@@ -40,19 +40,19 @@ export const Navbar = () => {
         }}
       >
         {/* Logo + Brand */}
-        <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
+        <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '12px', textDecoration: 'none' }}>
           <img
             src={LOGO}
             alt="عزام"
-            style={{ width: '38px', height: '38px', objectFit: 'contain', filter: 'brightness(1.1)' }}
+            style={{ width: '52px', height: '52px', objectFit: 'contain', mixBlendMode: 'screen' }}
           />
           <span
             style={{
               color: '#10b981',
               fontWeight: 800,
-              fontSize: '1.1rem',
-              letterSpacing: '-0.01em',
-              fontFamily: 'Tajawal, sans-serif',
+              fontSize: '1.35rem',
+              letterSpacing: '-0.02em',
+              fontFamily: "'Readex Pro', sans-serif",
             }}
           >
             عزام

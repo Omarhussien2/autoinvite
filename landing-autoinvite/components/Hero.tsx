@@ -188,7 +188,7 @@ export const Hero = () => {
             letterSpacing: '-0.02em', marginBottom: '1.2rem', color: '#fafafa',
           }}>
             عزام —{' '}
-            <span style={{ color: '#10b981' }}>شريكك التسويقي</span>
+            <span style={{ color: '#10b981', fontFamily: "'Readex Pro', sans-serif" }}>شريكك التسويقي</span>
             {' '}الأذكى على واتساب.
           </h2>
 
