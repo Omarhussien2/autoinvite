@@ -1,5 +1,5 @@
 /**
- * AutoInvite — Campaign Runner
+ * Azzam — Campaign Runner
  * Manages the real-time log panel, start/stop controls,
  * and live counters via Socket.IO.
  */

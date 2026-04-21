@@ -129,7 +129,7 @@ router.post('/test', quotaGuard, async (req, res) => {
         const chatId = `${targetPhone}@c.us`;
         const client = await WhatsAppManager.getClient(tenantId);
 
-        await client.sendMessage(chatId, 'تجربة أوتو إنفايت: هلا والله! النظام شغال 🚀');
+        await client.sendMessage(chatId, 'تجربة عزام: هلا والله! النظام شغال 🚀');
         res.json({ success: true, message: 'Test message sent' });
     } catch (err) {
         console.error('Test Err:', err);

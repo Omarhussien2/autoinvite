@@ -43,19 +43,19 @@ export const Navbar = () => {
         <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
           <img
             src={LOGO}
-            alt="أوتو إنفايت"
+            alt="عزام"
             style={{ width: '38px', height: '38px', objectFit: 'contain', filter: 'brightness(1.1)' }}
           />
           <span
             style={{
-              color: '#fafafa',
+              color: '#10b981',
               fontWeight: 800,
               fontSize: '1.1rem',
               letterSpacing: '-0.01em',
               fontFamily: 'Tajawal, sans-serif',
             }}
           >
-            أوتو<span style={{ color: '#10b981' }}> إنفايت</span>
+            عزام
           </span>
         </a>
 

@@ -1,4 +1,4 @@
-# Dockerfile for AutoInvite on Railway/Render using Node 18
+# Dockerfile for Azzam on Railway/Render using Node 18
 
 FROM node:18-slim
 

@@ -1,5 +1,5 @@
 /**
- * AutoInvite SaaS — PM2 Ecosystem Configuration
+ * Azzam SaaS — PM2 Ecosystem Configuration
  * Usage:
  *   pm2 start ecosystem.config.js --env production
  *   pm2 save
@@ -9,7 +9,7 @@
 module.exports = {
     apps: [
         {
-            name: 'autoinvite',
+            name: 'azzam',
             script: 'src/server.js',
 
             // ── Process Mode ───────────────────────────────────────────────

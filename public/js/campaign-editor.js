@@ -1,5 +1,5 @@
 /**
- * AutoInvite — Campaign Visual Editor
+ * Azzam — Campaign Visual Editor
  * Handles: image upload preview, draggable name overlay on canvas,
  * font size/color controls, and form submission (multipart).
  */

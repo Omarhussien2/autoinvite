@@ -11,7 +11,7 @@ export const CTA = () => {
           <span className="text-digital-teal">اليوم، بدون تعقيد.</span>
         </h2>
         <p className="text-2xl text-zinc-400 mb-12 font-light">
-          انضم لمئات الشركات السعودية التي وفّرت ساعات عمل أسبوعياً مع أوتو إنفايت.
+          انضم لمئات الشركات السعودية التي وفّرت ساعات عمل أسبوعياً مع عزام.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-6">

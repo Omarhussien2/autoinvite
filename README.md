@@ -1,4 +1,4 @@
-# AutoInvite SaaS — WhatsApp Invitation Automation Platform
+# Azzam SaaS — WhatsApp Invitation Automation Platform
 
 A multi-tenant SaaS platform for sending personalized WhatsApp invitations at scale, with real-time monitoring via Socket.io, an Admin-Centric Quota System, and a beautiful Arabic-first dashboard.
 

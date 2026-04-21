@@ -1,5 +1,5 @@
 /**
- * AutoInvite V2 - Data Intelligence Engine
+ * Azzam - Data Intelligence Engine
  * Handles phone normalization (Saudi Focus), name transliteration, and deduplication.
  */
 

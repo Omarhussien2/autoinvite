@@ -18,7 +18,7 @@ export const Hero = () => {
         </h1>
 
         <p className="text-xl md:text-3xl text-zinc-400 max-w-2xl mb-12 leading-relaxed font-light">
-          أوتو إنفايت ينظف بياناتك، يصمم دعواتك الشخصية، ويرسلها بأمان تام — بدون أن تلمس لوحة المفاتيح.
+          عزام ينظف بياناتك، يصمم دعواتك الشخصية، ويرسلها بأمان تام — بدون أن تلمس لوحة المفاتيح.
         </p>
 
         <div className="flex flex-wrap gap-4">

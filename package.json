@@ -1,7 +1,7 @@
 {
-  "name": "autoinvite",
+  "name": "azzam",
   "version": "1.0.0",
-  "description": "AutoInvite SaaS — WhatsApp Invitation Automation Platform",
+  "description": "Azzam SaaS — WhatsApp Invitation Automation Platform",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
