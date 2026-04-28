@@ -31,9 +31,9 @@
 
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs font-medium text-gray-500 mb-1.5">صورة الدعوة (القالب) <span class="bg-yellow-100 text-yellow-800 text-[10px] font-medium px-2 py-0.5 rounded mr-1">قريباً 🚀</span></label>
-                            <div class="relative group opacity-50 pointer-events-none">
-                                <input type="file" id="imgUpload" accept="image/*" disabled
+                            <label class="block text-xs font-medium text-gray-500 mb-1.5">صورة الدعوة (القالب)</label>
+                            <div class="relative group">
+                                <input type="file" id="imgUpload" accept="image/*"
                                     class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
                                 <div
                                     class="w-full px-4 py-2.5 rounded-xl border border-dashed border-gray-300 text-xs text-center text-gray-500 group-hover:border-brand-green transition">
@@ -273,30 +273,29 @@
             <div class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm sticky top-24 relative">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-sm font-semibold text-gray-800">المصمم الذكي</h3>
-                    <span class="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded ml-2">قريباً 🚀</span>
                 </div>
                 <p class="text-[11px] text-gray-400 mb-4 text-center">ارفع الصورة ثم اسحب "الاسم" للمكان المناسب</p>
 
                 <div id="canvas-container"
-                    class="aspect-[4/5] bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center overflow-hidden relative opacity-50 pointer-events-none">
+                    class="aspect-[4/5] bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center overflow-hidden relative">
                     <p id="placeholder-text" class="text-xs text-gray-300">في انتظار رفع الصورة...</p>
                     <canvas id="previewCanvas" class="max-w-full max-h-full cursor-move shadow-md hidden"></canvas>
                 </div>
 
                 <!-- Canvas Controls -->
-                <div id="canvas-controls" class="grid grid-cols-2 gap-4 mt-4 opacity-50 pointer-events-none">
+                <div id="canvas-controls" class="grid grid-cols-2 gap-4 mt-4">
                     <div>
                         <label class="block text-[10px] font-medium text-gray-500 mb-1">حجم الخط</label>
                         <% let cfgFontSize=60; let cfgFontColor='#000000' ; if (campaign && campaign.canvas_config) {
                             try { const cc=JSON.parse(campaign.canvas_config); cfgFontSize=cc.fontSize || 60;
                             cfgFontColor=cc.color || '#000000' ; } catch(e) {} } %>
                             <input type="number" id="fontSize" value="<%= cfgFontSize %>"
-                                class="w-full px-3 py-1.5 rounded-lg border border-gray-200 text-sm" disabled>
+                                class="w-full px-3 py-1.5 rounded-lg border border-gray-200 text-sm">
                     </div>
                     <div>
                         <label class="block text-[10px] font-medium text-gray-500 mb-1">اللون</label>
                         <input type="color" id="fontColor" value="<%= cfgFontColor %>"
-                            class="w-full h-8 p-0 rounded-lg border border-gray-200 cursor-pointer overflow-hidden" disabled>
+                            class="w-full h-8 p-0 rounded-lg border border-gray-200 cursor-pointer overflow-hidden">
                     </div>
                 </div>
             </div>

@@ -30,21 +30,28 @@
 
 ---
 
-## Backend Bugs to Fix (Post-V1.0)
+## Backend Bugs — Status
 
-### BUG-A: Canvas name overlay not rendering/moving correctly
-- **Location:** `src/utils/generator.js` + `public/js/campaign-editor.js`
-- **Problem:** The drag-to-position name overlay on the invitation template does not render or move correctly. The canvas drawImage + fillText coordinates may be miscalculated relative to the template dimensions.
-- **Impact:** Smart Designer feature is unusable — users cannot position guest names on invitation images.
-- **Fix needed:** Debug canvas coordinate system, verify `generator.js` reads `canvas_config` (x, y, fontSize, color) correctly, test end-to-end with actual template images.
+### ~~BUG-A: Canvas name overlay not rendering/moving correctly~~ — FIXED ✅
+- **Fixed in:** commit TBD (2026-04-28)
+- **Root causes found:**
+  1. Font mismatch: frontend used "IBM Plex Sans Arabic" while backend used TSNAS Bold → unified to Readex Pro
+  2. Hit test used `fontSize * previewName.length * 0.6` (ASCII estimate) → replaced with `ctx.measureText()` for accurate Arabic text width
+  3. `loadImageFromUrl` used falsy check `cc.x ?` which fails when x=0 → changed to `cc.x != null`
+  4. No RTL direction set on canvas → added `ctx.direction = 'rtl'`
+  5. Preview name was generic "الاسم" → changed to realistic "محمد أحمد"
+- **Files changed:** `public/js/campaign-editor.js`, `src/utils/generator.js`, `src/config/settings.js`
 
-### BUG-B: Image attachment causing campaign failure
-- **Location:** `src/core/processBatch.js` + `src/core/WhatsAppManager.js`
-- **Problem:** When a campaign has a `template_path` (image), the send flow fails. Likely causes: (1) file path resolution issue on server vs local, (2) WPPConnect/Puppeteer `sendMessageWithThumb` or `sendImage` API misuse, (3) image buffer not loaded correctly before send.
-- **Impact:** Any campaign using image templates will fail per-contact. Text-only campaigns work fine.
-- **Fix needed:** Trace the image send path from `processBatch` → `WhatsAppManager.sendMessage`, verify file exists, test with WPPConnect's correct media send API.
+### ~~BUG-B: Image attachment causing campaign failure~~ — FIXED ✅
+- **Fixed in:** commit TBD (2026-04-28)
+- **Root causes found:**
+  1. No fallback when image send fails after retries → added text-only fallback
+  2. Retry count was 2 → increased to 3 with better logging
+  3. Temp image cleanup was not in finally block → moved to `finally` for guaranteed cleanup
+  4. generator.js had no cleanup on failure → added temp file removal in catch
+- **Files changed:** `src/core/processBatch.js`, `src/utils/generator.js`
 
-### BUG-C: Schedule manager timezone/trigger issues
+### BUG-C: Schedule manager timezone/trigger issues — STILL PENDING
 - **Location:** `src/core/ScheduleManager.js`
 - **Problem:** (1) Off-by-one bug was fixed (changed `0, contacts.length-1` to `1, contacts.length`), but broader timezone handling may still be wrong — server runs in UTC, campaigns expect Asia/Riyadh (UTC+3). (2) The polling interval (60s) may miss the exact scheduled minute. (3) No retry logic on transient failures.
 - **Impact:** Scheduled campaigns may fire at wrong times or fail silently.
@@ -56,9 +63,9 @@
 
 When each bug is fixed, revert the UI changes:
 
-| Feature | File | What to revert |
-|---------|------|----------------|
-| Scheduling sidebar | `sidebar.ejs` | Change `href="#"` back to `href="/campaigns"`, remove `pointer-events-none opacity-60 cursor-default`, remove badge |
-| Smart Designer | `campaign-form.ejs` | Remove `قريباً 🚀` badge from header, remove `opacity-50 pointer-events-none` from canvas container and controls |
-| Image Upload | `campaign-form.ejs` | Remove `opacity-50 pointer-events-none` from container, remove `disabled` from input |
-| Schedule Toggle | `campaign-form.ejs` | Remove `opacity-50 pointer-events-none` wrapper, remove `disabled` from buttons and inputs, remove badge |
+| Feature | File | Status | What was reverted |
+|---------|------|--------|-------------------|
+| Scheduling sidebar | `sidebar.ejs` | STILL DISABLED | Change `href="#"` back to `href="/campaigns"`, remove `pointer-events-none opacity-60 cursor-default`, remove badge |
+| Smart Designer | `campaign-form.ejs` | RE-ENABLED ✅ | Removed `قريباً 🚀` badge, removed `opacity-50 pointer-events-none` from canvas container and controls |
+| Image Upload | `campaign-form.ejs` | RE-ENABLED ✅ | Removed `opacity-50 pointer-events-none` from container, removed `disabled` from input |
+| Schedule Toggle | `campaign-form.ejs` | STILL DISABLED | Remove `opacity-50 pointer-events-none` wrapper, remove `disabled` from buttons and inputs, remove badge |

@@ -1,12 +1,33 @@
+/**
+ * Azzam — Server-Side Invitation Image Generator
+ * Generates personalized invitation images by compositing guest name onto template.
+ *
+ * Font pipeline:
+ *   1. Readex Pro Bold (assets/ReadexPro-Bold.ttf) — primary, matches frontend
+ *   2. TSNAS Bold (assets/TSNAS-BOLD.OTF) — fallback
+ *   3. System sans-serif — last resort
+ */
+
 const { createCanvas, loadImage, registerFont } = require('canvas');
 const fs = require('fs-extra');
 const path = require('path');
 const config = require('../config/settings');
 
-// Register the custom font
-if (config.image.fontPath && fs.existsSync(config.image.fontPath)) {
-    registerFont(config.image.fontPath, { family: config.image.fontFamily });
+// ── Register fonts (order matters — first registered = default) ──
+const PRIMARY_FONT = 'Readex Pro';
+const FALLBACK_FONT = 'TSNAS Bold';
+
+const primaryFontPath = path.resolve(__dirname, '../../assets/ReadexPro-Bold.ttf');
+if (fs.existsSync(primaryFontPath)) {
+    registerFont(primaryFontPath, { family: PRIMARY_FONT, weight: '700' });
 }
+
+if (config.image.fontPath && fs.existsSync(config.image.fontPath)) {
+    registerFont(config.image.fontPath, { family: FALLBACK_FONT });
+}
+
+// Pick whichever font is available
+const ACTIVE_FONT = fs.existsSync(primaryFontPath) ? PRIMARY_FONT : FALLBACK_FONT;
 
 /**
  * Generates an invitation image for a given name.
@@ -17,45 +38,73 @@ if (config.image.fontPath && fs.existsSync(config.image.fontPath)) {
  * @returns {Promise<string>} - The absolute path of the generated image.
  */
 async function generateImage(name, phone, customTemplatePath = null, customCanvasConfig = null) {
+    let imagePath = null;
     try {
-        const tPath = customTemplatePath ? path.resolve(__dirname, '../../', customTemplatePath) : config.image.templatePath;
-        const cConfig = (customCanvasConfig && customCanvasConfig.x != null) ? customCanvasConfig : config.image.textPosition;
-        const rawFontSize = customCanvasConfig && customCanvasConfig.fontSize ? customCanvasConfig.fontSize : config.image.fontSize;
-        const fontSizeStr = typeof rawFontSize === 'number' ? `${rawFontSize}px` : rawFontSize;
-        const textColor = customCanvasConfig && customCanvasConfig.color ? customCanvasConfig.color : config.image.textColor;
+        // ── Resolve template path ──
+        const tPath = customTemplatePath
+            ? path.resolve(__dirname, '../../', customTemplatePath)
+            : config.image.templatePath;
 
+        // ── Resolve canvas config with safe fallbacks ──
+        const cConfig = (customCanvasConfig && customCanvasConfig.x != null)
+            ? customCanvasConfig
+            : config.image.textPosition;
+
+        const rawFontSize = (customCanvasConfig && customCanvasConfig.fontSize)
+            ? customCanvasConfig.fontSize
+            : parseInt(config.image.fontSize) || 75;
+
+        const fontSizeNum = typeof rawFontSize === 'number' ? rawFontSize : parseInt(rawFontSize);
+        const textColor = (customCanvasConfig && customCanvasConfig.color)
+            ? customCanvasConfig.color
+            : config.image.textColor;
+
+        // ── Load template image ──
         const image = await loadImage(tPath);
         const canvas = createCanvas(image.width, image.height);
         const ctx = canvas.getContext('2d');
 
-        // Draw Template
+        // Draw template background
         ctx.drawImage(image, 0, 0, image.width, image.height);
 
-        // Configure Text
-        ctx.font = `${fontSizeStr} "${config.image.fontFamily}"`;
+        // ── Configure text ──
+        ctx.font = `bold ${fontSizeNum}px "${ACTIVE_FONT}", sans-serif`;
         ctx.fillStyle = textColor;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        ctx.direction = 'rtl';  // proper Arabic text shaping
 
-        // Write Name — use config defaults if coordinates are missing
-        const textX = cConfig.x != null ? cConfig.x : config.image.textPosition.x;
-        const textY = cConfig.y != null ? cConfig.y : config.image.textPosition.y;
+        // Shadow for readability on any background
+        ctx.shadowColor = 'rgba(0,0,0,0.35)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 2;
+
+        // ── Calculate position ──
+        const textX = cConfig.x != null ? cConfig.x : Math.round(image.width / 2);
+        const textY = cConfig.y != null ? cConfig.y : Math.round(image.height * 0.70);
+
+        // Write name
         ctx.fillText(name, textX, textY);
 
-        // Ensure temp dir exists
+        // ── Ensure output dir exists ──
         await fs.ensureDir(config.paths.outputDir);
 
-        // Save Image
+        // ── Save image ──
         const outputFilename = `invite_${phone}.png`;
-        const outputPath = path.join(config.paths.outputDir, outputFilename);
+        imagePath = path.join(config.paths.outputDir, outputFilename);
 
         const buffer = canvas.toBuffer('image/png');
-        await fs.writeFile(outputPath, buffer);
+        await fs.writeFile(imagePath, buffer);
 
-        return outputPath;
+        return imagePath;
     } catch (error) {
+        // Cleanup temp file on failure
+        if (imagePath) {
+            await fs.remove(imagePath).catch(() => {});
+        }
         throw new Error(`Failed to generate image for ${name}: ${error.message}`);
     }
 }
 
-module.exports = { generateImage };
+module.exports = { generateImage, ACTIVE_FONT };

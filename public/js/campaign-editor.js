@@ -8,12 +8,16 @@
     /* ──────────── State ──────────── */
     let canvas, ctx;
     let bgImage = null;
+    let fullImageWidth = 0;   // original image width (for scale-up on save)
     let nameX = 0, nameY = 0;
     let isDragging = false;
     let dragOffsetX = 0, dragOffsetY = 0;
     let fontSize = 60;
     let fontColor = '#000000';
-    let previewName = 'الاسم';
+    let previewName = 'محمد أحمد';  // realistic Arabic name for preview
+
+    // Font must match backend generator.js — Readex Pro (loaded from Google Fonts)
+    const CANVAS_FONT_FAMILY = "'Readex Pro', sans-serif";
 
     /* ──────────── Enable canvas UI ──────────── */
     function enableCanvasUI() {
@@ -106,11 +110,11 @@
         // Canvas mouse events (drag)
         canvas.addEventListener('mousedown', onMouseDown);
         canvas.addEventListener('mousemove', onMouseMove);
-        canvas.addEventListener('mouseup', () => { isDragging = false; });
-        canvas.addEventListener('mouseleave', () => { isDragging = false; });
+        document.addEventListener('mouseup', () => { isDragging = false; canvas.style.cursor = 'default'; });
+        canvas.addEventListener('mouseleave', () => { if (!isDragging) canvas.style.cursor = 'default'; });
 
-        // Touch events (mobile)
-        canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+        // Touch events (mobile) — passive:false to prevent scroll during drag
+        canvas.addEventListener('touchstart', onTouchStart, { passive: false });
         canvas.addEventListener('touchmove', onTouchMove, { passive: false });
         canvas.addEventListener('touchend', () => { isDragging = false; });
 
@@ -137,6 +141,7 @@
             const img = new Image();
             img.onload = function () {
                 bgImage = img;
+                fullImageWidth = img.width;
 
                 // Scale canvas to image, max 600px wide
                 const maxW = 600;
@@ -166,6 +171,7 @@
         img.crossOrigin = 'anonymous';
         img.onload = function () {
             bgImage = img;
+            fullImageWidth = img.width;
             const maxW = 600;
             const scale = Math.min(1, maxW / img.width);
             canvas.width = img.width * scale;
@@ -176,8 +182,8 @@
             if (canvasConfigRaw) {
                 try {
                     const cc = typeof canvasConfigRaw === 'string' ? JSON.parse(canvasConfigRaw) : canvasConfigRaw;
-                    nameX = cc.x ? cc.x * scaleDown : canvas.width / 2;
-                    nameY = cc.y ? cc.y * scaleDown : canvas.height * 0.70;
+                    nameX = cc.x != null ? cc.x * scaleDown : canvas.width / 2;
+                    nameY = cc.y != null ? cc.y * scaleDown : canvas.height * 0.70;
                     fontSize = cc.fontSize ? Math.round(cc.fontSize * scaleDown) : fontSize;
                     fontColor = cc.color || fontColor;
                     document.getElementById('fontSize').value = fontSize;
@@ -211,33 +217,44 @@
         // Scale image to fit canvas
         ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
 
-        // Draw name text
+        // Draw name text — use Readex Pro to match backend generator
         ctx.save();
-        ctx.font = `bold ${fontSize}px "IBM Plex Sans Arabic", "Cairo", sans-serif`;
+        ctx.font = `bold ${fontSize}px ${CANVAS_FONT_FAMILY}`;
         ctx.fillStyle = fontColor;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        ctx.direction = 'rtl';  // proper Arabic text shaping
 
-        // Shadow for readability
-        ctx.shadowColor = 'rgba(0,0,0,0.25)';
-        ctx.shadowBlur = 4;
+        // Shadow for readability on any background
+        ctx.shadowColor = 'rgba(0,0,0,0.35)';
+        ctx.shadowBlur = 6;
         ctx.shadowOffsetX = 1;
-        ctx.shadowOffsetY = 1;
+        ctx.shadowOffsetY = 2;
 
         ctx.fillText(previewName, nameX, nameY);
         ctx.restore();
 
-        // Draw drag handle indicator
+        // Draw drag handle indicator — measure actual text width (accurate for Arabic)
         ctx.save();
-        ctx.strokeStyle = 'rgba(0, 200, 83, 0.6)';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 3]);
-        const textW = ctx.measureText(previewName).width;
-        ctx.strokeRect(nameX - textW / 2 - 8, nameY - fontSize / 2 - 4, textW + 16, fontSize + 8);
+        ctx.font = `bold ${fontSize}px ${CANVAS_FONT_FAMILY}`;
+        const textMetrics = ctx.measureText(previewName);
+        const textW = textMetrics.width;
+        ctx.strokeStyle = 'rgba(0, 200, 83, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(nameX - textW / 2 - 10, nameY - fontSize / 2 - 6, textW + 20, fontSize + 12);
         ctx.restore();
     }
 
     /* ──────────── Drag logic ──────────── */
+    function getTextHitBox() {
+        // Measure actual text width for accurate hit testing (critical for Arabic)
+        ctx.font = `bold ${fontSize}px ${CANVAS_FONT_FAMILY}`;
+        const textW = ctx.measureText(previewName).width;
+        const hitH = fontSize + 16;
+        return { halfW: Math.max(50, textW / 2) + 10, halfH: hitH / 2 };
+    }
+
     function getCanvasPos(e) {
         const rect = canvas.getBoundingClientRect();
         const scaleX = canvas.width / rect.width;
@@ -251,30 +268,36 @@
     function onMouseDown(e) {
         if (!bgImage) return;
         const pos = getCanvasPos(e);
-        const hitW = Math.max(100, fontSize * previewName.length * 0.6);
-        const hitH = fontSize + 16;
-        if (Math.abs(pos.x - nameX) < hitW / 2 && Math.abs(pos.y - nameY) < hitH / 2) {
+        const hit = getTextHitBox();
+        if (Math.abs(pos.x - nameX) < hit.halfW && Math.abs(pos.y - nameY) < hit.halfH) {
             isDragging = true;
             dragOffsetX = pos.x - nameX;
             dragOffsetY = pos.y - nameY;
+            canvas.style.cursor = 'grabbing';
         }
     }
 
     function onMouseMove(e) {
-        if (!isDragging) return;
-        e.preventDefault();
+        if (!bgImage) return;
+        // Change cursor on hover over text
         const pos = getCanvasPos(e);
-        nameX = Math.max(fontSize, Math.min(canvas.width - fontSize, pos.x - dragOffsetX));
-        nameY = Math.max(fontSize, Math.min(canvas.height - fontSize, pos.y - dragOffsetY));
-        drawCanvas();
+        if (isDragging) {
+            e.preventDefault();
+            nameX = Math.max(fontSize, Math.min(canvas.width - fontSize, pos.x - dragOffsetX));
+            nameY = Math.max(fontSize, Math.min(canvas.height - fontSize, pos.y - dragOffsetY));
+            drawCanvas();
+        } else {
+            const hit = getTextHitBox();
+            const isOverText = Math.abs(pos.x - nameX) < hit.halfW && Math.abs(pos.y - nameY) < hit.halfH;
+            canvas.style.cursor = isOverText ? 'grab' : 'default';
+        }
     }
 
     function onTouchStart(e) {
         if (!bgImage || !e.touches[0]) return;
         const pos = getCanvasPos(e.touches[0]);
-        const hitW = Math.max(100, fontSize * previewName.length * 0.6);
-        const hitH = fontSize + 16;
-        if (Math.abs(pos.x - nameX) < hitW / 2 && Math.abs(pos.y - nameY) < hitH / 2) {
+        const hit = getTextHitBox();
+        if (Math.abs(pos.x - nameX) < hit.halfW && Math.abs(pos.y - nameY) < hit.halfH) {
             isDragging = true;
             dragOffsetX = pos.x - nameX;
             dragOffsetY = pos.y - nameY;

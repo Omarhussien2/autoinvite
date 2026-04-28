@@ -1,6 +1,39 @@
 # سجل التحديثات — عزام
 
 <!--
+
+---
+
+## [v3.3.0] — 2026-04-28 — تفعيل المصمم الذكي
+
+### Fixed
+- إصلاح BUG-A: توحيد خط الاسم بين Frontend و Backend (Readex Pro) `TBD`
+- إصلاح BUG-A: hit test للـ drag يستخدم `measureText()` بدل تقدير ASCII `TBD`
+- إصلاح BUG-A: `loadImageFromUrl` كان يفشل عند x=0 بسبب falsy check `TBD`
+- إصلاح BUG-A: إضافة `ctx.direction = 'rtl'` لدعم النص العربي على Canvas `TBD`
+- إصلاح BUG-B: إضافة fallback لنص عادي عند فشل إرسال الصورة بعد 3 محاولات `TBD`
+- إصلاح BUG-B: cleanup مضمون للـ temp images عبر `finally` block `TBD`
+
+### Added
+- خط Readex Pro Bold (ReadexPro-Bold.ttf) للـ server-side canvas rendering `TBD`
+- `getTextHitBox()` function لقياس عرض النص العربي بدقة `TBD`
+- cursor تغيير (grab/grabbing) عند hover/drag على الاسم `TBD`
+- logging محسّن في retry logic (عرض رقم المحاولة) `TBD`
+
+### Changed
+- Frontend preview name: "الاسم" → "محمد أحمد" (اسم حقيقي للمعاينة) `TBD`
+- Retry count: 2 → 3 محاولات لإرسال الصور `TBD`
+- generator.js: font registration priority (Readex Pro → TSNAS Bold → system) `TBD`
+- settings.js: fontFamily default: "CustomFont" → "Readex Pro" `TBD`
+
+### Removed
+- إزالة `قريباً 🚀` badge من المصمم الذكي `TBD`
+- إزالة `opacity-50 pointer-events-none` من canvas-container و canvas-controls `TBD`
+- إزالة `disabled` من imgUpload و fontSize و fontColor inputs `TBD`
+
+---
+
+-->
   ╔══════════════════════════════════════════════════════════════╗
   ║  MUST يتم تحديث هذا الملف مع كل تغيير يُدخل على المشروع     ║
   ║  آخر مهمة دائمة في أي task: تحديث CHANGELOG.md + DEVLOG.md  ║

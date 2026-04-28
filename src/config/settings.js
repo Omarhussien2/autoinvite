@@ -5,12 +5,12 @@ module.exports = {
     image: {
         templatePath: path.resolve(__dirname, '../../assets/TEMPLATE2.png'),
         fontPath: path.resolve(__dirname, '../../assets/TSNAS-BOLD.OTF'),
-        fontFamily: 'CustomFont',
+        fontFamily: 'Readex Pro',     // primary font (registered in generator.js)
         fontSize: '75px',
         textColor: '#2f4858',
         textPosition: {
-            x: 540,
-            y: 730
+            x: 540,   // default center X for TEMPLATE2.png (1080px wide)
+            y: 730    // default ~70% height for TEMPLATE2.png
         }
     },
 

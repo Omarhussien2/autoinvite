@@ -305,6 +305,56 @@ console.error('Send failed:', err.message || err);
 
 ---
 
+## التحدي ١٦ — المصمم الذكي: BUG-A + BUG-B
+**التاريخ:** 2026-04-28
+
+### المشكلة
+المصمم الذكي (Smart Designer) كان معطّلاً منذ الإطلاق بسبب bugين:
+- **BUG-A:** اسم الضيف لا يُرسم أو يتحرك بشكل صحيح على canvas الـ preview
+- **BUG-B:** إرسال الصور المُخصصة يفشل أثناء الحملات
+
+### السبب (تحليل أعمق بعد مراجعة الكود)
+**BUG-A — 5 أسباب مترابطة:**
+1. Font mismatch: Frontend استخدم `"IBM Plex Sans Arabic"` بينما Backend استخدم `"CustomFont"` (TSNAS Bold). الاسم يظهر بشكل مختلف في preview vs الناتج النهائي
+2. Hit test يستخدم `fontSize * previewName.length * 0.6` — هذا تقدير لـ ASCII. الأحرف العربية أعرض، فمنطقة السحب أصغر من النص الفعلي
+3. `loadImageFromUrl` يستخدم `cc.x ? cc.x * scaleDown` — إذا كانت x=0 (أعلى الصورة)، الشرط falsy ويُرجع center
+4. Canvas direction ما كان مضبوط لـ RTL
+5. Preview name ثابت "الاسم" — لا يعطي فكرة حقيقية عن حجم النص
+
+**BUG-B — 3 أسباب:**
+1. لا يوجد fallback — إذا فشل إرسال الصورة، الحملة تتوقف (لا fallback لنص)
+2. Cleanup في السطر اللي بعد sendImage — لو فشل sendImage، الملف المؤقت ما يُحذف
+3. generator.js لا يحذف الملف المؤقت عند فشل generateImage
+
+### الحل (4 مراحل)
+**المرحلة ١ — Frontend (`campaign-editor.js`):**
+- توحيد الخط: Readex Pro (يُطابق frontend و backend)
+- استبدال hit test بـ `ctx.measureText()` لقياس عرض النص العربي بدقة
+- إضافة `ctx.direction = 'rtl'` + cursor تغيير (grab/grabbing)
+- تصحيح falsy check: `cc.x ?` → `cc.x != null`
+
+**المرحلة ٢ — Backend (`generator.js` + `settings.js`):**
+- تحميل Readex Pro Bold كملف TTF للـ server-side canvas
+- font registration hierarchy: Readex Pro → TSNAS Bold → system fallback
+- إضافة cleanup في catch block لـ temp files
+- تحسين parseInt لـ fontSize (كان يقرأ string "75px" بشكل خاطئ أحياناً)
+
+**المرحلة ٣ — Pipeline (`processBatch.js`):**
+- Retry count: 2 → 3 مع logging محسّن
+- إضافة try/catch/finally حول generateImage + sendImage
+- Fallback: إذا فشل إرسال الصورة → أرسل نص فقط + log warning
+- Cleanup في `finally` block (مضمون حتى لو فشل كل شيء)
+
+**المرحلة ٤ — إعادة التفعيل (`campaign-form.ejs`):**
+- إزالة `قريباً 🚀` badge
+- إزالة `opacity-50 pointer-events-none` من canvas و controls
+- إزالة `disabled` من imgUpload و fontSize و fontColor
+
+### الدرس
+> Bug واحد ظاهري (الاسم ما يتحرك) كان خمسة أسباب مترابطة. Font mismatch، hit test خاطئ، falsy check، RTL، وpreview غير واقعي. كل واحد لوحده يكسر التجربة. **الدرس:** عند debugging canvas/drag issues، ابدأ بالـ font و text measurement قبل ما تتحقق من coordinate system. الفرق بين الأحرف العربية والإنجليزية في العرض مش مجرد esthetic — هو functional bug يكسر drag.
+
+---
+
 ## ملخص الدروس المستفادة
 
 | # | التحدي | الدرس الرئيسي |
@@ -324,3 +374,4 @@ console.error('Send failed:', err.message || err);
 | ١٣ | No .git on Server | احفظ .env دائماً. استخدم git clone من البداية |
 | ١٤ | Path Changes | وثّق مسارات deployment في AGENTS.md بعد كل تغيير |
 | ١٥ | Logo Background | استخدم transparent PNG من البداية. CSS hacks = حلول مؤقتة |
+| ١٦ | Smart Designer BUGs | 5 أسباب مترابطة لـ bug واحد. تحقق من font + text measurement أولاً في canvas issues. Fallback دائماً عند فشل media |

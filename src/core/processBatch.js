@@ -168,26 +168,42 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                 // Send text caption separately if present
                 if (message) await client.sendText(chatId, message);
             } else if (hasTemplate && templatePath) {
-                const imagePath = await generateImage(name, normalizedPhone, templatePath, canvasConfig);
-                const imgBase64 = `data:image/png;base64,${fs.readFileSync(imagePath).toString('base64')}`;
-                // Retry up to 2 times for transient WhatsApp media errors
-                let mediaRetries = 2;
-                while (true) {
-                    try {
-                        await client.sendImage(chatId, imgBase64, 'invitation.png', message);
-                        break;
-                    } catch (mediaErr) {
-                        const errStr = String(mediaErr && mediaErr.message ? mediaErr.message : mediaErr);
-                        if (mediaRetries > 0 && (errStr.includes('InvalidMedia') || errStr.includes('RepairFailed') || errStr.includes('FailedType'))) {
-                            mediaRetries--;
-                            onLog(`[Retry] خطأ مؤقت في الوسائط، إعادة المحاولة بعد 3 ثوانٍ...`, 'WARN');
-                            await AntiBanEngine.sleep(3000);
-                        } else {
-                            throw mediaErr;
+                // ── Image send with retry + fallback to text-only ──
+                let imageSent = false;
+                let imagePath = null;
+                try {
+                    imagePath = await generateImage(name, normalizedPhone, templatePath, canvasConfig);
+                    const imgBase64 = `data:image/png;base64,${fs.readFileSync(imagePath).toString('base64')}`;
+
+                    // Retry up to 3 times for transient WhatsApp media errors
+                    let mediaRetries = 3;
+                    while (!imageSent) {
+                        try {
+                            await client.sendImage(chatId, imgBase64, 'invitation.png', message);
+                            imageSent = true;
+                        } catch (mediaErr) {
+                            const errStr = String(mediaErr && mediaErr.message ? mediaErr.message : mediaErr);
+                            if (mediaRetries > 0 && (errStr.includes('InvalidMedia') || errStr.includes('RepairFailed') || errStr.includes('FailedType'))) {
+                                mediaRetries--;
+                                onLog(`[Retry] خطأ مؤقت في الوسائط (${3 - mediaRetries}/3)، إعادة المحاولة بعد 3 ثوانٍ...`, 'WARN');
+                                await AntiBanEngine.sleep(3000);
+                            } else {
+                                throw mediaErr;
+                            }
                         }
                     }
+                } catch (imgErr) {
+                    // Fallback: send text-only message if image fails
+                    const errMsg = imgErr && imgErr.message ? imgErr.message : String(imgErr);
+                    onLog(`[Fallback] فشل إرسال الصورة لـ ${name}: ${errMsg} — إرسال نص فقط`, 'WARN');
+                    WhatsAppManager.emitToTenant(tenantId, 'log', { message: `فشل إرسال الصورة لـ ${name}، يتم الإرسال نص فقط`, type: 'WARN' });
+                    await client.sendText(chatId, message);
+                } finally {
+                    // Always cleanup temp image
+                    if (imagePath) {
+                        await fs.remove(imagePath).catch(err => console.error('[processBatch] Failed to cleanup temp image:', err.message));
+                    }
                 }
-                await fs.remove(imagePath);
             } else {
                 await client.sendText(chatId, message);
             }
