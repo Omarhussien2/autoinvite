@@ -103,6 +103,39 @@ app.use('/auth', authRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/whatsapp', require('./routes/whatsapp.api.js'));
 
+// ── Schedule Manager Debug Endpoints ──
+app.get('/api/scheduler/status', isAuthenticated, async (req, res) => {
+    try {
+        const scheduled = await db.query(
+            `SELECT id, name, status, scheduled_at, failed_count, created_at
+             FROM campaigns WHERE tenant_id = $1 AND status = 'scheduled' ORDER BY scheduled_at ASC`,
+            [req.session.tenantId]
+        );
+        const serverTime = await db.query('SELECT NOW() as now_utc, NOW() AT TIME ZONE \'UTC\' as now_tz');
+        res.json({
+            success: true,
+            server_time_utc: serverTime.rows[0].now_utc,
+            server_time_tz: serverTime.rows[0].now_tz,
+            scheduled_campaigns: scheduled.rows,
+            poll_interval_seconds: 30,
+            note: 'Compare scheduled_at with server_time_utc to see if campaign is due'
+        });
+    } catch (err) {
+        res.json({ success: false, message: err.message });
+    }
+});
+
+app.post('/api/scheduler/test', isAuthenticated, async (req, res) => {
+    // Manually trigger a poll — for testing ONLY
+    console.log(`[ScheduleManager] Manual test poll triggered by user ${req.session.tenantId}`);
+    try {
+        await ScheduleManager._poll();
+        res.json({ success: true, message: 'Manual poll completed — check server logs' });
+    } catch (err) {
+        res.json({ success: false, message: err.message });
+    }
+});
+
 // --- ADMIN ROUTES ---
 app.use('/admin', adminRoutes);
 

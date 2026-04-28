@@ -25,6 +25,9 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, upload.fields([{ name
         const isScheduled = scheduled_at && scheduled_at.trim() !== '';
         const status = isScheduled ? 'scheduled' : 'active';
 
+        // Debug: log scheduling info
+        console.log(`[Campaigns] Creating campaign "${name}" — scheduled_at: ${scheduled_at || 'NONE'}, isScheduled: ${isScheduled}, status: ${status}`);
+
         const result = await db.query(`
             INSERT INTO campaigns (tenant_id, name, template_path, contacts_path, message_templates, canvas_config, voicenote_path, status, scheduled_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)

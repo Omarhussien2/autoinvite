@@ -67,8 +67,13 @@ class ScheduleManager {
                    AND c.scheduled_at <= (NOW() AT TIME ZONE 'UTC')`
             );
 
+            if (result.rows.length > 0) {
+                console.log(`[ScheduleManager] Found ${result.rows.length} due campaign(s)`);
+            }
+
             for (const campaign of result.rows) {
                 try {
+                    console.log(`[ScheduleManager] Attempting campaign "${campaign.name}" (id: ${campaign.id}) — WA: ${campaign.whatsapp_status}, quota: ${campaign.messages_used}/${campaign.message_quota}`);
                     await this._triggerCampaign(campaign);
                 } catch (err) {
                     console.error(`[ScheduleManager] Failed to trigger campaign ${campaign.id}:`, err.message);
