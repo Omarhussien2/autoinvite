@@ -355,6 +355,36 @@ console.error('Send failed:', err.message || err);
 
 ---
 
+## التحدي ١٧ — الجدولة الذكية: BUG-C (7 أسباب)
+**التاريخ:** 2026-04-28
+
+### المشكلة
+الجدولة الذكية كانت معطّلة منذ الإطلاق. كل محاولة سابقة لتشغيلها فشلت.
+
+### السبب (7 أسباب مترابطة)
+1. **لا يوجد WA readiness check:** ScheduleManager يُشغّل الحملة حتى لو واتساب غير متصل → فشل فوري
+2. **لا يوجد quota check:** الحملات المجدولة تتجاوز quotaGuard middleware → إرسال يتجاوز الحصة
+3. **لا يوجد retry logic:** أي فشل = `status = 'failed'` نهائياً → الحملة لا تُعاد
+4. **Polling 60s:** تأخير حتى 59 ثانية → تجربة سيئة
+5. **لا يوجد Socket.IO notifications:** المستخدم لا يعرف إن حملته بدأت أو فشلت
+6. **لا يوجد composite index:** الـ query يمسح كل الـ campaigns table كل 30 ثانية
+7. **ScheduleManager غير مربوط بـ io:** الـ `setIo()` كان موجود فقط في WhatsAppManager
+
+### الحل — إعادة كتابة كاملة لـ ScheduleManager.js
+1. **JOIN query:** يجيب campaign + tenant data في query واحد (whatsapp_status, quota)
+2. **Pre-checks:** WA connected? quota available? no running job? → لازم كلها pass
+3. **Retry logic:** 3 محاولات مع exponential backoff (1min → 5min → 15min)
+4. **`failed_count` column:** يتتبع عدد المحاولات (repurposed existing column)
+5. **Socket.IO notifications:** إشعار فوري عند: بداية الحملة، كل retry، فشل نهائي
+6. **Partial index:** `CREATE INDEX ON campaigns(status, scheduled_at) WHERE status = 'scheduled'`
+7. **30s polling:** بدل 60s مع initial delay 5s عشان السيرفر يكتمل
+8. **Input validation:** Frontend يتحقق من صحة التاريخ قبل الإرسال
+
+### الدرس
+> System-level features (scheduling) تختلف عن feature-level bugs. ليس مجرد bug واحد — هو غياب كامل للـ guards الأساسية. **الدرس:** أي feature تعمل عمل تلقائي (cron, scheduler) لازم تكون فيها: (1) readiness checks، (2) quota/respect limits، (3) retry logic، (4) notifications. بدون هذه الأربعة، Feature يشتغل في الـ demo لكن يفشل في الإنتاج.
+
+---
+
 ## ملخص الدروس المستفادة
 
 | # | التحدي | الدرس الرئيسي |
@@ -375,3 +405,4 @@ console.error('Send failed:', err.message || err);
 | ١٤ | Path Changes | وثّق مسارات deployment في AGENTS.md بعد كل تغيير |
 | ١٥ | Logo Background | استخدم transparent PNG من البداية. CSS hacks = حلول مؤقتة |
 | ١٦ | Smart Designer BUGs | 5 أسباب مترابطة لـ bug واحد. تحقق من font + text measurement أولاً في canvas issues. Fallback دائماً عند فشل media |
+| ١٧ | Smart Scheduling | 7 أسباب = غياب guards أساسية. أي auto-feature لازم فيها: readiness + quota + retry + notifications |

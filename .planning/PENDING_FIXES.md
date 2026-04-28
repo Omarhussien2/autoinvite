@@ -51,13 +51,17 @@
   4. generator.js had no cleanup on failure → added temp file removal in catch
 - **Files changed:** `src/core/processBatch.js`, `src/utils/generator.js`
 
-### BUG-C: Schedule manager timezone/trigger issues — STILL PENDING
-- **Location:** `src/core/ScheduleManager.js`
-- **Problem:** (1) Off-by-one bug was fixed (changed `0, contacts.length-1` to `1, contacts.length`), but broader timezone handling may still be wrong — server runs in UTC, campaigns expect Asia/Riyadh (UTC+3). (2) The polling interval (60s) may miss the exact scheduled minute. (3) No retry logic on transient failures.
-- **Impact:** Scheduled campaigns may fire at wrong times or fail silently.
-- **Fix needed:** Convert `scheduled_at` comparison to tenant timezone, add retry logic, consider reducing poll interval or using a more precise trigger mechanism.
-
----
+### ~~BUG-C: Schedule manager timezone/trigger issues~~ — FIXED ✅
+- **Fixed in:** commit TBD (2026-04-28)
+- **Root causes found:**
+  1. No WhatsApp readiness check before triggering → campaign fails instantly if WA disconnected
+  2. No quota check → scheduled campaigns bypass quotaGuard middleware entirely
+  3. No retry logic → single failure = permanently failed campaign
+  4. 60s polling too coarse → up to 59s delay
+  5. No Socket.IO notifications → user doesn't know campaign started/stopped
+  6. No composite DB index → polling query scans full table
+  7. ScheduleManager not connected to Socket.IO → no real-time feedback
+- **Files changed:** `src/core/ScheduleManager.js` (full rewrite), `src/server.js`, `src/database/migrate_saas.js`, `src/views/dashboard/campaign-form.ejs`, `src/views/partials/sidebar.ejs`, `public/js/campaign-editor.js`
 
 ## How to Re-Enable
 
@@ -65,7 +69,7 @@ When each bug is fixed, revert the UI changes:
 
 | Feature | File | Status | What was reverted |
 |---------|------|--------|-------------------|
-| Scheduling sidebar | `sidebar.ejs` | STILL DISABLED | Change `href="#"` back to `href="/campaigns"`, remove `pointer-events-none opacity-60 cursor-default`, remove badge |
+| Scheduling sidebar | `sidebar.ejs` | RE-ENABLED ✅ | Changed href to `/campaigns`, removed `pointer-events-none opacity-60 cursor-default`, removed badge |
 | Smart Designer | `campaign-form.ejs` | RE-ENABLED ✅ | Removed `قريباً 🚀` badge, removed `opacity-50 pointer-events-none` from canvas container and controls |
 | Image Upload | `campaign-form.ejs` | RE-ENABLED ✅ | Removed `opacity-50 pointer-events-none` from container, removed `disabled` from input |
-| Schedule Toggle | `campaign-form.ejs` | STILL DISABLED | Remove `opacity-50 pointer-events-none` wrapper, remove `disabled` from buttons and inputs, remove badge |
+| Schedule Toggle | `campaign-form.ejs` | RE-ENABLED ✅ | Removed `opacity-50 pointer-events-none` wrapper, removed `disabled` from buttons and inputs, removed badge |

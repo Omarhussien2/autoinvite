@@ -68,6 +68,7 @@ async function migrate() {
         // Performance indexes
         await db.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_tenant ON campaigns(tenant_id)`);
         await db.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status)`);
+        await db.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_scheduled ON campaigns(status, scheduled_at) WHERE status = 'scheduled'`);
         await db.query(`CREATE INDEX IF NOT EXISTS idx_sent_logs_tenant ON sent_logs(tenant_id, campaign_id)`);
         await db.query(`CREATE INDEX IF NOT EXISTS idx_sent_logs_date ON sent_logs(sent_at)`);
         await db.query(`CREATE INDEX IF NOT EXISTS idx_contacts_tenant_phone ON contacts(tenant_id, phone)`);

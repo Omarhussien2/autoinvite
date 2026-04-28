@@ -411,12 +411,25 @@
             }
 
             // Scheduling — convert user's local datetime to UTC for server comparison
+            // The server stores and compares in UTC, so toISOString() is correct
             if (window.CAMPAIGN_SCHEDULE_MODE === 'later') {
                 const dateVal = document.getElementById('schedule-date').value;
                 const timeVal = document.getElementById('schedule-time').value;
                 if (dateVal && timeVal) {
+                    // Create Date from user's local timezone input, then convert to UTC ISO
                     const localDate = new Date(dateVal + 'T' + timeVal);
+                    if (isNaN(localDate.getTime())) {
+                        showToast('تاريخ أو وقت غير صالح', 'error');
+                        btn.textContent = origText;
+                        btn.disabled = false;
+                        return;
+                    }
                     formData.append('scheduled_at', localDate.toISOString());
+                } else {
+                    showToast('يرجى اختيار التاريخ والوقت', 'error');
+                    btn.textContent = origText;
+                    btn.disabled = false;
+                    return;
                 }
             }
 

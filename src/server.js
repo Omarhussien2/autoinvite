@@ -51,7 +51,8 @@ app.set('trust proxy', 1);
 
 WhatsAppManager.setIo(io);
 WhatsAppManager.startSleepMonitor(8 * 60 * 60 * 1000);
-ScheduleManager.start(60000);
+ScheduleManager.setIo(io);
+ScheduleManager.start(30000);
 
 const PORT = process.env.PORT || 5000;
 

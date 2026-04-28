@@ -26,10 +26,21 @@
 - generator.js: font registration priority (Readex Pro → TSNAS Bold → system) `TBD`
 - settings.js: fontFamily default: "CustomFont" → "Readex Pro" `TBD`
 
+### Changed
+- ScheduleManager polling interval: 60s → 30s for better accuracy `TBD`
+
+### Added
+- ScheduleManager: WhatsApp readiness check before triggering `TBD`
+- ScheduleManager: Quota check before triggering `TBD`
+- ScheduleManager: Retry logic with exponential backoff (1min, 5min, 15min, max 3 retries) `TBD`
+- ScheduleManager: Socket.IO real-time notifications for scheduled campaign events `TBD`
+- ScheduleManager: JOIN with tenants table for single-query pre-checks `TBD`
+- DB composite index on `(status, scheduled_at) WHERE status = 'scheduled'` `TBD`
+- Timezone-aware scheduling with input validation `TBD`
+
 ### Removed
-- إزالة `قريباً 🚀` badge من المصمم الذكي `TBD`
-- إزالة `opacity-50 pointer-events-none` من canvas-container و canvas-controls `TBD`
-- إزالة `disabled` من imgUpload و fontSize و fontColor inputs `TBD`
+- إزالة `قريباً 🚀` badge من الجدولة في campaign-form و sidebar `TBD`
+- إزالة `opacity-50 pointer-events-none` و `disabled` من قسم الجدولة `TBD`
 
 ---
 
