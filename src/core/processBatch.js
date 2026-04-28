@@ -10,15 +10,16 @@ const AntiBanEngine = require('./AntiBanEngine');
 const { convertToOggOpus } = require('../utils/audioConverter');
 
 function pickWeightedMessage(messages, name) {
+    if (!messages || messages.length === 0) return '';
     const totalWeight = messages.reduce((sum, m) => sum + (m.weight || 1), 0);
     let random = Math.random() * totalWeight;
     for (const msg of messages) {
         random -= (msg.weight || 1);
         if (random <= 0) {
-            return msg.text.replace('[الاسم]', name);
+            return (msg.text || '').replace('[الاسم]', name);
         }
     }
-    return messages[0].text.replace('[الاسم]', name);
+    return (messages[0].text || '').replace('[الاسم]', name);
 }
 
 function getSaudiErrorMessage(name, error) {

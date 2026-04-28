@@ -130,7 +130,14 @@ class ScheduleManager {
             messages = [];
         }
 
+        // Validate: must have at least a message or a template image
         const hasTemplate = !!campaign.template_path;
+        if (messages.length === 0 && !hasTemplate) {
+            console.warn(`[ScheduleManager] Campaign ${campaignId} has no messages and no template — marking as failed.`);
+            await db.query('UPDATE campaigns SET status = $1 WHERE id = $2', ['failed', campaignId]);
+            this._emitToTenant(tenantId, 'log', { message: `الحملة "${campaign.name}" فشلت — لا توجد رسائل ولا قالب صورة`, type: 'ERROR' });
+            return;
+        }
         let canvasConfig = campaign.canvas_config || null;
         if (typeof canvasConfig === 'string') {
             try { canvasConfig = JSON.parse(canvasConfig); } catch (e) { canvasConfig = null; }
