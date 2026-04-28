@@ -176,13 +176,15 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     const imgBase64 = `data:image/png;base64,${fs.readFileSync(imagePath).toString('base64')}`;
 
                     // Retry up to 3 times for transient WhatsApp media errors
+                    // NOTE: WPPConnect has sendImage (file path) vs sendImageFromBase64 (base64 data URI)
                     let mediaRetries = 3;
                     while (!imageSent) {
                         try {
-                            await client.sendImage(chatId, imgBase64, 'invitation.png', message);
+                            await client.sendImageFromBase64(chatId, imgBase64, 'invitation.png', message);
                             imageSent = true;
                         } catch (mediaErr) {
-                            const errStr = String(mediaErr && mediaErr.message ? mediaErr.message : mediaErr);
+                            const errObj = mediaErr && mediaErr.message ? mediaErr : { message: String(mediaErr), raw: mediaErr };
+                            const errStr = JSON.stringify(errObj.raw || errObj.message);
                             if (mediaRetries > 0 && (errStr.includes('InvalidMedia') || errStr.includes('RepairFailed') || errStr.includes('FailedType'))) {
                                 mediaRetries--;
                                 onLog(`[Retry] خطأ مؤقت في الوسائط (${3 - mediaRetries}/3)، إعادة المحاولة بعد 3 ثوانٍ...`, 'WARN');
@@ -194,7 +196,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     }
                 } catch (imgErr) {
                     // Fallback: send text-only message if image fails
-                    const errMsg = imgErr && imgErr.message ? imgErr.message : String(imgErr);
+                    const errMsg = imgErr && imgErr.message ? imgErr.message : JSON.stringify(imgErr);
                     onLog(`[Fallback] فشل إرسال الصورة لـ ${name}: ${errMsg} — إرسال نص فقط`, 'WARN');
                     WhatsAppManager.emitToTenant(tenantId, 'log', { message: `فشل إرسال الصورة لـ ${name}، يتم الإرسال نص فقط`, type: 'WARN' });
                     await client.sendText(chatId, message);
