@@ -1,212 +1,453 @@
-/**
- * Azzam — Schedule Manager
- * Polls for scheduled campaigns and triggers them automatically.
- *
- * Design decisions:
- *   1. 30s poll interval — balances accuracy with DB load
- *   2. WhatsApp readiness check BEFORE triggering — prevents instant failures
- *   3. Quota check BEFORE triggering — respects tenant limits
- *   4. Retry logic with exponential backoff — handles transient failures
- *   5. Max 3 retries — then mark as failed with reason
- *   6. Socket.IO notifications — tenant sees real-time status changes
- */
-
+const PgBoss = require('pg-boss');
 const db = require('../database/pg-client');
 
-const POLL_INTERVAL_MS = 30000;   // 30 seconds
+const QUEUE_NAME = 'campaign.schedule.start';
 const MAX_RETRIES = 3;
-const RETRY_DELAYS = [60000, 300000, 900000]; // 1min, 5min, 15min
+const RETRY_DELAYS_MS = [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000];
+
+function asDate(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        throw new Error('Invalid scheduled_at value');
+    }
+    return date;
+}
+
+function parseJsonArray(value) {
+    if (Array.isArray(value)) return value;
+    if (!value) return [];
+    try {
+        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function parseJsonObject(value) {
+    if (!value) return null;
+    if (typeof value === 'object') return value;
+    try {
+        return JSON.parse(value);
+    } catch (_) {
+        return null;
+    }
+}
 
 class ScheduleManager {
     constructor() {
-        this._intervalId = null;
-        this._running = false;
         this._io = null;
+        this._boss = null;
+        this._starting = null;
+        this._workerId = null;
     }
 
-    /** Inject Socket.IO instance for real-time notifications */
     setIo(io) {
         this._io = io;
     }
 
-    /** Emit event to tenant's Socket.IO room */
     _emitToTenant(tenantId, event, data) {
         if (this._io) {
             this._io.to(`tenant_${tenantId}`).emit(event, data);
         }
     }
 
-    start(pollMs = POLL_INTERVAL_MS) {
-        if (this._intervalId) return;
-        console.log(`[ScheduleManager] Started — polling every ${pollMs / 1000}s`);
-        this._intervalId = setInterval(() => this._poll(), pollMs);
-        // Initial poll after 5s (give server time to fully initialize)
-        setTimeout(() => this._poll(), 5000);
-    }
+    _bossConfig() {
+        const base = {
+            schema: 'pgboss',
+            migrate: true,
+            pollingIntervalSeconds: 5,
+            monitorStateIntervalSeconds: 60,
+            retryLimit: 0,
+        };
 
-    stop() {
-        if (this._intervalId) {
-            clearInterval(this._intervalId);
-            this._intervalId = null;
-            console.log('[ScheduleManager] Stopped.');
+        if (process.env.DATABASE_URL) {
+            return {
+                ...base,
+                connectionString: process.env.DATABASE_URL,
+                ssl: process.env.PGSSLMODE === 'require' ? { rejectUnauthorized: false } : false,
+            };
         }
+
+        return {
+            ...base,
+            user: process.env.PGUSER || process.env.DB_USER || 'postgres',
+            host: process.env.PGHOST || process.env.DB_HOST || 'localhost',
+            database: process.env.PGDATABASE || process.env.DB_NAME || 'autoinvite_saas',
+            password: process.env.PGPASSWORD || process.env.DB_PASSWORD || 'postgres',
+            port: parseInt(process.env.PGPORT || process.env.DB_PORT || '5432', 10),
+        };
     }
 
-    async _poll() {
-        if (this._running) return;
-        this._running = true;
+    start() {
+        if (this._boss) return Promise.resolve(this._boss);
+        if (this._starting) return this._starting;
+
+        this._starting = this._start().catch((err) => {
+            this._starting = null;
+            throw err;
+        });
+        return this._starting;
+    }
+
+    async _start() {
+        const boss = new PgBoss(this._bossConfig());
+        boss.on('error', (err) => {
+            console.error('[ScheduleManager] pg-boss error:', err.message || err);
+        });
+
+        await boss.start();
+        await boss.createQueue(QUEUE_NAME);
+        this._workerId = await boss.work(QUEUE_NAME, { batchSize: 1, pollingIntervalSeconds: 5 }, async ([job]) => {
+            if (job) {
+                await this._handleScheduledJob(job);
+            }
+        });
+
+        this._boss = boss;
+        console.log(`[ScheduleManager] Started pg-boss queue "${QUEUE_NAME}"`);
+        await this.reconcileScheduledCampaigns();
+        return boss;
+    }
+
+    async stop() {
+        if (!this._boss) return;
+
+        const boss = this._boss;
+        this._boss = null;
+        this._starting = null;
 
         try {
-            // Find campaigns that are due (scheduled_at in the past)
-            // Use NOW() directly — PG compares TIMESTAMP WITHOUT TZ consistently
-            // within the same session timezone, so no AT TIME ZONE conversion needed.
-            // Frontend sends UTC via toISOString(), PG stores it in session TZ.
-            // NOW() also uses session TZ. Same TZ for both = correct comparison.
-            const nowUtc = new Date().toISOString();
-            console.log(`[ScheduleManager] Polling at ${nowUtc} (UTC)`);
-            const result = await db.query(
-                `SELECT c.*, t.whatsapp_status, t.message_quota, t.messages_used
-                 FROM campaigns c
-                 JOIN tenants t ON c.tenant_id = t.id
-                 WHERE c.status = 'scheduled'
-                   AND c.scheduled_at <= NOW()`
-            );
-
-            if (result.rows.length > 0) {
-                console.log(`[ScheduleManager] Found ${result.rows.length} due campaign(s)`);
+            if (this._workerId) {
+                await boss.offWork({ id: this._workerId });
+                this._workerId = null;
             }
-
-            for (const campaign of result.rows) {
-                try {
-                    console.log(`[ScheduleManager] Attempting campaign "${campaign.name}" (id: ${campaign.id}) — WA: ${campaign.whatsapp_status}, quota: ${campaign.messages_used}/${campaign.message_quota}`);
-                    await this._triggerCampaign(campaign);
-                } catch (err) {
-                    console.error(`[ScheduleManager] Failed to trigger campaign ${campaign.id}:`, err.message);
-                    await this._handleTriggerFailure(campaign, err);
-                }
-            }
+            await boss.stop({ graceful: true, timeout: 10000, wait: true });
+            console.log('[ScheduleManager] Stopped.');
         } catch (err) {
-            console.error('[ScheduleManager] Poll error:', err.message);
-        } finally {
-            this._running = false;
+            console.error('[ScheduleManager] Stop error:', err.message);
         }
+    }
+
+    async _ensureStarted() {
+        return this.start();
+    }
+
+    async scheduleCampaign(campaignId, tenantId, options = {}) {
+        const scheduledAt = asDate(options.scheduledAt);
+        if (scheduledAt.getTime() <= Date.now()) {
+            throw new Error('Scheduled time must be in the future');
+        }
+
+        await this._enqueueCampaign({
+            id: campaignId,
+            tenant_id: tenantId,
+            scheduled_at: scheduledAt,
+            timezone: options.timezone || 'Asia/Riyadh',
+            schedule_job_id: options.previousJobId || null,
+        }, {
+            allowPast: false,
+            resetAttempts: true,
+        });
+    }
+
+    async cancelCampaign(campaignId, tenantId, previousJobId = null) {
+        await this._ensureStarted();
+
+        const jobId = previousJobId || await this._getCampaignJobId(campaignId, tenantId);
+        await this._cancelJob(jobId);
+
+        await db.query(
+            `UPDATE campaigns
+             SET schedule_job_id = NULL,
+                 schedule_attempts = 0,
+                 schedule_last_error = NULL,
+                 schedule_last_attempt_at = NULL
+             WHERE id = $1 AND tenant_id = $2`,
+            [campaignId, tenantId]
+        );
+    }
+
+    async reconcileScheduledCampaigns() {
+        await this._ensureStarted();
+
+        const result = await db.query(
+            `SELECT id, tenant_id, scheduled_at, timezone, schedule_job_id
+             FROM campaigns
+             WHERE status = 'scheduled'
+               AND scheduled_at IS NOT NULL
+               AND (schedule_job_id IS NULL OR scheduled_at <= NOW())`
+        );
+
+        for (const campaign of result.rows) {
+            try {
+                await this._enqueueCampaign(campaign, {
+                    allowPast: true,
+                    resetAttempts: false,
+                });
+                console.log(`[ScheduleManager] Reconciled campaign ${campaign.id}`);
+            } catch (err) {
+                console.error(`[ScheduleManager] Failed to reconcile campaign ${campaign.id}:`, err.message);
+            }
+        }
+    }
+
+    async _enqueueCampaign(campaign, options = {}) {
+        const boss = await this._ensureStarted();
+        const scheduledAt = asDate(campaign.scheduled_at);
+        const startAfter = options.allowPast && scheduledAt.getTime() <= Date.now()
+            ? new Date(Date.now() + 1000)
+            : scheduledAt;
+
+        if (!options.allowPast && startAfter.getTime() <= Date.now()) {
+            throw new Error('Scheduled time must be in the future');
+        }
+
+        await this._cancelJob(campaign.schedule_job_id);
+
+        const jobId = await boss.send(QUEUE_NAME, {
+            campaignId: campaign.id,
+            tenantId: campaign.tenant_id,
+        }, {
+            startAfter,
+            retryLimit: 0,
+            expireInHours: 24,
+            deleteAfterDays: 14,
+        });
+
+        if (!jobId) {
+            throw new Error('Failed to create scheduled campaign job');
+        }
+
+        const attemptsSql = options.resetAttempts ? ', schedule_attempts = 0' : '';
+        await db.query(
+            `UPDATE campaigns
+             SET status = 'scheduled',
+                 scheduled_at = $1,
+                 timezone = COALESCE($2, timezone),
+                 schedule_job_id = $3,
+                 schedule_last_error = NULL,
+                 schedule_last_attempt_at = NULL
+                 ${attemptsSql}
+             WHERE id = $4 AND tenant_id = $5`,
+            [scheduledAt.toISOString(), campaign.timezone || 'Asia/Riyadh', jobId, campaign.id, campaign.tenant_id]
+        );
+
+        return jobId;
+    }
+
+    async _handleScheduledJob(job) {
+        const campaignId = job.data && job.data.campaignId;
+        const tenantId = job.data && job.data.tenantId;
+        if (!campaignId || !tenantId) return;
+
+        const result = await db.query(
+            `SELECT c.*, t.whatsapp_status, t.message_quota, t.messages_used
+             FROM campaigns c
+             JOIN tenants t ON c.tenant_id = t.id
+             WHERE c.id = $1 AND c.tenant_id = $2`,
+            [campaignId, tenantId]
+        );
+
+        const campaign = result.rows[0];
+        if (!campaign) return;
+        if (campaign.status !== 'scheduled') return;
+        if (campaign.schedule_job_id && String(campaign.schedule_job_id) !== String(job.id)) return;
+        if (campaign.scheduled_at && new Date(campaign.scheduled_at).getTime() > Date.now() + 1000) return;
+
+        await db.query(
+            `UPDATE campaigns
+             SET schedule_last_attempt_at = NOW()
+             WHERE id = $1`,
+            [campaignId]
+        );
+
+        await this._triggerCampaign(campaign);
     }
 
     async _triggerCampaign(campaign) {
         const tenantId = campaign.tenant_id;
         const campaignId = campaign.id;
 
-        // ── Pre-check 1: Is WhatsApp connected? ──
         if (campaign.whatsapp_status !== 'connected') {
-            throw new Error(`واتساب غير متصل (الحالة: ${campaign.whatsapp_status || 'غير معروف'})`);
+            await this._retryOrPause(campaign, new Error(`WhatsApp is not connected (${campaign.whatsapp_status || 'unknown'})`));
+            return;
         }
 
-        // ── Pre-check 2: Does tenant have quota? ──
         if (campaign.messages_used >= campaign.message_quota) {
-            throw new Error(`الحصة مستنفدة (${campaign.messages_used}/${campaign.message_quota})`);
+            await this._pauseCampaign(campaign, `Quota exhausted (${campaign.messages_used}/${campaign.message_quota})`);
+            return;
         }
 
-        // ── Pre-check 3: Is another job already running for this tenant? ──
         const BackgroundQueue = require('./BackgroundQueue');
         if (BackgroundQueue.jobs && BackgroundQueue.jobs.has(tenantId)) {
-            throw new Error('حملة أخرى تعمل حالياً لهذا الحساب');
-        }
-
-        // ── Load contacts ──
-        const { loadContacts } = require('../utils/dataProcessor');
-        const contacts = await loadContacts(campaign.contacts_path);
-        if (!contacts || contacts.length === 0) {
-            console.warn(`[ScheduleManager] Campaign ${campaignId} has no contacts — marking as failed.`);
-            await db.query('UPDATE campaigns SET status = $1 WHERE id = $2', ['failed', campaignId]);
-            this._emitToTenant(tenantId, 'log', { message: `الحملة "${campaign.name}" فشلت — لا توجد جهات اتصال`, type: 'ERROR' });
+            await this._retryOrPause(campaign, new Error('Another campaign is already running for this tenant'));
             return;
         }
 
-        // ── Parse config ──
-        let messages = [];
+        const { loadContacts } = require('../utils/dataProcessor');
+        let contacts;
         try {
-            messages = JSON.parse(campaign.message_templates || '[]');
-        } catch (e) {
-            messages = [];
+            contacts = await loadContacts(campaign.contacts_path);
+        } catch (err) {
+            await this._failCampaign(campaign, `Contacts file could not be loaded: ${err.message}`);
+            return;
         }
 
-        // Validate: must have at least a message or a template image
+        if (!contacts || contacts.length === 0) {
+            await this._failCampaign(campaign, 'Campaign has no contacts');
+            return;
+        }
+
+        const messages = parseJsonArray(campaign.message_templates);
         const hasTemplate = !!campaign.template_path;
         if (messages.length === 0 && !hasTemplate) {
-            console.warn(`[ScheduleManager] Campaign ${campaignId} has no messages and no template — marking as failed.`);
-            await db.query('UPDATE campaigns SET status = $1 WHERE id = $2', ['failed', campaignId]);
-            this._emitToTenant(tenantId, 'log', { message: `الحملة "${campaign.name}" فشلت — لا توجد رسائل ولا قالب صورة`, type: 'ERROR' });
+            await this._failCampaign(campaign, 'Campaign has no messages and no template');
             return;
         }
-        let canvasConfig = campaign.canvas_config || null;
-        if (typeof canvasConfig === 'string') {
-            try { canvasConfig = JSON.parse(canvasConfig); } catch (e) { canvasConfig = null; }
-        }
 
-        // ── Notify tenant ──
-        console.log(`[ScheduleManager] Triggering scheduled campaign "${campaign.name}" (${contacts.length} contacts)`);
         this._emitToTenant(tenantId, 'log', {
-            message: `بدء الحملة المجدولة "${campaign.name}" تلقائياً — ${contacts.length} جهة اتصال`,
-            type: 'INFO'
+            message: `Starting scheduled campaign "${campaign.name}" automatically (${contacts.length} contacts).`,
+            type: 'INFO',
         });
 
-        // ── Clear scheduled_at and launch ──
-        await db.query('UPDATE campaigns SET scheduled_at = NULL WHERE id = $1', [campaignId]);
+        try {
+            await BackgroundQueue.addJob(
+                tenantId,
+                campaignId,
+                contacts,
+                campaign.last_sent_row || 1,
+                contacts.length,
+                messages,
+                hasTemplate,
+                campaign.template_path,
+                parseJsonObject(campaign.canvas_config),
+                campaign.voicenote_path || null
+            );
+        } catch (err) {
+            await this._retryOrPause(campaign, err);
+            return;
+        }
 
-        await BackgroundQueue.addJob(
-            tenantId,
-            campaignId,
-            contacts,
-            1,
-            contacts.length,
-            messages,
-            hasTemplate,
-            campaign.template_path,
-            canvasConfig,
-            campaign.voicenote_path || null
+        await db.query(
+            `UPDATE campaigns
+             SET scheduled_at = NULL,
+                 schedule_job_id = NULL,
+                 schedule_attempts = 0,
+                 schedule_last_error = NULL,
+                 schedule_last_attempt_at = NOW()
+             WHERE id = $1`,
+            [campaignId]
         );
     }
 
-    /**
-     * Handle trigger failure with retry logic.
-     * Strategy:
-     *   - Track retry count in campaign's failed_count column (repurposed)
-     *   - On each failure, reschedule with exponential backoff
-     *   - After MAX_RETRIES, mark as failed permanently
-     */
-    async _handleTriggerFailure(campaign, error) {
-        const tenantId = campaign.tenant_id;
-        const campaignId = campaign.id;
-        const retryCount = (campaign.failed_count || 0) + 1;
+    async _retryOrPause(campaign, error) {
+        const attempt = (parseInt(campaign.schedule_attempts || 0, 10) || 0) + 1;
+        const message = error && error.message ? error.message : String(error);
 
-        if (retryCount <= MAX_RETRIES) {
-            // Reschedule with exponential backoff
-            const delayMs = RETRY_DELAYS[retryCount - 1] || 300000;
-            const newScheduledAt = new Date(Date.now() + delayMs);
-
-            await db.query(
-                'UPDATE campaigns SET failed_count = $1 WHERE id = $2',
-                [retryCount, campaignId]
-            );
-
-            console.log(`[ScheduleManager] Retry ${retryCount}/${MAX_RETRIES} for campaign ${campaignId} — next attempt at ${newScheduledAt.toISOString()}`);
-            this._emitToTenant(tenantId, 'log', {
-                message: `الحملة المجدولة "${campaign.name}" — محاولة ${retryCount}/${MAX_RETRIES} بعد ${Math.round(delayMs / 60000)} دقيقة (${error.message})`,
-                type: 'WARN'
-            });
-            // Don't change status — let it stay 'scheduled' so next poll picks it up
-            // But set scheduled_at to future so it doesn't immediately re-trigger
-            // NOTE: we only reschedule if the issue is transient (WA disconnected, quota, etc.)
-            // For permanent errors (no contacts), we already handled above
-        } else {
-            // Max retries exceeded — mark as failed permanently
-            await db.query('UPDATE campaigns SET status = $1, failed_count = $2 WHERE id = $3', ['failed', retryCount, campaignId]);
-            console.error(`[ScheduleManager] Campaign ${campaignId} failed permanently after ${MAX_RETRIES} retries`);
-            this._emitToTenant(tenantId, 'log', {
-                message: `الحملة المجدولة "${campaign.name}" فشلت نهائياً بعد ${MAX_RETRIES} محاولات: ${error.message}`,
-                type: 'ERROR'
-            });
+        if (attempt > MAX_RETRIES) {
+            await this._pauseCampaign(campaign, `Scheduling paused after ${MAX_RETRIES} retries: ${message}`);
+            return;
         }
+
+        const delayMs = RETRY_DELAYS_MS[attempt - 1] || RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
+        const nextRunAt = new Date(Date.now() + delayMs);
+        const jobId = await this._enqueueCampaign({
+            id: campaign.id,
+            tenant_id: campaign.tenant_id,
+            scheduled_at: nextRunAt,
+            timezone: campaign.timezone || 'Asia/Riyadh',
+            schedule_job_id: null,
+        }, {
+            allowPast: false,
+            resetAttempts: false,
+        });
+
+        await db.query(
+            `UPDATE campaigns
+             SET schedule_attempts = $1,
+                 schedule_last_error = $2,
+                 schedule_last_attempt_at = NOW(),
+                 schedule_job_id = $3,
+                 scheduled_at = $4
+             WHERE id = $5`,
+            [attempt, message, jobId, nextRunAt.toISOString(), campaign.id]
+        );
+
+        this._emitToTenant(campaign.tenant_id, 'log', {
+            message: `Scheduled campaign "${campaign.name}" will retry in ${Math.round(delayMs / 60000)} minute(s): ${message}`,
+            type: 'WARN',
+        });
+    }
+
+    async _pauseCampaign(campaign, reason) {
+        await db.query(
+            `UPDATE campaigns
+             SET status = 'paused',
+                 schedule_job_id = NULL,
+                 schedule_last_error = $1,
+                 schedule_last_attempt_at = NOW()
+             WHERE id = $2`,
+            [reason, campaign.id]
+        );
+
+        this._emitToTenant(campaign.tenant_id, 'log', {
+            message: `Scheduled campaign "${campaign.name}" paused: ${reason}`,
+            type: 'ERROR',
+        });
+    }
+
+    async _failCampaign(campaign, reason) {
+        await db.query(
+            `UPDATE campaigns
+             SET status = 'failed',
+                 schedule_job_id = NULL,
+                 schedule_last_error = $1,
+                 schedule_last_attempt_at = NOW()
+             WHERE id = $2`,
+            [reason, campaign.id]
+        );
+
+        this._emitToTenant(campaign.tenant_id, 'log', {
+            message: `Scheduled campaign "${campaign.name}" failed: ${reason}`,
+            type: 'ERROR',
+        });
+    }
+
+    async _getCampaignJobId(campaignId, tenantId) {
+        const result = await db.query(
+            'SELECT schedule_job_id FROM campaigns WHERE id = $1 AND tenant_id = $2',
+            [campaignId, tenantId]
+        );
+        return result.rows[0] ? result.rows[0].schedule_job_id : null;
+    }
+
+    async _cancelJob(jobId) {
+        if (!jobId || !this._boss) return;
+        try {
+            await this._boss.cancel(QUEUE_NAME, String(jobId));
+        } catch (err) {
+            console.warn(`[ScheduleManager] Could not cancel job ${jobId}:`, err.message);
+        }
+    }
+
+    async getStatus(tenantId) {
+        const scheduled = await db.query(
+            `SELECT id, name, status, scheduled_at, timezone, schedule_job_id,
+                    schedule_attempts, schedule_last_error, created_at
+             FROM campaigns
+             WHERE tenant_id = $1 AND status = 'scheduled'
+             ORDER BY scheduled_at ASC`,
+            [tenantId]
+        );
+        const queueSize = this._boss ? await this._boss.getQueueSize(QUEUE_NAME).catch(() => null) : null;
+
+        return {
+            started: !!this._boss,
+            queue: QUEUE_NAME,
+            queue_size: queueSize,
+            scheduled_campaigns: scheduled.rows,
+        };
     }
 }
 

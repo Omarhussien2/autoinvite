@@ -98,7 +98,7 @@
                                                 </span>
                                                 <% if (c.status === 'scheduled' && c.scheduled_at) { %>
                                                     <span class="text-[10px] text-purple-500 font-medium">
-                                                        <%= new Date(c.scheduled_at).toLocaleDateString('ar-SA') %> <%= new Date(c.scheduled_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) %>
+                                                        <%= new Date(c.scheduled_at).toLocaleDateString('ar-SA', { timeZone: c.timezone || 'Asia/Riyadh' }) %> <%= new Date(c.scheduled_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', timeZone: c.timezone || 'Asia/Riyadh' }) %>
                                                     </span>
                                                 <% } %>
                                             </div>

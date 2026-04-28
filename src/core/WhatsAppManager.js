@@ -6,6 +6,7 @@ const db = require('../database/pg-client');
 class WhatsAppManager {
     constructor() {
         this.clients = new Map(); // tenantId -> wppconnect client
+        this.initializing = new Map(); // tenantId -> initialization promise
         this.states = new Map(); // tenantId -> { status, lastQr, lastActive, phone }
         this.io = null;
         this.MAX_TOTAL_CLIENTS = process.env.MAX_TOTAL_CLIENTS || 5;
@@ -28,11 +29,20 @@ class WhatsAppManager {
             return client;
         }
 
+        if (this.initializing.has(tenantId)) {
+            return this.initializing.get(tenantId);
+        }
+
         if (this.clients.size >= this.MAX_TOTAL_CLIENTS) {
             throw new Error('النظام استنفد كامل طاقته حالياً. يرجى المحاولة لاحقاً (Server at capacity)');
         }
 
-        return this.initializeClient(tenantId);
+        const initPromise = this.initializeClient(tenantId)
+            .finally(() => {
+                this.initializing.delete(tenantId);
+            });
+        this.initializing.set(tenantId, initPromise);
+        return initPromise;
     }
 
     getTenantState(tenantId) {
@@ -296,10 +306,17 @@ class WhatsAppManager {
     }
 
     async stopClient(tenantId) {
+        if (this.initializing.has(tenantId)) {
+            try {
+                await this.initializing.get(tenantId);
+            } catch (_) {}
+        }
+
         const client = this.clients.get(tenantId);
         if (client) {
             try {
                 await client.close();
+                await new Promise(resolve => setTimeout(resolve, 1500));
             } catch (e) {
                 console.error(`Error closing client for tenant ${tenantId}:`, e.message);
                 // Try to kill browser process if close fails

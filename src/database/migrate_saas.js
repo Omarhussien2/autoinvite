@@ -62,13 +62,35 @@ async function migrate() {
         await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS whatsapp_phone TEXT`);
 
         // Smart Scheduling columns on campaigns
-        await db.query(`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP DEFAULT NULL`);
+        await db.query(`
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'campaigns'
+                      AND column_name = 'scheduled_at'
+                      AND data_type = 'timestamp without time zone'
+                ) THEN
+                    ALTER TABLE campaigns
+                    ALTER COLUMN scheduled_at TYPE TIMESTAMPTZ
+                    USING scheduled_at AT TIME ZONE 'UTC';
+                ELSE
+                    ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ DEFAULT NULL;
+                END IF;
+            END $$;
+        `);
         await db.query(`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'Asia/Riyadh'`);
+        await db.query(`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS schedule_job_id UUID DEFAULT NULL`);
+        await db.query(`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS schedule_attempts INTEGER NOT NULL DEFAULT 0`);
+        await db.query(`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS schedule_last_error TEXT DEFAULT NULL`);
+        await db.query(`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS schedule_last_attempt_at TIMESTAMPTZ DEFAULT NULL`);
 
         // Performance indexes
         await db.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_tenant ON campaigns(tenant_id)`);
         await db.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status)`);
         await db.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_scheduled ON campaigns(status, scheduled_at) WHERE status = 'scheduled'`);
+        await db.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_schedule_job ON campaigns(schedule_job_id) WHERE schedule_job_id IS NOT NULL`);
         await db.query(`CREATE INDEX IF NOT EXISTS idx_sent_logs_tenant ON sent_logs(tenant_id, campaign_id)`);
         await db.query(`CREATE INDEX IF NOT EXISTS idx_sent_logs_date ON sent_logs(sent_at)`);
         await db.query(`CREATE INDEX IF NOT EXISTS idx_contacts_tenant_phone ON contacts(tenant_id, phone)`);

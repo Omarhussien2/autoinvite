@@ -582,9 +582,8 @@ function setScheduleMode(mode) {
 document.addEventListener('DOMContentLoaded', function () {
     <% if (campaign && campaign.scheduled_at) { %>
     setScheduleMode('later');
-    // Parse stored UTC timestamp correctly by appending 'Z' if missing
-    const rawTs = '<%= campaign.scheduled_at %>';
-    const sd = new Date(rawTs.endsWith('Z') ? rawTs : rawTs + 'Z');
+    const rawTs = '<%= campaign.scheduled_at ? new Date(campaign.scheduled_at).toISOString() : "" %>';
+    const sd = new Date(rawTs);
     // HTML date/time inputs expect LOCAL timezone values — getHours/getDate already return local
     const pad = n => String(n).padStart(2, '0');
     const sdYear = sd.getFullYear();

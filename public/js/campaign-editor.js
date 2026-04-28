@@ -424,6 +424,7 @@
                         btn.disabled = false;
                         return;
                     }
+                    formData.append('timezone', Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Riyadh');
                     formData.append('scheduled_at', localDate.toISOString());
                 } else {
                     showToast('يرجى اختيار التاريخ والوقت', 'error');

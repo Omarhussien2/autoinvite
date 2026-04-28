@@ -32,6 +32,12 @@ async function initializeSaaS() {
         voicenote_path TEXT,
         last_sent_row INTEGER DEFAULT 1,
         failed_count INTEGER NOT NULL DEFAULT 0,
+        scheduled_at TIMESTAMPTZ DEFAULT NULL,
+        timezone TEXT DEFAULT 'Asia/Riyadh',
+        schedule_job_id UUID DEFAULT NULL,
+        schedule_attempts INTEGER NOT NULL DEFAULT 0,
+        schedule_last_error TEXT DEFAULT NULL,
+        schedule_last_attempt_at TIMESTAMPTZ DEFAULT NULL,
         status TEXT DEFAULT 'draft',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )

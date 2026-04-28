@@ -52,7 +52,7 @@ app.set('trust proxy', 1);
 WhatsAppManager.setIo(io);
 WhatsAppManager.startSleepMonitor(8 * 60 * 60 * 1000);
 ScheduleManager.setIo(io);
-ScheduleManager.start(30000);
+ScheduleManager.start().catch(err => console.error('[ScheduleManager] Startup failed:', err.message));
 
 const PORT = process.env.PORT || 5000;
 
@@ -106,20 +106,15 @@ app.use('/api/whatsapp', require('./routes/whatsapp.api.js'));
 // ── Schedule Manager Debug Endpoints ──
 app.get('/api/scheduler/status', isAuthenticated, async (req, res) => {
     try {
-        const scheduled = await db.query(
-            `SELECT id, name, status, scheduled_at, failed_count, created_at
-             FROM campaigns WHERE tenant_id = $1 AND status = 'scheduled' ORDER BY scheduled_at ASC`,
-            [req.session.tenantId]
-        );
         const serverTime = await db.query(`SELECT NOW() as now_value, CURRENT_TIMESTAMP as current_ts, NOW() AT TIME ZONE 'UTC' as now_utc`);
+        const schedulerStatus = await ScheduleManager.getStatus(req.session.tenantId);
         res.json({
             success: true,
             server_now: serverTime.rows[0].now_value,
             server_current_ts: serverTime.rows[0].current_ts,
             server_now_utc: serverTime.rows[0].now_utc,
-            scheduled_campaigns: scheduled.rows,
-            poll_interval_seconds: 30,
-            note: 'scheduled_at <= NOW() is the comparison used by ScheduleManager. If scheduled_at is before server_now, campaign should trigger on next poll.'
+            scheduler: schedulerStatus,
+            note: 'pg-boss durable queue is used for scheduled campaign start jobs.'
         });
     } catch (err) {
         res.json({ success: false, message: err.message });
@@ -127,10 +122,14 @@ app.get('/api/scheduler/status', isAuthenticated, async (req, res) => {
 });
 
 app.post('/api/scheduler/test', isAuthenticated, async (req, res) => {
+    if (process.env.NODE_ENV === 'production' || req.session.tenantRole !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Scheduler test is admin-only and disabled in production' });
+    }
+
     // Manually trigger a poll — for testing ONLY
     console.log(`[ScheduleManager] Manual test poll triggered by user ${req.session.tenantId}`);
     try {
-        await ScheduleManager._poll();
+        await ScheduleManager.reconcileScheduledCampaigns();
         res.json({ success: true, message: 'Manual poll completed — check server logs' });
     } catch (err) {
         res.json({ success: false, message: err.message });
