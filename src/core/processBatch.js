@@ -8,6 +8,11 @@ const db = require('../database/pg-client');
 const WhatsAppManager = require('./WhatsAppManager');
 const AntiBanEngine = require('./AntiBanEngine');
 const { convertToOggOpus } = require('../utils/audioConverter');
+const {
+    WhatsAppSessionError,
+    isWhatsAppSessionError,
+    stringifyError,
+} = require('./WhatsAppSessionError');
 
 function pickWeightedMessage(messages, name) {
     if (!messages || messages.length === 0) return '';
@@ -257,16 +262,31 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             try { await client.stopTyping(`${normalizedPhone}@c.us`); } catch (_) {}
 
             // WPPConnect throws plain objects like { erro: true, text: '...' }
-            let errMsg;
-            if (error && error.message) {
-                errMsg = error.message;
-            } else if (error && error.text) {
-                errMsg = error.text;
-            } else if (typeof error === 'object') {
-                errMsg = JSON.stringify(error);
-            } else {
-                errMsg = String(error);
+            const errMsg = stringifyError(error);
+
+            if (isWhatsAppSessionError(error)) {
+                onLog(`WhatsApp session lost while processing row ${currentRow}. Campaign paused so remaining contacts are not marked failed.`, 'SESSION_ERROR');
+                WhatsAppManager.emitToTenant(tenantId, 'log', {
+                    message: 'انقطع اتصال واتساب أثناء الإرسال. تم إيقاف الحملة مؤقتا حتى لا يتم احتساب باقي الأرقام كفشل.',
+                    type: 'SESSION_ERROR'
+                });
+
+                if (campaignId) {
+                    await db.query(
+                        'UPDATE campaigns SET last_sent_row = $1, status = $2 WHERE id = $3',
+                        [currentRow, 'paused', campaignId]
+                    ).catch(err => console.error('[processBatch] Failed to pause campaign after session error:', err.message));
+                }
+
+                try {
+                    await WhatsAppManager.stopClient(tenantId);
+                } catch (stopErr) {
+                    console.error('[processBatch] Failed to stop stale WhatsApp client:', stopErr.message);
+                }
+
+                throw new WhatsAppSessionError(errMsg, { currentRow, originalError: error });
             }
+
             await logResult(normalizedPhone, name, 'FAIL', errMsg);
             const saudiMsg = getSaudiErrorMessage(name, errMsg);
             onLog(`Failed: ${name} - ${saudiMsg}`, 'ERROR');

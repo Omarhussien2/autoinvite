@@ -69,6 +69,14 @@
         _socket.on('working_state', function (state) {
             setRunningState(state);
         });
+
+        _socket.on('session_lost', function (data) {
+            setRunningState(false);
+            setStatus('انقطع الاتصال');
+            updateWaStatusBadge('disconnected');
+            appendLog(data && data.message ? data.message : 'WhatsApp connection was lost. Reconnect and resume the campaign.', 'WARN');
+            showToast('انقطع اتصال واتساب. أعد الربط ثم أكمل الحملة.', 'error');
+        });
     }
 
     /* ──────────── Button Handlers ──────────── */
