@@ -58,13 +58,18 @@ class ScheduleManager {
 
         try {
             // Find campaigns that are due (scheduled_at in the past)
-            // Compare against UTC — frontend sends UTC via toISOString()
+            // Use NOW() directly — PG compares TIMESTAMP WITHOUT TZ consistently
+            // within the same session timezone, so no AT TIME ZONE conversion needed.
+            // Frontend sends UTC via toISOString(), PG stores it in session TZ.
+            // NOW() also uses session TZ. Same TZ for both = correct comparison.
+            const nowUtc = new Date().toISOString();
+            console.log(`[ScheduleManager] Polling at ${nowUtc} (UTC)`);
             const result = await db.query(
                 `SELECT c.*, t.whatsapp_status, t.message_quota, t.messages_used
                  FROM campaigns c
                  JOIN tenants t ON c.tenant_id = t.id
                  WHERE c.status = 'scheduled'
-                   AND c.scheduled_at <= (NOW() AT TIME ZONE 'UTC')`
+                   AND c.scheduled_at <= NOW()`
             );
 
             if (result.rows.length > 0) {

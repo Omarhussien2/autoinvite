@@ -26,7 +26,11 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, upload.fields([{ name
         const status = isScheduled ? 'scheduled' : 'active';
 
         // Debug: log scheduling info
-        console.log(`[Campaigns] Creating campaign "${name}" — scheduled_at: ${scheduled_at || 'NONE'}, isScheduled: ${isScheduled}, status: ${status}`);
+        console.log(`[Campaigns] Creating campaign "${name}" — scheduled_at raw: "${scheduled_at || 'NONE'}", isScheduled: ${isScheduled}, status: ${status}`);
+        if (isScheduled) {
+            const parsedDate = new Date(scheduled_at);
+            console.log(`[Campaigns] Scheduled for: ${scheduled_at} (parsed: ${parsedDate.toISOString()}, valid: ${!isNaN(parsedDate.getTime())})`);
+        }
 
         const result = await db.query(`
             INSERT INTO campaigns (tenant_id, name, template_path, contacts_path, message_templates, canvas_config, voicenote_path, status, scheduled_at)

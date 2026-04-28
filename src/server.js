@@ -111,14 +111,15 @@ app.get('/api/scheduler/status', isAuthenticated, async (req, res) => {
              FROM campaigns WHERE tenant_id = $1 AND status = 'scheduled' ORDER BY scheduled_at ASC`,
             [req.session.tenantId]
         );
-        const serverTime = await db.query('SELECT NOW() as now_utc, NOW() AT TIME ZONE \'UTC\' as now_tz');
+        const serverTime = await db.query(`SELECT NOW() as now_value, CURRENT_TIMESTAMP as current_ts, NOW() AT TIME ZONE 'UTC' as now_utc`);
         res.json({
             success: true,
-            server_time_utc: serverTime.rows[0].now_utc,
-            server_time_tz: serverTime.rows[0].now_tz,
+            server_now: serverTime.rows[0].now_value,
+            server_current_ts: serverTime.rows[0].current_ts,
+            server_now_utc: serverTime.rows[0].now_utc,
             scheduled_campaigns: scheduled.rows,
             poll_interval_seconds: 30,
-            note: 'Compare scheduled_at with server_time_utc to see if campaign is due'
+            note: 'scheduled_at <= NOW() is the comparison used by ScheduleManager. If scheduled_at is before server_now, campaign should trigger on next poll.'
         });
     } catch (err) {
         res.json({ success: false, message: err.message });
