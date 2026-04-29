@@ -97,8 +97,8 @@
                                                     <%= c.name %>
                                                 </span>
                                                 <% if (c.status === 'scheduled' && c.scheduled_at) { %>
-                                                    <span class="text-[10px] text-purple-500 font-medium">
-                                                        <%= new Date(c.scheduled_at).toLocaleDateString('ar-SA', { timeZone: c.timezone || 'Asia/Riyadh' }) %> <%= new Date(c.scheduled_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', timeZone: c.timezone || 'Asia/Riyadh' }) %>
+                                                    <span class="text-[10px] text-purple-500 font-medium"
+                                                          data-scheduled-at="<%= c.scheduled_at instanceof Date ? c.scheduled_at.toISOString() : new Date(c.scheduled_at).toISOString() %>">
                                                     </span>
                                                 <% } %>
                                             </div>
@@ -214,6 +214,20 @@
 
 </div>
 
+<script>
+    // Format all scheduled-at dates in user's local timezone
+    document.querySelectorAll('[data-scheduled-at]').forEach(function(el) {
+        try {
+            var iso = el.getAttribute('data-scheduled-at');
+            var d = new Date(iso);
+            if (!isNaN(d.getTime())) {
+                var dateStr = d.toLocaleDateString('ar-SA', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                var timeStr = d.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+                el.textContent = dateStr + ' ' + timeStr;
+            }
+        } catch(e) {}
+    });
+</script>
 <script>
     document.getElementById('campaign-search').addEventListener('input', function () {
         const q = this.value.toLowerCase().trim();
