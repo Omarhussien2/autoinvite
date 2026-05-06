@@ -8,7 +8,7 @@ function isAuthenticated(req, res, next) {
     console.log(`🔒 Auth blocked: ${req.method} ${req.originalUrl} — reason: ${reason} | cookie: ${req.headers.cookie ? 'present' : 'MISSING'}`);
 
     // If it's an API request, return 401 JSON
-    if (req.path.startsWith('/api') || req.xhr || (req.headers.accept && req.headers.accept.includes('json'))) {
+    if (req.originalUrl.startsWith('/api') || req.xhr || (req.headers.accept && req.headers.accept.includes('json'))) {
         return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 

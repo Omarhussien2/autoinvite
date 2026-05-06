@@ -6,6 +6,7 @@ const { quotaGuard } = require('../middleware/quotaGuard');
 const { upload } = require('../middleware/uploadStorage');
 const { loadContacts } = require('../core');
 const ScheduleManager = require('../core/ScheduleManager');
+const { normalizeMessageTemplates } = require('../utils/messageTemplates');
 
 const router = express.Router();
 
@@ -68,7 +69,9 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, upload.fields([{ name
         const contactsPath = files.contacts ? files.contacts[0].path : null;
         const voicenotePath = files.voicenote ? files.voicenote[0].path : null;
 
-        if (!name || !message_templates || !contactsPath) {
+        const normalizedMessages = normalizeMessageTemplates(message_templates);
+
+        if (!name || normalizedMessages.length === 0 || !contactsPath) {
             return res.status(400).json({ success: false, message: 'Name, messages, and contact file are required' });
         }
 
@@ -87,7 +90,7 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, upload.fields([{ name
             name,
             templatePath,
             contactsPath,
-            message_templates,
+            JSON.stringify(normalizedMessages),
             canvas_config || '{}',
             voicenotePath,
             status,
@@ -146,6 +149,12 @@ router.put('/:id', isAuthenticated, tenantScope, upload.fields([{ name: 'templat
         const contactsPath = files.contacts ? files.contacts[0].path : null;
         const voicenotePath = files.voicenote ? files.voicenote[0].path : null;
 
+        const normalizedMessages = normalizeMessageTemplates(message_templates);
+
+        if (!name || normalizedMessages.length === 0) {
+            return res.status(400).json({ success: false, message: 'Name and messages are required' });
+        }
+
         const existingRes = await db.query(
             'SELECT schedule_job_id FROM campaigns WHERE id = $1 AND tenant_id = $2',
             [req.params.id, req.tenantId]
@@ -166,7 +175,7 @@ router.put('/:id', isAuthenticated, tenantScope, upload.fields([{ name: 'templat
                 status = $4,
                 timezone = $5
         `;
-        const params = [name, message_templates, canvas_config || '{}', status, timezone || 'Asia/Riyadh'];
+        const params = [name, JSON.stringify(normalizedMessages), canvas_config || '{}', status, timezone || 'Asia/Riyadh'];
 
         if (templatePath) {
             params.push(templatePath);

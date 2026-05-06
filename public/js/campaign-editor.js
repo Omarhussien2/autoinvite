@@ -128,6 +128,10 @@
             addMsgBtn.addEventListener('click', addMessageVariation);
             // Bind remove buttons for existing messages
             document.querySelectorAll('.remove-msg').forEach(btn => bindRemoveBtn(btn));
+            document.querySelectorAll('.msg-weight').forEach(select => {
+                select.addEventListener('change', updateMessageRatios);
+            });
+            updateMessageRatios();
         }
     }
 
@@ -336,6 +340,8 @@
         `;
         list.appendChild(box);
         bindRemoveBtn(box.querySelector('.remove-msg'));
+        box.querySelector('.msg-weight').addEventListener('change', updateMessageRatios);
+        updateMessageRatios();
         box.querySelector('textarea').focus();
     }
 
@@ -347,6 +353,31 @@
             } else {
                 this.closest('.message-box').querySelector('textarea').value = '';
             }
+            updateMessageRatios();
+        });
+    }
+
+    function updateMessageRatios() {
+        const boxes = Array.from(document.querySelectorAll('.message-box'));
+        const weights = boxes.map(box => {
+            const select = box.querySelector('.msg-weight');
+            return Math.max(1, parseInt(select && select.value, 10) || 1);
+        });
+        const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || 1;
+
+        boxes.forEach((box, index) => {
+            const header = box.querySelector('.flex.items-center.justify-between');
+            const select = box.querySelector('.msg-weight');
+            if (!header || !select) return;
+
+            let ratio = box.querySelector('.msg-ratio');
+            if (!ratio) {
+                ratio = document.createElement('span');
+                ratio.className = 'msg-ratio text-[10px] text-gray-400 mr-2';
+                select.insertAdjacentElement('afterend', ratio);
+            }
+
+            ratio.textContent = Math.round((weights[index] / totalWeight) * 100) + '%';
         });
     }
 

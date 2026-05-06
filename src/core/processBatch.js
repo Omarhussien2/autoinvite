@@ -8,13 +8,14 @@ const db = require('../database/pg-client');
 const WhatsAppManager = require('./WhatsAppManager');
 const AntiBanEngine = require('./AntiBanEngine');
 const { convertToOggOpus } = require('../utils/audioConverter');
+const { normalizeMessageTemplates, pickWeightedMessage } = require('../utils/messageTemplates');
 const {
     WhatsAppSessionError,
     isWhatsAppSessionError,
     stringifyError,
 } = require('./WhatsAppSessionError');
 
-function pickWeightedMessage(messages, name) {
+function legacyPickWeightedMessage(messages, name) {
     if (!messages || messages.length === 0) return '';
     const totalWeight = messages.reduce((sum, m) => sum + (m.weight || 1), 0);
     let random = Math.random() * totalWeight;
@@ -44,6 +45,7 @@ function getSaudiErrorMessage(name, error) {
 
 async function processBatch(contacts, startRow, endRow, messages, campaignId = null, hasTemplate = false, onLog = console.log, templatePath = null, canvasConfig = null, tenantId, voicenotePath = null) {
     const subset = contacts.slice(startRow - 1, endRow);
+    const normalizedMessages = normalizeMessageTemplates(messages);
     onLog(`\nProcessing ${subset.length} contacts (Rows ${startRow} to ${endRow})...\n`, 'INFO');
 
     WhatsAppManager.updateActivity(tenantId);
@@ -130,7 +132,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
         }
 
         try {
-            const message = pickWeightedMessage(messages, name);
+            const message = pickWeightedMessage(normalizedMessages, name, currentRow - 1);
             onLog(`[${index + 1}/${subset.length}] Processing: ${name} (${normalizedPhone})`, 'INFO');
 
             const chatId = `${normalizedPhone}@c.us`;

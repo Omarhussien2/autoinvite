@@ -8,7 +8,7 @@ const SAUDI_PREFIX = '966';
 const fs = require('fs-extra');
 const path = require('path');
 const csv = require('csv-parser');
-const xlsx = require('xlsx');
+const readXlsxFile = require('read-excel-file/node');
 
 const { translate } = require('google-translate-api-x');
 
@@ -182,10 +182,25 @@ async function loadContacts(customFilePath = null) {
                     .on('end', () => resolve(normalizeContactColumns(rows)))
                     .on('error', (err) => reject(err));
             } else if (ext === 'xlsx' || ext === 'xls') {
-                const workbook = xlsx.readFile(filePath, { cellText: false, cellDates: true });
-                const sheetName = workbook.SheetNames[0];
-                const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
-                resolve(normalizeContactColumns(rows));
+                readXlsxFile(filePath)
+                    .then((rows) => {
+                        if (!rows || rows.length === 0) {
+                            resolve([]);
+                            return;
+                        }
+
+                        const headers = rows[0].map((header) => String(header || '').trim());
+                        const dataRows = rows.slice(1).map((row) => {
+                            const entry = {};
+                            headers.forEach((header, index) => {
+                                entry[header || `column_${index + 1}`] = row[index] == null ? '' : row[index];
+                            });
+                            return entry;
+                        });
+
+                        resolve(normalizeContactColumns(dataRows));
+                    })
+                    .catch((err) => reject(err));
             } else {
                 reject(new Error(`نوع الملف غير مدعوم: ${ext}. المدعوم: CSV, XLSX, XLS`));
             }

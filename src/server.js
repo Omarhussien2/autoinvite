@@ -61,7 +61,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // --- i18next MIDDLEWARE ---
-app.use(i18nMiddleware.handle(i18next));
 
 // Session Setup — persistent via PostgreSQL
 const isProduction = process.env.NODE_ENV === 'production';
@@ -94,6 +93,8 @@ const sessionMiddleware = session({
 });
 app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware);
+
+app.use(i18nMiddleware.handle(i18next));
 
 // --- EJS LAYOUT MIDDLEWARE ---
 app.use(ejsLayout);

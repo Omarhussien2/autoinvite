@@ -90,7 +90,9 @@
                     <p class="text-xs text-brand-green mb-4">💡 استخدم <code>[الاسم]</code> ليتم استبداله باسم الضيف تلقائياً.</p>
                     <div id="messages-list" class="space-y-4">
                     <% let msgs=[{ text: '' , weight: '3' }]; if (campaign && campaign.message_templates) { try {
-                        msgs=JSON.parse(campaign.message_templates); } catch(e) {} } %>
+                        msgs = Array.isArray(campaign.message_templates) ? campaign.message_templates : JSON.parse(campaign.message_templates);
+                        if (!Array.isArray(msgs) || msgs.length === 0) msgs = [{ text: '' , weight: '3' }];
+                    } catch(e) {} } %>
                         <% msgs.forEach(function(m, i) { %>
                             <div
                                 class="message-box relative group bg-gray-50/50 p-4 rounded-xl border border-gray-100 hover:border-brand-green transition">
@@ -109,7 +111,7 @@
                                     </button>
                                 </div>
                                 <textarea name="message[]" rows="2" placeholder="حياك الله يا [الاسم]..."
-                                    class="w-full bg-transparent border-none text-sm focus:ring-0 resize-none outline-none"><%= m.text %></textarea>
+                                    class="w-full bg-transparent border-none text-sm focus:ring-0 resize-none outline-none"><%= m.text || m.content || m.message || m.body || '' %></textarea>
                             </div>
                             <% }) %>
                 </div>
