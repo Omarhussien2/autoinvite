@@ -23,6 +23,7 @@ const fs = require('fs');
 const session = require('express-session');
 const connectPgSimple = require('connect-pg-simple');
 const db = require('./database/pg-client');
+const { ensureSmartScheduleSchema } = require('./database/ensure_smart_schedule_schema');
 const { WhatsAppManager, loadContacts, processBatch } = require('./core');
 const ScheduleManager = require('./core/ScheduleManager');
 const authRoutes = require('./routes/auth');
@@ -52,7 +53,9 @@ app.set('trust proxy', 1);
 WhatsAppManager.setIo(io);
 WhatsAppManager.startSleepMonitor(8 * 60 * 60 * 1000);
 ScheduleManager.setIo(io);
-ScheduleManager.start().catch(err => console.error('[ScheduleManager] Startup failed:', err.message));
+ensureSmartScheduleSchema()
+    .then(() => ScheduleManager.start())
+    .catch(err => console.error('[ScheduleManager] Startup failed:', err.message));
 
 const PORT = process.env.PORT || 5000;
 
