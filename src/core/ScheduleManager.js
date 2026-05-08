@@ -257,7 +257,6 @@ class ScheduleManager {
             startAfter,
             retryLimit: 0,
             expireInMinutes: 15,
-            deleteAfterDays: 14,
         });
 
         if (!jobId) {
@@ -304,7 +303,6 @@ class ScheduleManager {
             startAfter,
             retryLimit: 0,
             expireInMinutes: 15,
-            deleteAfterDays: 14,
         });
 
         if (!jobId) {
