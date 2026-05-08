@@ -6,7 +6,9 @@ const { quotaGuard } = require('../middleware/quotaGuard');
 const { upload } = require('../middleware/uploadStorage');
 const { loadContacts } = require('../core');
 const ScheduleManager = require('../core/ScheduleManager');
+const { ensureSmartScheduleSchema } = require('../database/ensure_smart_schedule_schema');
 const { normalizeMessageTemplates } = require('../utils/messageTemplates');
+const { buildSmartBatches, normalizeSmartScheduleOptions } = require('../utils/smartScheduler');
 
 const router = express.Router();
 const campaignUpload = upload.fields([{ name: 'template' }, { name: 'contacts' }, { name: 'voicenote' }]);
@@ -57,9 +59,8 @@ async function importContacts(tenantId, campaignId, contactsPath) {
         if (contactList && contactList.length > 0) {
             const { normalizePhone } = require('../utils/dataProcessor');
             for (const c of contactList) {
-                // loadContacts() normalizes columns to { Name, Phone }
-                const rawName = c.Name || c.name || '';
-                const rawPhone = c.Phone || c.phone || '';
+                const rawName = c.Name || c['Ø§Ù„Ø¥Ø³Ù…'] || c.name || '';
+                const rawPhone = c.Phone || c['Ø±Ù‚Ù… Ø§Ù„Ø¬ÙˆØ§Ù„'] || c.phone || '';
                 const phone = normalizePhone(rawPhone);
                 if (!phone) continue;
 
@@ -75,9 +76,71 @@ async function importContacts(tenantId, campaignId, contactsPath) {
     }
 }
 
+async function getTenantSchedulingPolicy(tenantId) {
+    let tenant = {};
+    try {
+        const result = await db.query('SELECT max_daily_limit FROM tenants WHERE id = $1', [tenantId]);
+        tenant = result.rows[0] || {};
+    } catch (err) {
+        if (err.code !== '42703') throw err;
+        console.warn('[Campaigns] max_daily_limit column missing; falling back to 200 until schema is updated.');
+    }
+
+    return {
+        maxDailyLimit: tenant.max_daily_limit || 200,
+        timezone: 'Asia/Riyadh',
+    };
+}
+
+async function createSmartCampaignBatches(tenantId, campaignId, contactsCount, options) {
+    await ensureSmartScheduleSchema();
+    await db.query('DELETE FROM campaign_batches WHERE tenant_id = $1 AND campaign_id = $2', [tenantId, campaignId]);
+    const batches = buildSmartBatches(contactsCount, options);
+
+    for (const batch of batches) {
+        const result = await db.query(
+            `INSERT INTO campaign_batches (
+                tenant_id, campaign_id, batch_number, start_row, end_row, scheduled_at,
+                send_window_start, send_window_end, timezone, daily_limit,
+                min_delay_seconds, max_delay_seconds, break_after_messages,
+                break_min_minutes, break_max_minutes, safety_mode, status
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'scheduled')
+             RETURNING id`,
+            [
+                tenantId,
+                campaignId,
+                batch.batchNumber,
+                batch.startRow,
+                batch.endRow,
+                batch.scheduledAt.toISOString(),
+                batch.sendWindowStart,
+                batch.sendWindowEnd,
+                batch.timezone,
+                batch.dailyLimit,
+                batch.minDelaySeconds,
+                batch.maxDelaySeconds,
+                batch.breakAfterMessages,
+                batch.breakMinMinutes,
+                batch.breakMaxMinutes,
+                batch.safetyMode,
+            ]
+        );
+
+        await ScheduleManager.scheduleBatch(result.rows[0].id, campaignId, tenantId, {
+            scheduledAt: batch.scheduledAt,
+            allowPast: true,
+        });
+    }
+
+    return batches;
+}
+
 // Create Campaign - quota guard applies (uploading contacts is a pre-launch step)
 router.post('/', isAuthenticated, tenantScope, quotaGuard, handleCampaignUpload, async (req, res) => {
     try {
+        await ensureSmartScheduleSchema();
+
         const { name, message_templates, canvas_config } = req.body;
         const files = req.files || {};
         const templatePath = files.template ? files.template[0].path : null;
@@ -85,20 +148,33 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, handleCampaignUpload,
         const voicenotePath = files.voicenote ? files.voicenote[0].path : null;
 
         const normalizedMessages = normalizeMessageTemplates(message_templates);
+        const smartOptions = normalizeSmartScheduleOptions(req.body, await getTenantSchedulingPolicy(req.tenantId));
+        const isSmartSchedule = smartOptions.enabled;
 
         if (!name || normalizedMessages.length === 0 || !contactsPath) {
             return res.status(400).json({ success: false, message: 'Name, messages, and contact file are required' });
         }
 
-        const { isScheduled, scheduledAt, timezone } = parseScheduleBody(req.body);
-        const status = isScheduled ? 'scheduled' : 'active';
+        const contactList = await loadContacts(contactsPath);
+        if (!contactList || contactList.length === 0) {
+            return res.status(400).json({ success: false, message: 'Contacts file is empty or invalid' });
+        }
+
+        const scheduleBody = isSmartSchedule
+            ? { isScheduled: true, scheduledAt: null, timezone: smartOptions.timezone }
+            : parseScheduleBody(req.body);
+        const status = scheduleBody.isScheduled ? 'scheduled' : 'active';
 
         const result = await db.query(`
             INSERT INTO campaigns (
                 tenant_id, name, template_path, contacts_path, message_templates,
-                canvas_config, voicenote_path, status, scheduled_at, timezone
+                canvas_config, voicenote_path, status, scheduled_at, timezone,
+                smart_schedule_enabled, schedule_mode, daily_limit,
+                send_window_start, send_window_end, min_delay_seconds, max_delay_seconds,
+                break_after_messages, break_min_minutes, break_max_minutes, safety_mode
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                    $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
             RETURNING id
         `, [
             req.tenantId,
@@ -109,17 +185,30 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, handleCampaignUpload,
             canvas_config || '{}',
             voicenotePath,
             status,
-            isScheduled ? scheduledAt.toISOString() : null,
-            timezone || 'Asia/Riyadh',
+            scheduleBody.scheduledAt ? scheduleBody.scheduledAt.toISOString() : null,
+            scheduleBody.timezone || smartOptions.timezone,
+            isSmartSchedule,
+            isSmartSchedule ? 'smart' : (scheduleBody.isScheduled ? 'later' : 'immediate'),
+            smartOptions.dailyLimit,
+            smartOptions.sendWindowStart,
+            smartOptions.sendWindowEnd,
+            smartOptions.minDelaySeconds,
+            smartOptions.maxDelaySeconds,
+            smartOptions.breakAfterMessages,
+            smartOptions.breakMinMinutes,
+            smartOptions.breakMaxMinutes,
+            smartOptions.safetyMode,
         ]);
 
         const campaignId = result.rows[0].id;
         await importContacts(req.tenantId, campaignId, contactsPath);
 
-        if (isScheduled) {
+        if (isSmartSchedule) {
+            await createSmartCampaignBatches(req.tenantId, campaignId, contactList.length, smartOptions);
+        } else if (scheduleBody.isScheduled) {
             await ScheduleManager.scheduleCampaign(campaignId, req.tenantId, {
-                scheduledAt,
-                timezone,
+                scheduledAt: scheduleBody.scheduledAt,
+                timezone: scheduleBody.timezone,
             });
         }
 
@@ -158,6 +247,8 @@ router.get('/:id', isAuthenticated, tenantScope, async (req, res) => {
 // Update Campaign (Edit)
 router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (req, res) => {
     try {
+        await ensureSmartScheduleSchema();
+
         const { name, message_templates, canvas_config } = req.body;
         const files = req.files || {};
         const templatePath = files.template ? files.template[0].path : null;
@@ -165,20 +256,24 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
         const voicenotePath = files.voicenote ? files.voicenote[0].path : null;
 
         const normalizedMessages = normalizeMessageTemplates(message_templates);
+        const smartOptions = normalizeSmartScheduleOptions(req.body, await getTenantSchedulingPolicy(req.tenantId));
+        const isSmartSchedule = smartOptions.enabled;
 
         if (!name || normalizedMessages.length === 0) {
             return res.status(400).json({ success: false, message: 'Name and messages are required' });
         }
 
         const existingRes = await db.query(
-            'SELECT schedule_job_id FROM campaigns WHERE id = $1 AND tenant_id = $2',
+            'SELECT schedule_job_id, contacts_path FROM campaigns WHERE id = $1 AND tenant_id = $2',
             [req.params.id, req.tenantId]
         );
         const existing = existingRes.rows[0];
         if (!existing) return res.status(404).json({ success: false, message: 'Campaign not found' });
 
-        const { isScheduled, scheduledAt, timezone } = parseScheduleBody(req.body);
-        const status = isScheduled ? 'scheduled' : 'active';
+        const scheduleBody = isSmartSchedule
+            ? { isScheduled: true, scheduledAt: null, timezone: smartOptions.timezone }
+            : parseScheduleBody(req.body);
+        const status = scheduleBody.isScheduled ? 'scheduled' : 'active';
 
         await ScheduleManager.cancelCampaign(req.params.id, req.tenantId, existing.schedule_job_id);
 
@@ -188,9 +283,37 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
                 message_templates = $2,
                 canvas_config = $3,
                 status = $4,
-                timezone = $5
+                timezone = $5,
+                smart_schedule_enabled = $6,
+                schedule_mode = $7,
+                daily_limit = $8,
+                send_window_start = $9,
+                send_window_end = $10,
+                min_delay_seconds = $11,
+                max_delay_seconds = $12,
+                break_after_messages = $13,
+                break_min_minutes = $14,
+                break_max_minutes = $15,
+                safety_mode = $16
         `;
-        const params = [name, JSON.stringify(normalizedMessages), canvas_config || '{}', status, timezone || 'Asia/Riyadh'];
+        const params = [
+            name,
+            JSON.stringify(normalizedMessages),
+            canvas_config || '{}',
+            status,
+            scheduleBody.timezone || smartOptions.timezone,
+            isSmartSchedule,
+            isSmartSchedule ? 'smart' : (scheduleBody.isScheduled ? 'later' : 'immediate'),
+            smartOptions.dailyLimit,
+            smartOptions.sendWindowStart,
+            smartOptions.sendWindowEnd,
+            smartOptions.minDelaySeconds,
+            smartOptions.maxDelaySeconds,
+            smartOptions.breakAfterMessages,
+            smartOptions.breakMinMinutes,
+            smartOptions.breakMaxMinutes,
+            smartOptions.safetyMode,
+        ];
 
         if (templatePath) {
             params.push(templatePath);
@@ -205,7 +328,7 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
             query += `, voicenote_path = $${params.length}`;
         }
 
-        params.push(isScheduled ? scheduledAt.toISOString() : null);
+        params.push(scheduleBody.scheduledAt ? scheduleBody.scheduledAt.toISOString() : null);
         query += `, scheduled_at = $${params.length}`;
         query += ', schedule_job_id = NULL, schedule_attempts = 0, schedule_last_error = NULL, schedule_last_attempt_at = NULL';
 
@@ -219,10 +342,14 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
             await importContacts(req.tenantId, req.params.id, contactsPath);
         }
 
-        if (isScheduled) {
+        if (isSmartSchedule) {
+            const effectiveContactsPath = contactsPath || existing.contacts_path;
+            const contactList = await loadContacts(effectiveContactsPath);
+            await createSmartCampaignBatches(req.tenantId, req.params.id, contactList.length, smartOptions);
+        } else if (scheduleBody.isScheduled) {
             await ScheduleManager.scheduleCampaign(req.params.id, req.tenantId, {
-                scheduledAt,
-                timezone,
+                scheduledAt: scheduleBody.scheduledAt,
+                timezone: scheduleBody.timezone,
             });
         }
 
@@ -239,6 +366,8 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
 // Delete Campaign
 router.delete('/:id', isAuthenticated, tenantScope, async (req, res) => {
     try {
+        await ensureSmartScheduleSchema();
+
         const existingRes = await db.query(
             'SELECT schedule_job_id FROM campaigns WHERE id = $1 AND tenant_id = $2',
             [req.params.id, req.tenantId]
@@ -268,10 +397,9 @@ router.get('/:id/stats', isAuthenticated, tenantScope, async (req, res) => {
 
         let totalContacts = 0;
         try {
-            const { loadContacts, processContacts } = require('../utils/dataProcessor');
-            const contacts = await loadContacts(campaign.contacts_path);
-            const processed = processContacts(contacts);
-            totalContacts = processed.valid.length;
+            const dataProcessor = require('../utils/dataProcessor');
+            const contacts = await dataProcessor.processContacts(campaign.contacts_path, tenantId, campaignId);
+            totalContacts = contacts.valid.length;
         } catch (e) {
             console.error('Error loading contacts for stats:', e.message);
         }

@@ -240,6 +240,10 @@
                             جدولة لوقت لاحق
                         </button>
                     </div>
+                    <button type="button" id="schedule-smart" onclick="setScheduleMode('smart')"
+                        class="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all duration-200 text-gray-500 hover:text-gray-700 border border-gray-100">
+                        Smart multi-day schedule
+                    </button>
                     <div id="schedule-datetime-wrap" class="hidden grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-medium text-gray-500 mb-1.5">التاريخ</label>
@@ -255,6 +259,45 @@
                     <p id="schedule-hint" class="text-[10px] text-gray-400 hidden">
                         سيتم إرسال الحملة تلقائياً في الوقت المحدد (حسب توقيت جهازك).
                     </p>
+                    <div id="smart-schedule-wrap" class="hidden rounded-xl border border-brand-green/20 bg-brand-light/40 p-4 space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1.5">Daily limit</label>
+                                <input type="number" id="dailyLimit" min="1" max="200" value="<%= campaign && campaign.daily_limit ? campaign.daily_limit : 100 %>"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green focus:ring-2 focus:ring-brand-green/10 transition">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1.5">Safety mode</label>
+                                <% const safetyMode = campaign && campaign.safety_mode ? campaign.safety_mode : 'balanced'; %>
+                                <select id="safetyMode" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green focus:ring-2 focus:ring-brand-green/10 transition">
+                                    <option value="conservative" <%= safetyMode === 'conservative' ? 'selected' : '' %>>Conservative</option>
+                                    <option value="balanced" <%= safetyMode === 'balanced' ? 'selected' : '' %>>Balanced</option>
+                                    <option value="faster" <%= safetyMode === 'faster' ? 'selected' : '' %>>Faster</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1.5">Window start</label>
+                                <input type="time" id="sendWindowStart" value="<%= campaign && campaign.send_window_start ? campaign.send_window_start : '10:00' %>"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green focus:ring-2 focus:ring-brand-green/10 transition">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1.5">Window end</label>
+                                <input type="time" id="sendWindowEnd" value="<%= campaign && campaign.send_window_end ? campaign.send_window_end : '20:00' %>"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green focus:ring-2 focus:ring-brand-green/10 transition">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1.5">Min delay (sec)</label>
+                                <input type="number" id="minDelaySeconds" min="30" max="1800" value="<%= campaign && campaign.min_delay_seconds ? campaign.min_delay_seconds : 120 %>"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green focus:ring-2 focus:ring-brand-green/10 transition">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1.5">Max delay (sec)</label>
+                                <input type="number" id="maxDelaySeconds" min="30" max="2400" value="<%= campaign && campaign.max_delay_seconds ? campaign.max_delay_seconds : 240 %>"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-brand-green focus:ring-2 focus:ring-brand-green/10 transition">
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-gray-500">Hard cap is 200 messages/day. The server checks this before every send.</p>
+                    </div>
                 </div>
             </div>
 
@@ -562,27 +605,36 @@ window.CAMPAIGN_SCHEDULE_MODE = 'immediate';
 function setScheduleMode(mode) {
     window.CAMPAIGN_SCHEDULE_MODE = mode;
     const isLater = mode === 'later';
+    const isSmart = mode === 'smart';
     document.getElementById('schedule-datetime-wrap').classList.toggle('hidden', !isLater);
     document.getElementById('schedule-datetime-wrap').classList.toggle('grid', isLater);
     document.getElementById('schedule-hint').classList.toggle('hidden', !isLater);
+    document.getElementById('smart-schedule-wrap').classList.toggle('hidden', !isSmart);
 
     const btnImm = document.getElementById('schedule-immediate');
     const btnLater = document.getElementById('schedule-later');
+    const btnSmart = document.getElementById('schedule-smart');
+    [btnImm, btnLater, btnSmart].forEach(btn => {
+        if (!btn) return;
+        btn.classList.remove('bg-white', 'text-brand-dark', 'shadow-sm');
+        btn.classList.add('text-gray-500', 'hover:text-gray-700');
+    });
     if (isLater) {
         btnLater.classList.add('bg-white', 'text-brand-dark', 'shadow-sm');
         btnLater.classList.remove('text-gray-500', 'hover:text-gray-700');
-        btnImm.classList.remove('bg-white', 'text-brand-dark', 'shadow-sm');
-        btnImm.classList.add('text-gray-500', 'hover:text-gray-700');
+    } else if (isSmart) {
+        btnSmart.classList.add('bg-white', 'text-brand-dark', 'shadow-sm');
+        btnSmart.classList.remove('text-gray-500', 'hover:text-gray-700');
     } else {
         btnImm.classList.add('bg-white', 'text-brand-dark', 'shadow-sm');
         btnImm.classList.remove('text-gray-500', 'hover:text-gray-700');
-        btnLater.classList.remove('bg-white', 'text-brand-dark', 'shadow-sm');
-        btnLater.classList.add('text-gray-500', 'hover:text-gray-700');
     }
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    <% if (campaign && campaign.scheduled_at) { %>
+    <% if (campaign && campaign.smart_schedule_enabled) { %>
+    setScheduleMode('smart');
+    <% } else if (campaign && campaign.scheduled_at) { %>
     setScheduleMode('later');
     const rawTs = '<%= campaign.scheduled_at ? new Date(campaign.scheduled_at).toISOString() : "" %>';
     const sd = new Date(rawTs);

@@ -43,9 +43,18 @@ function getSaudiErrorMessage(name, error) {
     return `صارت مشكلة غير متوقعة`;
 }
 
-async function processBatch(contacts, startRow, endRow, messages, campaignId = null, hasTemplate = false, onLog = console.log, templatePath = null, canvasConfig = null, tenantId, voicenotePath = null) {
+const { HARD_DAILY_LIMIT } = require('../utils/smartScheduler');
+
+async function processBatch(contacts, startRow, endRow, messages, campaignId = null, hasTemplate = false, onLog = console.log, templatePath = null, canvasConfig = null, tenantId, voicenotePath = null, runOptions = {}) {
     const subset = contacts.slice(startRow - 1, endRow);
     const normalizedMessages = normalizeMessageTemplates(messages);
+
+    const dailyLimit = Math.max(1, Math.min(HARD_DAILY_LIMIT, parseInt(runOptions.dailyLimit || runOptions.daily_limit || HARD_DAILY_LIMIT, 10) || HARD_DAILY_LIMIT));
+    const timezone = runOptions.timezone || 'Asia/Riyadh';
+    const breakAfterMessages = Math.max(0, parseInt(runOptions.breakAfterMessages || runOptions.break_after_messages || 0, 10) || 0);
+    const breakMinMinutes = Math.max(0, parseInt(runOptions.breakMinMinutes || runOptions.break_min_minutes || 0, 10) || 0);
+    const breakMaxMinutes = Math.max(breakMinMinutes, parseInt(runOptions.breakMaxMinutes || runOptions.break_max_minutes || breakMinMinutes, 10) || breakMinMinutes);
+
     onLog(`\nProcessing ${subset.length} contacts (Rows ${startRow} to ${endRow})...\n`, 'INFO');
 
     WhatsAppManager.updateActivity(tenantId);
@@ -71,6 +80,16 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
         console.warn('[processBatch] Could not load tenant settings, using defaults:', err.message);
     }
 
+    if (runOptions.minDelaySeconds || runOptions.min_delay_seconds) {
+        tenantMinDelay = (parseInt(runOptions.minDelaySeconds || runOptions.min_delay_seconds, 10) || (tenantMinDelay / 1000)) * 1000;
+    }
+    if (runOptions.maxDelaySeconds || runOptions.max_delay_seconds) {
+        tenantMaxDelay = Math.max(
+            tenantMinDelay,
+            (parseInt(runOptions.maxDelaySeconds || runOptions.max_delay_seconds, 10) || (tenantMaxDelay / 1000)) * 1000
+        );
+    }
+
     // Pre-convert voice note to OGG/Opus once (not per-contact)
     let pttBase64 = null;
     let pttOggPath = null;
@@ -85,13 +104,44 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
     // ── BUG-7: Track success/fail counts for partial failure detection ──
     let successCount = 0;
     let failCount = 0;
+    let stoppedReason = null;
+    let stoppedRow = null;
 
     for (const [index, contact] of subset.entries()) {
         WhatsAppManager.updateActivity(tenantId);
 
         if (global.stopBatchRequested && global.stopBatchRequested[tenantId]) {
             onLog('تم إيقاف الإرسال بنجاح.', 'WARN');
+            stoppedReason = 'stop_requested';
+            stoppedRow = startRow + index;
             break;
+        }
+
+        try {
+            const dailyRes = await db.query(
+                `SELECT COUNT(*) FROM sent_logs 
+                 WHERE tenant_id = $1 
+                   AND (status IS NULL OR status = 'success')
+                   AND sent_at >= (date_trunc('day', NOW() AT TIME ZONE $2) AT TIME ZONE $2)
+                   AND sent_at < ((date_trunc('day', NOW() AT TIME ZONE $2) + interval '1 day') AT TIME ZONE $2)`,
+                [tenantId, timezone]
+            );
+            const sentToday = parseInt(dailyRes.rows[0].count, 10) || 0;
+            if (sentToday >= dailyLimit) {
+                onLog(`Daily send limit reached (${sentToday}/${dailyLimit}). Batch paused until next window.`, 'WARN');
+                stoppedReason = 'daily_limit_reached';
+                const currentRow = startRow + index;
+                stoppedRow = currentRow;
+                if (campaignId) {
+                    await db.query(
+                        'UPDATE campaigns SET status = $1, last_sent_row = $2, paused_reason = $3 WHERE id = $4 AND tenant_id = $5',
+                        ['paused', currentRow, 'daily_limit_reached', campaignId, tenantId]
+                    ).catch(err => console.error('[processBatch] Failed to pause campaign after daily limit:', err.message));
+                }
+                break;
+            }
+        } catch (dailyErr) {
+            console.warn('[processBatch] Daily limit check failed, continuing:', dailyErr.message);
         }
 
         // ── BUG-9: Quota check before each send ──
@@ -273,7 +323,13 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             successCount++;
 
             // Apply inter-message delay using tenant-specific settings (skip after the very last message)
-            if (index < subset.length - 1) {
+            if (breakAfterMessages && successCount > 0 && successCount % breakAfterMessages === 0 && index < subset.length - 1) {
+                const breakMs = (breakMinMinutes + Math.random() * Math.max(0, breakMaxMinutes - breakMinMinutes)) * 60000;
+                if (breakMs > 0) {
+                    onLog(`[SafetyBreak] Resting for ${(breakMs / 60000).toFixed(1)} minute(s) after ${successCount} messages.`, 'WARN');
+                    await AntiBanEngine.sleep(breakMs);
+                }
+            } else if (index < subset.length - 1) {
                 await AntiBanEngine.applyDelay(
                     tenantMinDelay,
                     tenantMaxDelay,
@@ -334,7 +390,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
     if (pttOggPath) await fs.remove(pttOggPath).catch(err => console.error('[processBatch] Failed to cleanup PTT file:', err.message));
 
     onLog(`\nBatch processing complete. Success: ${successCount}, Failed: ${failCount}`, 'DONE');
-    return { successCount, failCount };
+    return { successCount, failCount, stoppedReason, lastRow: stoppedRow || endRow };
 }
 
 module.exports = { processBatch };

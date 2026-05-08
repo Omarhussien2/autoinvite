@@ -25,6 +25,7 @@ router.get('/dashboard', isAuthenticated, isAdmin, async (req, res) => {
                 t.role,
                 t.message_quota,
                 t.messages_used,
+                t.max_daily_limit,
                 t.created_at,
                 COUNT(DISTINCT c.id) FILTER (WHERE c.status IN ('active', 'running')) AS active_campaign_count,
                 COUNT(DISTINCT c.id) AS total_campaign_count
@@ -74,6 +75,19 @@ router.patch('/tenants/:id/quota', isAuthenticated, isAdmin, async (req, res) =>
     }
 });
 
+router.patch('/tenants/:id/daily-limit', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const dailyLimit = Math.max(1, Math.min(200, parseInt(req.body.max_daily_limit, 10) || 200));
+
+        await db.query('UPDATE tenants SET max_daily_limit = $1 WHERE id = $2', [dailyLimit, id]);
+        res.json({ success: true, max_daily_limit: dailyLimit });
+    } catch (err) {
+        console.error('Update Daily Limit Error:', err);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
 // Reset Tenant Usage
 router.patch('/tenants/:id/reset-usage', isAuthenticated, isAdmin, async (req, res) => {
     try {
@@ -89,7 +103,7 @@ router.patch('/tenants/:id/reset-usage', isAuthenticated, isAdmin, async (req, r
 // Create Tenant
 router.post('/tenants', isAuthenticated, isAdmin, async (req, res) => {
     try {
-        const { name, username, password, message_quota } = req.body;
+        const { name, username, password, message_quota, max_daily_limit } = req.body;
 
         if (!name || !username || !password) {
             return res.status(400).json({ success: false, message: 'الاسم واسم المستخدم وكلمة المرور مطلوبة' });
@@ -105,10 +119,11 @@ router.post('/tenants', isAuthenticated, isAdmin, async (req, res) => {
 
         const password_hash = await bcrypt.hash(password, 10);
         const quota = parseInt(message_quota) || 99;
+        const dailyLimit = Math.max(1, Math.min(200, parseInt(max_daily_limit, 10) || 200));
 
         const result = await db.query(
-            'INSERT INTO tenants (name, username, password_hash, role, message_quota, messages_used, settings) VALUES ($1, $2, $3, $4, $5, 0, $6) RETURNING id, name, username, role, message_quota',
-            [name, username, password_hash, 'user', quota, JSON.stringify({ min_delay: 30, max_delay: 60, safe_mode: true })]
+            'INSERT INTO tenants (name, username, password_hash, role, message_quota, messages_used, max_daily_limit, settings) VALUES ($1, $2, $3, $4, $5, 0, $6, $7) RETURNING id, name, username, role, message_quota, max_daily_limit',
+            [name, username, password_hash, 'user', quota, dailyLimit, JSON.stringify({ min_delay: 30, max_delay: 60, safe_mode: true })]
         );
 
         res.json({ success: true, tenant: result.rows[0] });
