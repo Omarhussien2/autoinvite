@@ -2,6 +2,8 @@ const wppconnect = require('@wppconnect-team/wppconnect');
 const path = require('path');
 const fs = require('fs');
 const db = require('../database/pg-client');
+const { createLogger } = require('../utils/logger');
+const log = createLogger('WhatsAppManager');
 
 class WhatsAppManager {
     constructor() {
@@ -118,7 +120,7 @@ class WhatsAppManager {
                         this.emitToTenant(tenantId, 'status', 'يا هلا! امسح الباركود عشان نربط الواتساب');
                     },
                     statusFind: (statusSession, session) => {
-                        console.log(`[Tenant ${tenantId}] WPPConnect status: ${statusSession}`);
+                        log.info(`WPPConnect status: ${statusSession}`);
                         this._handleStatusChange(tenantId, statusSession);
                     },
                 });
@@ -147,17 +149,17 @@ class WhatsAppManager {
 
             this.emitToTenant(tenantId, 'ready', { phone });
             this.emitToTenant(tenantId, 'status', `الواتساب جاهز ومتصل بالرقم (${phone})`);
-            console.log(`[Tenant ${tenantId}] WPPConnect client is ready!`);
+            log.info(`WPPConnect client is ready!`);
 
             // Update tenant status in DB
             await db.query(
                 'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = $2 WHERE id = $3',
                 ['connected', phone, tenantId]
-            ).catch(err => console.error(`[WhatsAppManager] Failed to update tenant status on connect:`, err.message));
+            ).catch(err => log.error('Failed to update tenant status on connect:', err.message));
 
             // Listen for disconnect
             client.onStateChange((state) => {
-                console.log(`[Tenant ${tenantId}] State changed: ${state}`);
+                log.info(`State changed: ${state}`);
                 if (state === 'CONFLICT' || state === 'UNPAIRED' || state === 'UNLAUNCHED') {
                     this.stopClient(tenantId);
                 }
@@ -182,7 +184,7 @@ class WhatsAppManager {
                         `INSERT INTO messages (tenant_id, remote_phone, sender, direction, body, sender_name, is_read, whatsapp_timestamp)
                          VALUES ($1, $2, $3, $4, $5, $6, FALSE, to_timestamp($7))`,
                         [tenantId, senderPhone, 'them', 'inbound', body, senderName, timestamp]
-                    ).catch(err => console.error(`[Tenant ${tenantId}] Failed to save inbound message:`, err.message));
+                    ).catch(err => log.error('Failed to save inbound message:', err.message));
 
                     // Push to frontend via Socket.io
                     this.emitToTenant(tenantId, 'new_whatsapp_message', {
@@ -194,17 +196,17 @@ class WhatsAppManager {
                     });
 
                     // Mark as read on WhatsApp
-                    await client.sendSeen(from).catch(err => console.error(`[WhatsAppManager] Failed to mark as seen:`, err.message));
+                    await client.sendSeen(from).catch(err => log.error('Failed to mark as seen:', err.message));
 
-                    console.log(`[Tenant ${tenantId}] Inbox: ${senderName} (${senderPhone}): ${body.substring(0, 50)}`);
+                    log.info(`Inbox: ${senderName} (${senderPhone}): ${body.substring(0, 50)}`);
                 } catch (err) {
-                    console.error(`[Tenant ${tenantId}] onMessage error:`, err.message);
+                    log.error('onMessage error:', err.message);
                 }
             });
 
             return client;
         } catch (err) {
-            console.error(`[Tenant ${tenantId}] WPPConnect Init Error:`, err.message);
+            log.error(`WPPConnect Init Error:`, err.message);
             this.states.set(tenantId, { status: 'ERROR', error: err.message });
             this.emitToTenant(tenantId, 'status', `خطأ في الاتصال: ${err.message}`);
 
@@ -212,7 +214,7 @@ class WhatsAppManager {
             await db.query(
                 'UPDATE tenants SET whatsapp_status = $1 WHERE id = $2',
                 ['error', tenantId]
-            ).catch(err => console.error(`[WhatsAppManager] Failed to update tenant error status:`, err.message));
+            ).catch(err => log.error('Failed to update tenant error status:', err.message));
 
             throw err;
         }
@@ -232,7 +234,7 @@ class WhatsAppManager {
                 await db.query(
                     'UPDATE tenants SET whatsapp_status = $1 WHERE id = $2',
                     ['connected', tenantId]
-                ).catch(err => console.error(`[WhatsAppManager] Failed to update tenant status (logged in):`, err.message));
+                ).catch(err => log.error('Failed to update tenant status (logged in):', err.message));
                 break;
 
             case 'notLogged':
@@ -249,7 +251,7 @@ class WhatsAppManager {
                 await db.query(
                     'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = NULL WHERE id = $2',
                     ['disconnected', tenantId]
-                ).catch(err => console.error(`[WhatsAppManager] Failed to update tenant status (disconnected):`, err.message));
+                ).catch(err => log.error('Failed to update tenant status (disconnected):', err.message));
                 break;
 
             case 'qrReadSuccess':
@@ -257,7 +259,7 @@ class WhatsAppManager {
                 break;
 
             case 'autoClose':
-                console.log(`[Tenant ${tenantId}] Session auto-closed.`);
+                log.info('Session auto-closed.');
                 this.stopClient(tenantId);
                 break;
 
@@ -273,10 +275,10 @@ class WhatsAppManager {
         // Step 1: Officially unlink device from WhatsApp servers
         if (client) {
             try { await client.logout(); } catch (e) {
-                console.error(`[WhatsAppManager] logout() failed for tenant ${tenantId}:`, e.message);
+                log.error(`logout() failed for tenant ${tenantId}:`, e.message);
             }
             try { await client.close(); } catch (e) {
-                console.error(`[WhatsAppManager] close() failed for tenant ${tenantId}:`, e.message);
+                log.error(`close() failed for tenant ${tenantId}:`, e.message);
             }
             this.clients.delete(tenantId);
         }
@@ -289,10 +291,10 @@ class WhatsAppManager {
         try {
             if (fs.existsSync(tokenDir)) {
                 fs.rmSync(tokenDir, { recursive: true, force: true });
-                console.log(`[WhatsAppManager] Deleted token folder for tenant ${tenantId}`);
+                log.info(`Deleted token folder for tenant ${tenantId}`);
             }
         } catch (e) {
-            console.error(`[WhatsAppManager] Failed to delete token folder:`, e.message);
+            log.error('Failed to delete token folder:', e.message);
         }
 
         // Step 3: Reset state
@@ -303,14 +305,13 @@ class WhatsAppManager {
         await db.query(
             'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = NULL WHERE id = $2',
             ['disconnected', tenantId]
-        ).catch(err => console.error(`[WhatsAppManager] Failed to update tenant status (logout):`, err.message));
+        ).catch(err => log.error('Failed to update tenant status (logout):', err.message));
 
-        // Step 5: Re-initialize to generate a fresh QR code
-        console.log(`[WhatsAppManager] Re-initializing client for tenant ${tenantId} (fresh QR)`);
+        log.info(`Re-initializing client for tenant ${tenantId} (fresh QR)`);
         try {
             await this.getClient(tenantId);
         } catch (err) {
-            console.error(`[WhatsAppManager] Re-init after logout failed for tenant ${tenantId}:`, err.message);
+            log.error(`Re-init after logout failed for tenant ${tenantId}:`, err.message);
         }
     }
 
@@ -327,7 +328,7 @@ class WhatsAppManager {
                 await client.close();
                 await new Promise(resolve => setTimeout(resolve, 1500));
             } catch (e) {
-                console.error(`Error closing client for tenant ${tenantId}:`, e.message);
+                log.error(`Error closing client for tenant ${tenantId}:`, e.message);
                 // Try to kill browser process if close fails
                 try { await client.killServiceWorker(); } catch (_) {}
             }
@@ -344,7 +345,7 @@ class WhatsAppManager {
         await db.query(
             'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = NULL WHERE id = $2',
             ['disconnected', tenantId]
-        ).catch(err => console.error(`[WhatsAppManager] Failed to update tenant status (stop):`, err.message));
+        ).catch(err => log.error('Failed to update tenant status (stop):', err.message));
     }
 
     /**
@@ -367,7 +368,7 @@ class WhatsAppManager {
             const now = Date.now();
             for (const [tenantId, state] of this.states.entries()) {
                 if (state.lastActive && (now - state.lastActive > idleMs)) {
-                    console.log(`[Session Sleep] Stopping inactive WhatsApp for Tenant ${tenantId} to save RAM.`);
+                    log.info(`Stopping inactive WhatsApp for Tenant ${tenantId} to save RAM.`);
                     this.stopClient(tenantId);
                 }
             }
@@ -378,7 +379,7 @@ class WhatsAppManager {
         if (this._sleepMonitorId) {
             clearInterval(this._sleepMonitorId);
             this._sleepMonitorId = null;
-            console.log('[WhatsAppManager] Sleep monitor stopped.');
+            log.info('Sleep monitor stopped.');
         }
     }
 }

@@ -3,6 +3,8 @@ const bcrypt = require('bcrypt');
 const rateLimit = require('express-rate-limit');
 const db = require('../database/pg-client');
 const { stripe, PLANS, isStripeConfigured } = require('../config/stripe');
+const { createLogger } = require('../utils/logger');
+const log = createLogger('Auth');
 
 const router = express.Router();
 
@@ -44,17 +46,17 @@ router.post('/login', authLimiter, async (req, res) => {
             // persisted, so the next request to /dashboard finds NO session → 401 redirect loop.
             req.session.save((saveErr) => {
                 if (saveErr) {
-                    console.error('❌ Session save failed:', saveErr);
+                    log.error('Session save failed:', saveErr);
                     return res.status(500).json({ success: false, message: 'فشل في حفظ الجلسة، حاول مرة أخرى' });
                 }
-                console.log(`✅ Session saved for tenant: ${tenant.username} (role: ${tenant.role || 'user'})`);
+                log.info(`Session saved for tenant: ${tenant.username} (role: ${tenant.role || 'user'})`);
                 return res.json({ success: true, redirect });
             });
         } else {
             return res.status(401).json({ success: false, message: 'بيانات الدخول غير صحيحة' });
         }
     } catch (err) {
-        console.error('Login Error:', err);
+        log.error('Login Error:', err);
         res.status(500).json({ success: false, message: 'خطأ في السيرفر' });
     }
 });
@@ -96,7 +98,7 @@ router.post('/register', authLimiter, async (req, res) => {
                 });
                 stripeCustomerId = customer.id;
             } catch (stripeErr) {
-                console.error('[Auth] Stripe customer creation failed:', stripeErr.message);
+                log.error('Stripe customer creation failed:', stripeErr.message);
             }
         }
 
@@ -122,14 +124,14 @@ router.post('/register', authLimiter, async (req, res) => {
         // CRITICAL: Force-save session to PostgreSQL BEFORE sending the response.
         req.session.save((saveErr) => {
             if (saveErr) {
-                console.error('❌ Session save failed (register):', saveErr);
+                log.error('Session save failed (register):', saveErr);
                 return res.status(500).json({ success: false, message: 'تم إنشاء الحساب لكن فشل تسجيل الدخول تلقائياً. حاول تسجيل الدخول يدوياً.' });
             }
-            console.log(`✅ Session saved for new tenant: ${newTenant.name}`);
+            log.info(`Session saved for new tenant: ${newTenant.name}`);
             res.json({ success: true, redirect: '/dashboard' });
         });
     } catch (err) {
-        console.error('Register Error:', err);
+        log.error('Register Error:', err);
         res.status(500).json({ success: false, message: 'فشل إنشاء الحساب' });
     }
 });

@@ -22,6 +22,15 @@ function stringifyError(error) {
     return String(error);
 }
 
+function safeStringify(obj) {
+    try {
+        if (obj instanceof Error) return obj.stack || obj.message;
+        return typeof obj === 'string' ? obj : JSON.stringify(obj, Object.getOwnPropertyNames(obj));
+    } catch (_) {
+        return String(obj);
+    }
+}
+
 function isWhatsAppSessionError(error) {
     const message = stringifyError(error).toLowerCase();
 
@@ -47,4 +56,5 @@ module.exports = {
     WhatsAppSessionError,
     isWhatsAppSessionError,
     stringifyError,
+    safeStringify,
 };

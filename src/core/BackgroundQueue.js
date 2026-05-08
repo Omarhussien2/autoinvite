@@ -1,6 +1,8 @@
 const { processBatch } = require('./processBatch');
 const db = require('../database/pg-client');
 const { WhatsAppSessionError } = require('./WhatsAppSessionError');
+const { createLogger } = require('../utils/logger');
+const log = createLogger('BackgroundQueue');
 
 class BackgroundQueue {
     constructor() {
@@ -76,7 +78,7 @@ class BackgroundQueue {
                 if (state) state.status = isSessionError ? 'DISCONNECTED' : 'READY';
 
                 WhatsAppManager.emitToTenant(tenantId, 'working_state', false);
-                console.error(`[BackgroundQueue] Job failed for tenant ${tenantId}:`, error);
+                log.error(`Job failed for tenant ${tenantId}:`, error);
 
                 if (isSessionError) {
                     WhatsAppManager.emitToTenant(tenantId, 'session_lost', {
@@ -121,7 +123,7 @@ class BackgroundQueue {
                 try {
                     await db.query('UPDATE campaigns SET status = $1 WHERE id = $2', ['paused', job.campaignId]);
                 } catch (err) {
-                    console.error(`[BackgroundQueue] Failed to pause campaign ${job.campaignId}:`, err);
+                    log.error(`Failed to pause campaign ${job.campaignId}:`, err);
                 }
             }
 

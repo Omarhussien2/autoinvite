@@ -9,8 +9,9 @@ const fs = require('fs-extra');
 const path = require('path');
 const csv = require('csv-parser');
 const readXlsxFile = require('read-excel-file/node');
-
 const { translate } = require('google-translate-api-x');
+const { createLogger } = require('./logger');
+const log = createLogger('dataProcessor');
 
 // In-memory translation cache — prevents hammering Google Translate API with duplicate names
 const _translateCache = new Map();
@@ -87,7 +88,7 @@ async function processName(name) {
         _translateCache.set(lowerName, translated);
         return translated;
     } catch (error) {
-        console.error(`Translation failed for ${trimmedName}:`, error.message);
+        log.error(`Translation failed for ${trimmedName}:`, error.message);
         return trimmedName; // Fallback to original if translation fails
     }
 }

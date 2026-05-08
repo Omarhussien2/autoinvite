@@ -3,7 +3,8 @@ const path = require('path');
 const { normalizePhone, processName } = require('../utils/dataProcessor');
 const config = require('../config/settings');
 const { generateImage } = require('../utils/generator');
-const { logResult } = require('../utils/logger');
+const { logResult, createLogger } = require('../utils/logger');
+const log = createLogger('processBatch');
 const db = require('../database/pg-client');
 const WhatsAppManager = require('./WhatsAppManager');
 const AntiBanEngine = require('./AntiBanEngine');
@@ -13,20 +14,8 @@ const {
     WhatsAppSessionError,
     isWhatsAppSessionError,
     stringifyError,
+    safeStringify,
 } = require('./WhatsAppSessionError');
-
-function legacyPickWeightedMessage(messages, name) {
-    if (!messages || messages.length === 0) return '';
-    const totalWeight = messages.reduce((sum, m) => sum + (m.weight || 1), 0);
-    let random = Math.random() * totalWeight;
-    for (const msg of messages) {
-        random -= (msg.weight || 1);
-        if (random <= 0) {
-            return (msg.text || '').replace('[الاسم]', name);
-        }
-    }
-    return (messages[0].text || '').replace('[الاسم]', name);
-}
 
 function getSaudiErrorMessage(name, error) {
     const msg = (error || '').toLowerCase();
@@ -77,7 +66,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             if (settings.safe_mode != null) tenantSafeMode = settings.safe_mode;
         }
     } catch (err) {
-        console.warn('[processBatch] Could not load tenant settings, using defaults:', err.message);
+        log.warn('Could not load tenant settings, using defaults:', err.message);
     }
 
     if (runOptions.minDelaySeconds || runOptions.min_delay_seconds) {
@@ -136,12 +125,12 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     await db.query(
                         'UPDATE campaigns SET status = $1, last_sent_row = $2, paused_reason = $3 WHERE id = $4 AND tenant_id = $5',
                         ['paused', currentRow, 'daily_limit_reached', campaignId, tenantId]
-                    ).catch(err => console.error('[processBatch] Failed to pause campaign after daily limit:', err.message));
+                    ).catch(err => log.error('Failed to pause campaign after daily limit:', err.message));
                 }
                 break;
             }
         } catch (dailyErr) {
-            console.warn('[processBatch] Daily limit check failed, continuing:', dailyErr.message);
+            log.warn('Daily limit check failed, continuing:', dailyErr.message);
         }
 
         // ── BUG-9: Quota check before each send ──
@@ -154,7 +143,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                 break;
             }
         } catch (quotaErr) {
-            console.warn('[processBatch] Quota check failed, continuing:', quotaErr.message);
+            log.warn('Quota check failed, continuing:', quotaErr.message);
         }
 
         const rawName = contact.Name || contact['الإسم'] || contact['name'] || 'ضيف';
@@ -196,11 +185,11 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     onLog(`Skipping ${name}: ${saudiMsg}`, 'WARN');
                     WhatsAppManager.emitToTenant(tenantId, 'log', { message: saudiMsg, type: 'WARN' });
                     if (campaignId) {
-                        await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(err => console.error('[processBatch] Failed to update failed_count (skip):', err.message));
+                        await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(err => log.error('Failed to update failed_count (skip):', err.message));
                         await db.query(
                             'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name, status, failed_at) VALUES ($1, $2, $3, $4, $5, NOW())',
                             [campaignId, tenantId, normalizedPhone, name, 'failed']
-                        ).catch(err => console.error('[processBatch] Failed to log skipped contact:', err.message));
+                        ).catch(err => log.error('Failed to log skipped contact:', err.message));
                     }
                     continue;
                 }
@@ -229,14 +218,6 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                 // ── Image send with retry + fallback to text-only ──
                 let imageSent = false;
                 let imagePath = null;
-                const safeStringify = (obj) => {
-                    try {
-                        if (obj instanceof Error) return obj.stack || obj.message;
-                        return typeof obj === 'string' ? obj : JSON.stringify(obj, Object.getOwnPropertyNames(obj));
-                    } catch (e) {
-                        return String(obj);
-                    }
-                };
 
                 try {
                     imagePath = await generateImage(name, normalizedPhone, templatePath, canvasConfig);
@@ -274,19 +255,11 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                 } finally {
                     // Always cleanup temp image
                     if (imagePath) {
-                        await fs.remove(imagePath).catch(err => console.error('[processBatch] Failed to cleanup temp image:', err.message));
+                        await fs.remove(imagePath).catch(err => log.error('Failed to cleanup temp image:', err.message));
                     }
                 }
             } else {
                 await client.sendText(chatId, message).catch(e => {
-                    const safeStringify = (obj) => {
-                        try {
-                            if (obj instanceof Error) return obj.stack || obj.message;
-                            return typeof obj === 'string' ? obj : JSON.stringify(obj, Object.getOwnPropertyNames(obj));
-                        } catch (err) {
-                            return String(obj);
-                        }
-                    };
                     if (!safeStringify(e).includes('msgChunks')) throw e;
                 });
             }
@@ -306,8 +279,8 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     await txClient.query('UPDATE campaigns SET last_sent_row = $1 WHERE id = $2', [currentRow, campaignId]);
                     await txClient.query('COMMIT');
                 } catch (txErr) {
-                    await txClient.query('ROLLBACK').catch(err => console.error('[processBatch] Rollback failed:', err.message));
-                    console.error('[processBatch] Transaction failed, rolling back:', txErr.message);
+                    await txClient.query('ROLLBACK').catch(err => log.error('Rollback failed:', err.message));
+                    log.error('Transaction failed, rolling back:', txErr.message);
                     throw txErr; // Re-throw so the outer catch handles it as a failure
                 } finally {
                     txClient.release();
@@ -356,13 +329,13 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     await db.query(
                         'UPDATE campaigns SET last_sent_row = $1, status = $2 WHERE id = $3',
                         [currentRow, 'paused', campaignId]
-                    ).catch(err => console.error('[processBatch] Failed to pause campaign after session error:', err.message));
+                    ).catch(err => log.error('Failed to pause campaign after session error:', err.message));
                 }
 
                 try {
                     await WhatsAppManager.stopClient(tenantId);
                 } catch (stopErr) {
-                    console.error('[processBatch] Failed to stop stale WhatsApp client:', stopErr.message);
+                    log.error('Failed to stop stale WhatsApp client:', stopErr.message);
                 }
 
                 throw new WhatsAppSessionError(errMsg, { currentRow, originalError: error });
@@ -371,23 +344,23 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             await logResult(normalizedPhone, name, 'FAIL', errMsg);
             const saudiMsg = getSaudiErrorMessage(name, errMsg);
             onLog(`Failed: ${name} - ${saudiMsg}`, 'ERROR');
-            console.error(`[processBatch] Error for ${name} (${normalizedPhone}):`, error);
+            log.error(`Error for ${name} (${normalizedPhone}):`, error);
             WhatsAppManager.emitToTenant(tenantId, 'log', { message: saudiMsg, type: 'ERROR' });
             WhatsAppManager.emitToTenant(tenantId, 'log', { message: `[تفاصيل] ${errMsg}`, type: 'WARN' });
             failCount++;
 
             if (campaignId) {
-                await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(err => console.error('[processBatch] Failed to update failed_count (error):', err.message));
+                await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(err => log.error('Failed to update failed_count (error):', err.message));
                 await db.query(
                     'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name, status, failed_at) VALUES ($1, $2, $3, $4, $5, NOW())',
                     [campaignId, tenantId, normalizedPhone, name, 'failed']
-                ).catch(err => console.error('[processBatch] Failed to log failed contact:', err.message));
+                ).catch(err => log.error('Failed to log failed contact:', err.message));
             }
         }
     }
 
     // Cleanup converted PTT file
-    if (pttOggPath) await fs.remove(pttOggPath).catch(err => console.error('[processBatch] Failed to cleanup PTT file:', err.message));
+    if (pttOggPath) await fs.remove(pttOggPath).catch(err => log.error('Failed to cleanup PTT file:', err.message));
 
     onLog(`\nBatch processing complete. Success: ${successCount}, Failed: ${failCount}`, 'DONE');
     return { successCount, failCount, stoppedReason, lastRow: stoppedRow || endRow };

@@ -1,30 +1,15 @@
 require('dotenv').config();
 
-// ── Startup Environment Validation ──────────────────────────────────────────
-const REQUIRED_ENV = ['DATABASE_URL', 'SESSION_SECRET'];
-const missing = REQUIRED_ENV.filter(k => !process.env[k]);
-if (missing.length > 0) {
-    console.error(`❌ FATAL: Missing required environment variables: ${missing.join(', ')}`);
-    console.error('   Copy .env.example to .env and fill in the values.');
-    process.exit(1);
-}
-if (process.env.SESSION_SECRET === 'autoinvite-change-me-in-production' && process.env.NODE_ENV === 'production') {
-    console.error('❌ FATAL: SESSION_SECRET is still the default placeholder. Generate a strong secret with: openssl rand -hex 32');
-    process.exit(1);
-}
-// ────────────────────────────────────────────────────────────────────────────
-
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
 const fs = require('fs');
-// QRCode no longer needed — WPPConnect provides base64 QR directly
 const session = require('express-session');
 const connectPgSimple = require('connect-pg-simple');
 const db = require('./database/pg-client');
 const { ensureSmartScheduleSchema } = require('./database/ensure_smart_schedule_schema');
-const { WhatsAppManager, loadContacts, processBatch } = require('./core');
+const { WhatsAppManager, loadContacts } = require('./core');
 const ScheduleManager = require('./core/ScheduleManager');
 const authRoutes = require('./routes/auth');
 const campaignRoutes = require('./routes/campaigns');
@@ -33,6 +18,21 @@ const { isAuthenticated } = require('./middleware/auth');
 const subscriptionGuard = require('./middleware/subscriptionGuard');
 const { i18next, middleware: i18nMiddleware } = require('./config/i18n');
 const ejsLayout = require('./middleware/ejsLayout');
+const { createLogger } = require('./utils/logger');
+const log = createLogger('Server');
+
+// ── Startup Environment Validation ──────────────────────────────────────────
+const REQUIRED_ENV = ['DATABASE_URL', 'SESSION_SECRET'];
+const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missing.length > 0) {
+    log.error(`FATAL: Missing required environment variables: ${missing.join(', ')}`);
+    log.error('   Copy .env.example to .env and fill in the values.');
+    process.exit(1);
+}
+if (process.env.SESSION_SECRET === 'autoinvite-change-me-in-production' && process.env.NODE_ENV === 'production') {
+    log.error('FATAL: SESSION_SECRET is still the default placeholder. Generate a strong secret with: openssl rand -hex 32');
+    process.exit(1);
+}
 
 const PgSession = connectPgSimple(session);
 
@@ -55,7 +55,7 @@ WhatsAppManager.startSleepMonitor(8 * 60 * 60 * 1000);
 ScheduleManager.setIo(io);
 ensureSmartScheduleSchema()
     .then(() => ScheduleManager.start())
-    .catch(err => console.error('[ScheduleManager] Startup failed:', err.message));
+    .catch(err => log.error('ScheduleManager startup failed:', err.message));
 
 const PORT = process.env.PORT || 5000;
 
@@ -79,7 +79,7 @@ const PgStore = new PgSession({
 
 // Log PgSession errors so we can catch silent DB failures
 PgStore.on('error', (err) => {
-    console.error('❌ [PgSession Store Error]:', err.message || err);
+    log.error('PgSession Store Error:', err.message || err);
 });
 
 const sessionMiddleware = session({
@@ -106,6 +106,9 @@ app.use(ejsLayout);
 app.use('/auth', authRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/whatsapp', require('./routes/whatsapp.api.js'));
+app.use('/api/contacts', require('./routes/contacts'));
+app.use('/api/tenant', require('./routes/tenant'));
+app.use('/api/inbox', require('./routes/inbox'));
 
 // ── Schedule Manager Debug Endpoints ──
 app.get('/api/scheduler/status', isAuthenticated, async (req, res) => {
@@ -131,7 +134,7 @@ app.post('/api/scheduler/test', isAuthenticated, async (req, res) => {
     }
 
     // Manually trigger a poll — for testing ONLY
-    console.log(`[ScheduleManager] Manual test poll triggered by user ${req.session.tenantId}`);
+    log.info(`Manual test poll triggered by user ${req.session.tenantId}`);
     try {
         await ScheduleManager.reconcileScheduledCampaigns();
         res.json({ success: true, message: 'Manual poll completed — check server logs' });
@@ -146,146 +149,21 @@ app.use('/admin', adminRoutes);
 // --- BILLING ROUTES ---
 app.use('/billing', require('./routes/billing'));
 
-// Tenant Settings API
-app.put('/api/tenant/settings', isAuthenticated, async (req, res) => {
-    try {
-        const { name, settings } = req.body;
-
-        if (!name || typeof name !== 'string' || name.length < 3) {
-            return res.status(400).json({ success: false, message: 'Invalid name' });
-        }
-        if (!settings || typeof settings !== 'object') {
-            return res.status(400).json({ success: false, message: 'Settings must be an object' });
-        }
-
-        await db.query('UPDATE tenants SET name = $1, settings = $2 WHERE id = $3', [name, JSON.stringify(settings), req.session.tenantId]);
-        req.session.tenantName = name;
-        res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
-    }
-});
-
-// Tenant Password Change API
-app.put('/api/tenant/password', isAuthenticated, async (req, res) => {
-    try {
-        const { current_password, new_password } = req.body;
-        const tenantId = req.session.tenantId;
-
-        if (!current_password || !new_password) {
-            return res.status(400).json({ success: false, message: 'جميع الحقول مطلوبة' });
-        }
-
-        if (new_password.length < 8) {
-            return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' });
-        }
-
-        const bcrypt = require('bcrypt');
-        const result = await db.query('SELECT password_hash FROM tenants WHERE id = $1', [tenantId]);
-        const tenant = result.rows[0];
-
-        if (!tenant) {
-            return res.status(404).json({ success: false, message: 'الحساب غير موجود' });
-        }
-
-        const match = await bcrypt.compare(current_password, tenant.password_hash);
-        if (!match) {
-            return res.status(401).json({ success: false, message: 'كلمة المرور الحالية غير صحيحة' });
-        }
-
-        const hashedPassword = await bcrypt.hash(new_password, 10);
-        await db.query('UPDATE tenants SET password_hash = $1 WHERE id = $2', [hashedPassword, tenantId]);
-
-        res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
-    }
-});
-
-// Contacts API — create
-app.post('/api/contacts', isAuthenticated, async (req, res) => {
-    try {
-        const { name, phone } = req.body;
-        const tenantId = req.session.tenantId;
-
-        if (!name || typeof name !== 'string' || name.trim().length === 0) {
-            return res.status(400).json({ success: false, message: 'الاسم مطلوب' });
-        }
-        if (!phone || typeof phone !== 'string' || phone.trim().length === 0) {
-            return res.status(400).json({ success: false, message: 'رقم الهاتف مطلوب' });
-        }
-
-        const result = await db.query(
-            'INSERT INTO contacts (tenant_id, name, phone, status) VALUES ($1, $2, $3, $4) RETURNING id, name, phone',
-            [tenantId, name.trim(), phone.trim(), 'pending']
-        );
-
-        res.json({ success: true, contact: result.rows[0] });
-    } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
-    }
-});
-
-// Contacts API — delete
-app.delete('/api/contacts/:id', isAuthenticated, async (req, res) => {
-    try {
-        const tenantId = req.session.tenantId;
-        const contactId = req.params.id;
-
-        const result = await db.query('DELETE FROM contacts WHERE id = $1 AND tenant_id = $2 RETURNING id', [contactId, tenantId]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ success: false, message: 'جهة اتصال غير موجودة' });
-        }
-
-        res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
-    }
-});
-
-// Tenant General Stats API
-app.get('/api/tenant/stats', isAuthenticated, async (req, res) => {
-    try {
-        const tenantId = req.session.tenantId;
-        const contactsCount = await db.query('SELECT COUNT(*) FROM contacts WHERE tenant_id = $1', [tenantId]);
-        const campaignResult = await db.query('SELECT * FROM campaigns WHERE tenant_id = $1', [tenantId]);
-        const sentResult = await db.query('SELECT COUNT(*) FROM sent_logs WHERE tenant_id = $1 AND (status IS NULL OR status = $2)', [tenantId, 'success']);
-        const tenantRes = await db.query('SELECT message_quota, messages_used FROM tenants WHERE id = $1', [tenantId]);
-
-        const tenant = tenantRes.rows[0] || { message_quota: 99, messages_used: 0 };
-
-        res.json({
-            success: true,
-            stats: {
-                contacts: parseInt(contactsCount.rows[0].count || 0),
-                campaigns: campaignResult.rows.length,
-                messagesSent: parseInt(sentResult.rows[0].count || 0),
-                activeCampaigns: campaignResult.rows.filter(c => c.status === 'active' || c.status === 'running').length,
-                messageQuota: parseInt(tenant.message_quota || 99),
-                messagesUsed: parseInt(tenant.messages_used || 0),
-                quotaRemaining: Math.max(0, parseInt(tenant.message_quota || 99) - parseInt(tenant.messages_used || 0))
-            }
-        });
-    } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
-    }
-});
-
 // Prevent Chrome/Puppeteer crashes from killing the entire server
 process.on('unhandledRejection', (reason) => {
-    console.error('⚠️ Unhandled Rejection (server stays alive):', reason?.message || reason);
+    log.error('Unhandled Rejection (server stays alive):', reason?.message || reason);
 });
 
 // ── BUG-8: Graceful shutdown — clean up WhatsApp clients & intervals on SIGTERM ──
 function gracefulShutdown(signal) {
-    console.log(`\n ${signal} received — shutting down gracefully...`);
+    log.info(`${signal} received — shutting down gracefully...`);
     WhatsAppManager.stopSleepMonitor();
     ScheduleManager.stop();
 
     // Stop all active WhatsApp clients
     for (const [tenantId] of WhatsAppManager.clients.entries()) {
-        console.log(`[Shutdown] Stopping WhatsApp client for tenant ${tenantId}`);
-        WhatsAppManager.stopClient(tenantId).catch(err => console.error('[Shutdown] Error stopping WA client:', err.message));
+        log.info(`Stopping WhatsApp client for tenant ${tenantId}`);
+        WhatsAppManager.stopClient(tenantId).catch(err => log.error('Error stopping WA client:', err.message));
     }
 
     // Close database pool
@@ -293,13 +171,12 @@ function gracefulShutdown(signal) {
 
     // Close HTTP server
     server.close(() => {
-        console.log('✅ HTTP server closed.');
+        log.info('HTTP server closed.');
         process.exit(0);
     });
 
-    // Force exit after 10s if cleanup stalls
     setTimeout(() => {
-        console.error('⚠️ Forced shutdown after 10s timeout.');
+        log.error('Forced shutdown after 10s timeout.');
         process.exit(1);
     }, 10000);
 }
@@ -315,13 +192,13 @@ const landingIndexPath = path.join(landingDistPath, 'index.html');
 
 // Auto-build landing page if dist doesn't exist
 if (!fs.existsSync(landingIndexPath)) {
-    console.log('⚙️ Landing page dist not found, attempting build...');
+    log.info('Landing page dist not found, attempting build...');
     try {
         const { execSync } = require('child_process');
         execSync('cd landing-autoinvite && npm install && npm run build', { stdio: 'inherit', cwd: path.join(__dirname, '..') });
-        console.log('✅ Landing page built successfully.');
+        log.info('Landing page built successfully.');
     } catch (buildErr) {
-        console.warn('⚠️ Landing page build failed:', buildErr.message);
+        log.warn('Landing page build failed:', buildErr.message);
     }
 }
 
@@ -333,7 +210,7 @@ app.get('/', (req, res) => {
     if (fs.existsSync(landingIndexPath)) {
         res.sendFile(landingIndexPath);
     } else {
-        console.warn('[Landing] index.html not found at:', landingIndexPath);
+        log.warn('index.html not found at:', landingIndexPath);
         res.redirect('/login');
     }
 });
@@ -418,7 +295,7 @@ app.get('/dashboard', isAuthenticated, subscriptionGuard(), async (req, res) => 
             chartData: dayData
         });
     } catch (err) {
-        console.error(err);
+        log.error('Dashboard error:', err);
         res.status(500).send('Internal Server Error');
     }
 });
@@ -591,60 +468,8 @@ app.get('/inbox', isAuthenticated, subscriptionGuard(), async (req, res) => {
             unreadMap,
         });
     } catch (err) {
-        console.error(err);
+        log.error('Inbox error:', err);
         res.status(500).send('Error loading inbox');
-    }
-});
-
-// Inbox API: Get messages for a specific conversation + mark as read
-app.get('/api/inbox/:phone/messages', isAuthenticated, async (req, res) => {
-    try {
-        const tenantId = req.session.tenantId;
-        const phone = req.params.phone;
-
-        const result = await db.query(
-            `SELECT * FROM messages WHERE tenant_id = $1 AND remote_phone = $2 ORDER BY created_at ASC LIMIT 200`,
-            [tenantId, phone]
-        );
-
-        // Mark all inbound messages from this phone as read
-        await db.query(
-            `UPDATE messages SET is_read = TRUE WHERE tenant_id = $1 AND remote_phone = $2 AND direction = 'inbound' AND is_read = FALSE`,
-            [tenantId, phone]
-        ).catch(err => console.error('[Inbox] Failed to mark messages as read:', err.message));
-
-        res.json({ success: true, messages: result.rows });
-    } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
-    }
-});
-
-// Inbox API: Send a reply
-app.post('/api/inbox/:phone/reply', isAuthenticated, async (req, res) => {
-    try {
-        const tenantId = req.session.tenantId;
-        const phone = req.params.phone;
-        const { body } = req.body;
-
-        if (!body || typeof body !== 'string' || body.trim().length === 0) {
-            return res.status(400).json({ success: false, message: 'الرسالة فارغة' });
-        }
-
-        const client = await WhatsAppManager.getClient(tenantId);
-        const chatId = `${phone}@c.us`;
-
-        await client.sendText(chatId, body.trim());
-
-        // Save outbound message
-        await db.query(
-            `INSERT INTO messages (tenant_id, remote_phone, sender, direction, body, whatsapp_timestamp)
-             VALUES ($1, $2, $3, $4, $5, NOW())`,
-            [tenantId, phone, 'me', 'outbound', body.trim()]
-        );
-
-        res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
     }
 });
 
@@ -698,7 +523,7 @@ io.on('connection', async (socket) => {
     const tenantRoom = `tenant_${tenantId}`;
     socket.join(tenantRoom);
 
-    console.log(`📡 Socket connected: Tenant ${tenantId}`);
+    log.info(`Socket connected: Tenant ${tenantId}`);
 
     try { await WhatsAppManager.getClient(tenantId); } catch (e) { }
 
@@ -711,8 +536,8 @@ io.on('connection', async (socket) => {
     }
 });
 
-console.log(`🔧 Session config: trustProxy=1 | cookie.secure=${cookieSecure} | env=${process.env.NODE_ENV || 'development'}`);
+log.info(`Session config: trustProxy=1 | cookie.secure=${cookieSecure} | env=${process.env.NODE_ENV || 'development'}`);
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 SaaS Platform running on http://localhost:${PORT}`);
+    log.info(`SaaS Platform running on http://localhost:${PORT}`);
 });

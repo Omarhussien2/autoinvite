@@ -5,6 +5,8 @@ const { quotaGuard } = require('../middleware/quotaGuard');
 const BackgroundQueue = require('../core/BackgroundQueue');
 const { WhatsAppManager, loadContacts } = require('../core');
 const db = require('../database/pg-client');
+const { createLogger } = require('../utils/logger');
+const log = createLogger('WhatsAppAPI');
 
 const router = express.Router();
 
@@ -60,7 +62,7 @@ router.post('/start', quotaGuard, async (req, res) => {
                                 : campaign.canvas_config;
                         }
                     } else {
-                        console.warn(`[Campaign ${campaignId}] Template file not found: ${resolvedTpl}, sending as text-only`);
+                        log.warn(`Campaign ${campaignId} template file not found: ${resolvedTpl}, sending as text-only`);
                     }
                 }
                 if (campaign.contacts_path) contactsPath = campaign.contacts_path;
@@ -104,7 +106,7 @@ router.post('/start', quotaGuard, async (req, res) => {
         res.json({ success: true, message: 'Started successfully' });
 
     } catch (error) {
-        console.error(error);
+        log.error('Start campaign error:', error);
         res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
@@ -140,7 +142,7 @@ router.post('/test', quotaGuard, async (req, res) => {
         await client.sendText(chatId, 'تجربة عزام: هلا والله! النظام شغال 🚀');
         res.json({ success: true, message: 'Test message sent' });
     } catch (err) {
-        console.error('Test Err:', err);
+        log.error('Test send error:', err);
         res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
@@ -167,7 +169,7 @@ router.post('/logout', async (req, res) => {
         await WhatsAppManager.logoutClient(req.tenantId);
         res.json({ success: true, message: 'تم قطع الاتصال وجاري توليد باركود جديد' });
     } catch (err) {
-        console.error('[WhatsApp API] Logout error:', err.message);
+        log.error('Logout error:', err.message);
         res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });

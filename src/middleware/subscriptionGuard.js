@@ -1,4 +1,6 @@
 const db = require('../database/pg-client');
+const { createLogger } = require('../utils/logger');
+const log = createLogger('subscriptionGuard');
 
 function subscriptionGuard(redirect = true) {
     return async (req, res, next) => {
@@ -35,7 +37,7 @@ function subscriptionGuard(redirect = true) {
             if (redirect) return res.redirect('/billing');
             return res.status(402).json({ success: false, error: 'Subscription inactive', code: 'SUBSCRIPTION_INACTIVE' });
         } catch (err) {
-            console.error('[SubscriptionGuard] DB error — denying access:', err.message);
+            log.error('DB error — denying access:', err.message);
             if (redirect) return res.redirect('/billing');
             return res.status(503).json({ success: false, error: 'Service unavailable', code: 'SUBSCRIPTION_CHECK_FAILED' });
         }

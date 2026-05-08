@@ -1,6 +1,8 @@
 const PgBoss = require('pg-boss');
 const db = require('../database/pg-client');
 const { ensureSmartScheduleSchema } = require('../database/ensure_smart_schedule_schema');
+const { createLogger } = require('../utils/logger');
+const log = createLogger('ScheduleManager');
 
 const QUEUE_NAME = 'campaign.schedule.start';
 const MAX_RETRIES = 3;
@@ -94,7 +96,7 @@ class ScheduleManager {
     async _start() {
         const boss = new PgBoss(this._bossConfig());
         boss.on('error', (err) => {
-            console.error('[ScheduleManager] pg-boss error:', err.message || err);
+            log.error('pg-boss error:', err.message || err);
         });
 
         await boss.start();
@@ -106,7 +108,7 @@ class ScheduleManager {
         });
 
         this._boss = boss;
-        console.log(`[ScheduleManager] Started pg-boss queue "${QUEUE_NAME}"`);
+        log.info(`Started pg-boss queue "${QUEUE_NAME}"`);
         await ensureSmartScheduleSchema();
         await this.reconcileScheduledCampaigns();
         return boss;
@@ -125,9 +127,9 @@ class ScheduleManager {
                 this._workerId = null;
             }
             await boss.stop({ graceful: true, timeout: 10000, wait: true });
-            console.log('[ScheduleManager] Stopped.');
+            log.info('Stopped.');
         } catch (err) {
-            console.error('[ScheduleManager] Stop error:', err.message);
+            log.error('Stop error:', err.message);
         }
     }
 
@@ -208,9 +210,9 @@ class ScheduleManager {
                     allowPast: true,
                     resetAttempts: false,
                 });
-                console.log(`[ScheduleManager] Reconciled campaign ${campaign.id}`);
+                log.info(`Reconciled campaign ${campaign.id}`);
             } catch (err) {
-                console.error(`[ScheduleManager] Failed to reconcile campaign ${campaign.id}:`, err.message);
+                log.error(`Failed to reconcile campaign ${campaign.id}:`, err.message);
             }
         }
 
@@ -228,9 +230,9 @@ class ScheduleManager {
                     allowPast: true,
                     resetAttempts: false,
                 });
-                console.log(`[ScheduleManager] Reconciled campaign batch ${batch.id}`);
+                log.info(`Reconciled campaign batch ${batch.id}`);
             } catch (err) {
-                console.error(`[ScheduleManager] Failed to reconcile batch ${batch.id}:`, err.message);
+                log.error(`Failed to reconcile batch ${batch.id}:`, err.message);
             }
         }
     }
@@ -711,7 +713,7 @@ class ScheduleManager {
         try {
             await this._boss.cancel(QUEUE_NAME, String(jobId));
         } catch (err) {
-            console.warn(`[ScheduleManager] Could not cancel job ${jobId}:`, err.message);
+            log.warn(`Could not cancel job ${jobId}:`, err.message);
         }
     }
 

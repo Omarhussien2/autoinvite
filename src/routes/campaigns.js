@@ -9,6 +9,9 @@ const ScheduleManager = require('../core/ScheduleManager');
 const { ensureSmartScheduleSchema } = require('../database/ensure_smart_schedule_schema');
 const { normalizeMessageTemplates } = require('../utils/messageTemplates');
 const { buildSmartBatches, normalizeSmartScheduleOptions } = require('../utils/smartScheduler');
+const { createLogger } = require('../utils/logger');
+const { importContacts, getTenantSchedulingPolicy, parseScheduleBody } = require('../services/campaign.service');
+const log = createLogger('Campaigns');
 
 const router = express.Router();
 const campaignUpload = upload.fields([{ name: 'template' }, { name: 'contacts' }, { name: 'voicenote' }]);
@@ -21,75 +24,9 @@ function handleCampaignUpload(req, res, next) {
             ? 'حجم الملف كبير. الحد الأقصى الحالي 32MB لكل ملف.'
             : (err.message || 'فشل رفع الملف');
 
-        console.error('[Campaigns] Upload failed:', message);
+        log.error('Upload failed:', message);
         return res.status(400).json({ success: false, message });
     });
-}
-
-function parseScheduleBody(body) {
-    const scheduledRaw = body.scheduled_at;
-    const isScheduled = scheduledRaw && scheduledRaw.trim() !== '';
-    if (!isScheduled) {
-        return { isScheduled: false, scheduledAt: null, timezone: null };
-    }
-
-    const scheduledAt = new Date(scheduledRaw);
-    if (Number.isNaN(scheduledAt.getTime())) {
-        const err = new Error('Invalid scheduled time');
-        err.statusCode = 400;
-        throw err;
-    }
-
-    if (scheduledAt.getTime() <= Date.now()) {
-        const err = new Error('Scheduled time must be in the future');
-        err.statusCode = 400;
-        throw err;
-    }
-
-    return {
-        isScheduled: true,
-        scheduledAt,
-        timezone: body.timezone || 'Asia/Riyadh',
-    };
-}
-
-async function importContacts(tenantId, campaignId, contactsPath) {
-    try {
-        const contactList = await loadContacts(contactsPath);
-        if (contactList && contactList.length > 0) {
-            const { normalizePhone } = require('../utils/dataProcessor');
-            for (const c of contactList) {
-                const rawName = c.Name || c['Ø§Ù„Ø¥Ø³Ù…'] || c.name || '';
-                const rawPhone = c.Phone || c['Ø±Ù‚Ù… Ø§Ù„Ø¬ÙˆØ§Ù„'] || c.phone || '';
-                const phone = normalizePhone(rawPhone);
-                if (!phone) continue;
-
-                await db.query(
-                    'INSERT INTO contacts (tenant_id, campaign_id, name, phone, status) VALUES ($1, $2, $3, $4, $5)',
-                    [tenantId, campaignId, rawName, phone, 'pending']
-                ).catch(err => console.error('[Contacts] Failed to insert contact:', err.message));
-            }
-            console.log(`[Contacts] Imported ${contactList.length} contacts for campaign ${campaignId}`);
-        }
-    } catch (contactErr) {
-        console.error('[Contacts] Failed to import contacts:', contactErr.message);
-    }
-}
-
-async function getTenantSchedulingPolicy(tenantId) {
-    let tenant = {};
-    try {
-        const result = await db.query('SELECT max_daily_limit FROM tenants WHERE id = $1', [tenantId]);
-        tenant = result.rows[0] || {};
-    } catch (err) {
-        if (err.code !== '42703') throw err;
-        console.warn('[Campaigns] max_daily_limit column missing; falling back to 200 until schema is updated.');
-    }
-
-    return {
-        maxDailyLimit: tenant.max_daily_limit || 200,
-        timezone: 'Asia/Riyadh',
-    };
 }
 
 async function createSmartCampaignBatches(tenantId, campaignId, contactsCount, options) {
@@ -214,7 +151,7 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, handleCampaignUpload,
 
         res.json({ success: true, campaignId });
     } catch (error) {
-        console.error('[Campaigns] Create failed:', error.message);
+        log.error('Create failed:', error.message);
         res.status(error.statusCode || 500).json({
             success: false,
             message: error.statusCode ? error.message : 'Internal server error',
@@ -355,7 +292,7 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
 
         res.json({ success: true });
     } catch (error) {
-        console.error('[Campaigns] Update failed:', error.message);
+        log.error('Update failed:', error.message);
         res.status(error.statusCode || 500).json({
             success: false,
             message: error.statusCode ? error.message : 'Internal server error',
@@ -401,7 +338,7 @@ router.get('/:id/stats', isAuthenticated, tenantScope, async (req, res) => {
             const contacts = await dataProcessor.processContacts(campaign.contacts_path, tenantId, campaignId);
             totalContacts = contacts.valid.length;
         } catch (e) {
-            console.error('Error loading contacts for stats:', e.message);
+            log.error('Error loading contacts for stats:', e.message);
         }
 
         const sentRes = await db.query(

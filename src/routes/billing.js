@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const db = require('../database/pg-client');
 const { isAuthenticated } = require('../middleware/auth');
 const { stripe, PLANS, getPlanQuota, isStripeConfigured } = require('../config/stripe');
+const { createLogger } = require('../utils/logger');
+const log = createLogger('Billing');
 
 const router = express.Router();
 
@@ -47,7 +49,7 @@ router.get('/', isAuthenticated, async (req, res) => {
                     pdfUrl: inv.invoice_pdf || null,
                 }));
             } catch (invErr) {
-                console.error('[Billing] Invoice list error:', invErr.message);
+                log.error('Invoice list error:', invErr.message);
             }
         }
 
@@ -71,7 +73,7 @@ router.get('/', isAuthenticated, async (req, res) => {
             invoices,
         });
     } catch (err) {
-        console.error('[Billing] Page error:', err.message);
+        log.error('Page error:', err.message);
         res.status(500).send('Error loading billing');
     }
 });
@@ -121,7 +123,7 @@ router.post('/checkout', isAuthenticated, async (req, res) => {
 
         res.json({ success: true, url: session.url });
     } catch (err) {
-        console.error('[Billing] Checkout error:', err.message);
+        log.error('Checkout error:', err.message);
         res.status(500).json({ success: false, message: err.message });
     }
 });
@@ -147,7 +149,7 @@ router.post('/portal', isAuthenticated, async (req, res) => {
 
         res.json({ success: true, url: session.url });
     } catch (err) {
-        console.error('[Billing] Portal error:', err.message);
+        log.error('Portal error:', err.message);
         res.status(500).json({ success: false, message: err.message });
     }
 });
@@ -163,12 +165,12 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!webhookSecret) {
-        console.error('[Stripe Webhook] FATAL: STRIPE_WEBHOOK_SECRET is not set — rejecting unverified payload');
+        log.error('FATAL: STRIPE_WEBHOOK_SECRET is not set — rejecting unverified payload');
         return res.status(500).send('Webhook secret not configured');
     }
 
     if (!sig) {
-        console.error('[Stripe Webhook] Missing stripe-signature header');
+        log.error('Missing stripe-signature header');
         return res.status(400).send('Missing signature');
     }
 
@@ -176,14 +178,14 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     try {
         event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (err) {
-        console.error('[Stripe Webhook] Signature verification failed:', err.message);
+        log.error('Signature verification failed:', err.message);
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
     const eventId = event.id;
     const eventType = event.type;
 
-    console.log(`[Stripe Webhook] ${eventType} (${eventId})`);
+    log.info(`${eventType} (${eventId})`);
 
     // Idempotency: check if we already processed this event
     try {
@@ -192,7 +194,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
             [eventId]
         );
         if (existing.rows.length > 0) {
-            console.log(`[Stripe Webhook] Duplicate event ${eventId} — skipping`);
+            log.info(`Duplicate event ${eventId} — skipping`);
             return res.json({ received: true });
         }
     } catch (_) {
@@ -208,7 +210,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                 const plan = PLANS[planKey] || PLANS.free;
 
                 if (!tenantId) {
-                    console.error('[Stripe Webhook] No tenantId in checkout session metadata');
+                    log.error('No tenantId in checkout session metadata');
                     break;
                 }
 
@@ -234,7 +236,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                     [customerId, subscriptionId, planKey, plan.quota, periodEnd, tenantId]
                 );
 
-                console.log(`[Stripe Webhook] Activated ${planKey} plan for tenant ${tenantId} (quota: ${plan.quota})`);
+                log.info(`Activated ${planKey} plan for tenant ${tenantId} (quota: ${plan.quota})`);
                 break;
             }
 
@@ -267,7 +269,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                     [plan.quota, periodEnd, planKey, customerId]
                 );
 
-                console.log(`[Stripe Webhook] Invoice paid — reset usage for customer ${customerId}`);
+                log.info(`Invoice paid — reset usage for customer ${customerId}`);
                 break;
             }
 
@@ -294,7 +296,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                     [status, planKey, plan.quota, periodEnd, customerId]
                 );
 
-                console.log(`[Stripe Webhook] Subscription updated: ${planKey}/${status} for customer ${customerId}`);
+                log.info(`Subscription updated: ${planKey}/${status} for customer ${customerId}`);
                 break;
             }
 
@@ -312,12 +314,12 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                     [PLANS.free.quota, customerId]
                 );
 
-                console.log(`[Stripe Webhook] Subscription deleted — downgraded to free for customer ${customerId}`);
+                log.info(`Subscription deleted — downgraded to free for customer ${customerId}`);
                 break;
             }
 
             default:
-                console.log(`[Stripe Webhook] Unhandled event type: ${eventType}`);
+                log.info(`Unhandled event type: ${eventType}`);
         }
 
         // Mark event as processed (idempotency)
@@ -341,11 +343,11 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                     [eventId, eventType]
                 );
             } catch (err2) {
-                console.error('[Stripe Webhook] Failed to record processed event:', err2.message);
+                log.error('Failed to record processed event:', err2.message);
             }
         }
     } catch (err) {
-        console.error(`[Stripe Webhook] Error processing ${eventType}:`, err.message);
+        log.error(`Error processing ${eventType}:`, err.message);
         return res.status(500).json({ error: 'Webhook processing failed' });
     }
 

@@ -3,6 +3,8 @@ const bcrypt = require('bcrypt');
 const db = require('../database/pg-client');
 const { isAuthenticated } = require('../middleware/auth');
 const WhatsAppManager = require('../core/WhatsAppManager');
+const { createLogger } = require('../utils/logger');
+const log = createLogger('Admin');
 
 const router = express.Router();
 
@@ -51,7 +53,7 @@ router.get('/dashboard', isAuthenticated, isAdmin, async (req, res) => {
             tenants
         });
     } catch (err) {
-        console.error('Admin Dashboard Error:', err);
+        log.error('Admin Dashboard Error:', err);
         res.status(500).send('خطأ داخلي في السيرفر');
     }
 });
@@ -70,7 +72,7 @@ router.patch('/tenants/:id/quota', isAuthenticated, isAdmin, async (req, res) =>
         await db.query('UPDATE tenants SET message_quota = $1 WHERE id = $2', [quota, id]);
         res.json({ success: true, message: 'تم تحديث الحصة بنجاح' });
     } catch (err) {
-        console.error('Update Quota Error:', err);
+        log.error('Update Quota Error:', err);
         res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
@@ -83,7 +85,7 @@ router.patch('/tenants/:id/daily-limit', isAuthenticated, isAdmin, async (req, r
         await db.query('UPDATE tenants SET max_daily_limit = $1 WHERE id = $2', [dailyLimit, id]);
         res.json({ success: true, max_daily_limit: dailyLimit });
     } catch (err) {
-        console.error('Update Daily Limit Error:', err);
+        log.error('Update Daily Limit Error:', err);
         res.status(500).json({ success: false, message: 'Internal server error' });
     }
 });
@@ -95,7 +97,7 @@ router.patch('/tenants/:id/reset-usage', isAuthenticated, isAdmin, async (req, r
         await db.query('UPDATE tenants SET messages_used = 0 WHERE id = $1', [id]);
         res.json({ success: true, message: 'تم إعادة تعيين الاستخدام' });
     } catch (err) {
-        console.error('Reset Usage Error:', err);
+        log.error('Reset Usage Error:', err);
         res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
@@ -128,7 +130,7 @@ router.post('/tenants', isAuthenticated, isAdmin, async (req, res) => {
 
         res.json({ success: true, tenant: result.rows[0] });
     } catch (err) {
-        console.error('Create Tenant Error:', err);
+        log.error('Create Tenant Error:', err);
         res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
@@ -156,7 +158,7 @@ router.delete('/tenants/:id', isAuthenticated, isAdmin, async (req, res) => {
 
         res.json({ success: true, message: 'تم حذف المستخدم بنجاح' });
     } catch (err) {
-        console.error('Delete Tenant Error:', err);
+        log.error('Delete Tenant Error:', err);
         res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
@@ -173,7 +175,7 @@ router.post('/tenants/:id/disconnect', isAuthenticated, isAdmin, async (req, res
         await WhatsAppManager.stopClient(id);
         res.json({ success: true, message: 'تم قطع اتصال الواتساب بنجاح' });
     } catch (err) {
-        console.error('Disconnect WhatsApp Error:', err);
+        log.error('Disconnect WhatsApp Error:', err);
         res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
 });
