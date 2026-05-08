@@ -57,8 +57,9 @@ async function importContacts(tenantId, campaignId, contactsPath) {
         if (contactList && contactList.length > 0) {
             const { normalizePhone } = require('../utils/dataProcessor');
             for (const c of contactList) {
-                const rawName = c.Name || c['Ø§Ù„Ø¥Ø³Ù…'] || c.name || '';
-                const rawPhone = c.Phone || c['Ø±Ù‚Ù… Ø§Ù„Ø¬ÙˆØ§Ù„'] || c.phone || '';
+                // loadContacts() normalizes columns to { Name, Phone }
+                const rawName = c.Name || c.name || '';
+                const rawPhone = c.Phone || c.phone || '';
                 const phone = normalizePhone(rawPhone);
                 if (!phone) continue;
 

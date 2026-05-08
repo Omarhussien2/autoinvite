@@ -46,11 +46,19 @@ router.post('/start', quotaGuard, async (req, res) => {
                 if (campaign.message_templates) messages = campaign.message_templates;
                 if (campaign.template_path) {
                     const fs = require('fs-extra');
-                    const resolvedTpl = require('path').resolve(__dirname, '../../', campaign.template_path);
+                    const pathMod = require('path');
+                    const resolvedTpl = pathMod.isAbsolute(campaign.template_path)
+                        ? campaign.template_path
+                        : pathMod.resolve(__dirname, '../../', campaign.template_path);
                     if (fs.existsSync(resolvedTpl)) {
                         hasTemplate = true;
                         templatePath = campaign.template_path;
-                        if (campaign.canvas_config) canvasConfig = campaign.canvas_config;
+                        if (campaign.canvas_config) {
+                            // PostgreSQL JSONB may return object or string
+                            canvasConfig = typeof campaign.canvas_config === 'string'
+                                ? JSON.parse(campaign.canvas_config)
+                                : campaign.canvas_config;
+                        }
                     } else {
                         console.warn(`[Campaign ${campaignId}] Template file not found: ${resolvedTpl}, sending as text-only`);
                     }
@@ -129,7 +137,7 @@ router.post('/test', quotaGuard, async (req, res) => {
         const chatId = `${targetPhone}@c.us`;
         const client = await WhatsAppManager.getClient(tenantId);
 
-        await client.sendMessage(chatId, 'تجربة عزام: هلا والله! النظام شغال 🚀');
+        await client.sendText(chatId, 'تجربة عزام: هلا والله! النظام شغال 🚀');
         res.json({ success: true, message: 'Test message sent' });
     } catch (err) {
         console.error('Test Err:', err);

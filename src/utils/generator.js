@@ -41,8 +41,11 @@ async function generateImage(name, phone, customTemplatePath = null, customCanva
     let imagePath = null;
     try {
         // ── Resolve template path ──
+        // Multer may save absolute paths; relative paths need resolving from project root
         const tPath = customTemplatePath
-            ? path.resolve(__dirname, '../../', customTemplatePath)
+            ? (require('path').isAbsolute(customTemplatePath)
+                ? customTemplatePath
+                : path.resolve(__dirname, '../../', customTemplatePath))
             : config.image.templatePath;
 
         // ── Resolve canvas config with safe fallbacks ──
