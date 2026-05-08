@@ -254,7 +254,7 @@ class ScheduleManager {
         }, {
             startAfter,
             retryLimit: 0,
-            expireInHours: 24,
+            expireInMinutes: 15,
             deleteAfterDays: 14,
         });
 
@@ -301,7 +301,7 @@ class ScheduleManager {
         }, {
             startAfter,
             retryLimit: 0,
-            expireInHours: 24,
+            expireInMinutes: 15,
             deleteAfterDays: 14,
         });
 
