@@ -190,7 +190,10 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                         } catch (mediaErr) {
                             const errObj = mediaErr && mediaErr.message ? mediaErr : { message: String(mediaErr), raw: mediaErr };
                             const errStr = JSON.stringify(errObj.raw || errObj.message);
-                            if (mediaRetries > 0 && (errStr.includes('InvalidMedia') || errStr.includes('RepairFailed') || errStr.includes('FailedType'))) {
+                            if (errStr.includes('msgChunks')) {
+                                // WPPConnect bug: message was sent but WA-JS couldn't fetch it back
+                                imageSent = true;
+                            } else if (mediaRetries > 0 && (errStr.includes('InvalidMedia') || errStr.includes('RepairFailed') || errStr.includes('FailedType'))) {
                                 mediaRetries--;
                                 onLog(`[Retry] خطأ مؤقت في الوسائط (${3 - mediaRetries}/3)، إعادة المحاولة بعد 3 ثوانٍ...`, 'WARN');
                                 await AntiBanEngine.sleep(3000);
@@ -200,11 +203,17 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                         }
                     }
                 } catch (imgErr) {
-                    // Fallback: send text-only message if image fails
-                    const errMsg = imgErr && imgErr.message ? imgErr.message : JSON.stringify(imgErr);
-                    onLog(`[Fallback] فشل إرسال الصورة لـ ${name}: ${errMsg} — إرسال نص فقط`, 'WARN');
-                    WhatsAppManager.emitToTenant(tenantId, 'log', { message: `فشل إرسال الصورة لـ ${name}، يتم الإرسال نص فقط`, type: 'WARN' });
-                    await client.sendText(chatId, message);
+                    const errStr = String(imgErr && imgErr.message ? imgErr.message : imgErr);
+                    if (errStr.includes('msgChunks')) {
+                        // ignore, message sent
+                    } else {
+                        // Fallback: send text-only message if image fails
+                        onLog(`[Fallback] فشل إرسال الصورة لـ ${name}: ${errStr} — إرسال نص فقط`, 'WARN');
+                        WhatsAppManager.emitToTenant(tenantId, 'log', { message: `فشل إرسال الصورة لـ ${name}، يتم الإرسال نص فقط`, type: 'WARN' });
+                        await client.sendText(chatId, message).catch(e => {
+                            if (!String(e).includes('msgChunks')) throw e;
+                        });
+                    }
                 } finally {
                     // Always cleanup temp image
                     if (imagePath) {
@@ -212,7 +221,9 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     }
                 }
             } else {
-                await client.sendText(chatId, message);
+                await client.sendText(chatId, message).catch(e => {
+                    if (!String(e).includes('msgChunks')) throw e;
+                });
             }
 
             // ── Step 6: Record sent & apply inter-message anti-ban delay ───

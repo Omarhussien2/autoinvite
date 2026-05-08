@@ -68,6 +68,15 @@ class WhatsAppManager {
         this.states.set(tenantId, { status: 'INITIALIZING', lastQr: null, lastActive: Date.now(), phone: null });
         this.emitToTenant(tenantId, 'status', 'جاري تهيئة جلسة الواتساب...');
 
+        // Clean orphaned locks left by PM2 crashes
+        const sessionPath = path.join(tokenDir, `tenant_${tenantId}`);
+        const lockPaths = [path.join(sessionPath, 'SingletonLock'), path.join(sessionPath, 'SingletonCookie')];
+        for (const lock of lockPaths) {
+            if (fs.existsSync(lock)) {
+                try { fs.unlinkSync(lock); } catch (e) {}
+            }
+        }
+
         try {
             let client;
             try {

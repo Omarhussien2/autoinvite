@@ -268,8 +268,10 @@ router.get('/:id/stats', isAuthenticated, tenantScope, async (req, res) => {
 
         let totalContacts = 0;
         try {
+            const { loadContacts, processContacts } = require('../utils/dataProcessor');
             const contacts = await loadContacts(campaign.contacts_path);
-            totalContacts = contacts.length;
+            const processed = processContacts(contacts);
+            totalContacts = processed.valid.length;
         } catch (e) {
             console.error('Error loading contacts for stats:', e.message);
         }
