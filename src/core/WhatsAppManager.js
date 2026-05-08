@@ -1,9 +1,29 @@
 const wppconnect = require('@wppconnect-team/wppconnect');
 const path = require('path');
 const fs = require('fs');
+const { execFileSync } = require('child_process');
 const db = require('../database/pg-client');
 const { createLogger } = require('../utils/logger');
 const log = createLogger('WhatsAppManager');
+
+function cleanExecutablePath(value) {
+    return value && String(value).trim().replace(/^["']|["']$/g, '');
+}
+
+function firstExistingPath(paths) {
+    return paths.map(cleanExecutablePath).find((candidate) => candidate && fs.existsSync(candidate));
+}
+
+function commandPath(command, args = []) {
+    try {
+        return cleanExecutablePath(execFileSync(command, args, {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).split(/\r?\n/)[0]);
+    } catch (_) {
+        return null;
+    }
+}
 
 class WhatsAppManager {
     constructor() {
@@ -12,6 +32,7 @@ class WhatsAppManager {
         this.states = new Map(); // tenantId -> { status, lastQr, lastActive, phone }
         this.io = null;
         this.MAX_TOTAL_CLIENTS = process.env.MAX_TOTAL_CLIENTS || 5;
+        this._chromiumExecutablePath = undefined;
     }
 
     setIo(io) {
@@ -58,6 +79,68 @@ class WhatsAppManager {
         }
     }
 
+    _resolveChromiumExecutablePath() {
+        if (this._chromiumExecutablePath !== undefined) return this._chromiumExecutablePath;
+
+        const envPath = firstExistingPath([process.env.CHROMIUM_PATH, process.env.PUPPETEER_EXECUTABLE_PATH]);
+        if (envPath) {
+            this._chromiumExecutablePath = envPath;
+            log.info(`Using Chromium executable from environment: ${envPath}`);
+            return this._chromiumExecutablePath;
+        }
+
+        const platformCandidates = process.platform === 'win32'
+            ? [
+                'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+                'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+                'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+                'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+            ]
+            : [
+                '/usr/bin/google-chrome',
+                '/usr/bin/google-chrome-stable',
+                '/usr/bin/chromium',
+                '/usr/bin/chromium-browser',
+                '/snap/bin/chromium',
+            ];
+
+        const knownPath = firstExistingPath(platformCandidates);
+        if (knownPath) {
+            this._chromiumExecutablePath = knownPath;
+            log.info(`Using Chromium executable: ${knownPath}`);
+            return this._chromiumExecutablePath;
+        }
+
+        const detectedPath = process.platform === 'win32'
+            ? firstExistingPath([
+                commandPath('where.exe', ['chrome']),
+                commandPath('where.exe', ['msedge']),
+                commandPath('where.exe', ['chromium']),
+            ])
+            : firstExistingPath([
+                commandPath('which', ['google-chrome']),
+                commandPath('which', ['google-chrome-stable']),
+                commandPath('which', ['chromium']),
+                commandPath('which', ['chromium-browser']),
+            ]);
+
+        this._chromiumExecutablePath = detectedPath || null;
+        if (this._chromiumExecutablePath) {
+            log.info(`Auto-detected Chromium executable: ${this._chromiumExecutablePath}`);
+        } else {
+            log.warn('No system Chrome/Chromium executable detected; WPPConnect will fall back to Puppeteer defaults.');
+        }
+
+        return this._chromiumExecutablePath;
+    }
+
+    _normalizeQrImage(qrImage) {
+        if (!qrImage || typeof qrImage !== 'string') return qrImage;
+        const trimmed = qrImage.trim();
+        if (trimmed.startsWith('data:image/')) return trimmed;
+        return `data:image/png;base64,${trimmed}`;
+    }
+
     async initializeClient(tenantId) {
         const tokenDir = path.join(
             process.env.DATA_DIR || path.join(__dirname, '../../'),
@@ -82,14 +165,16 @@ class WhatsAppManager {
         try {
             let client;
             try {
+                const chromiumExecutablePath = this._resolveChromiumExecutablePath();
                 client = await wppconnect.create({
                     session: `tenant_${tenantId}`,
                     tokenStore: 'file',
                     folderNameToken: tokenDir,
                     headless: true,
-                    useChrome: false,
+                    useChrome: !chromiumExecutablePath,
                     autoClose: 0, // Never auto-close
                     puppeteerOptions: {
+                        ...(chromiumExecutablePath ? { executablePath: chromiumExecutablePath } : {}),
                         args: [
                             '--no-sandbox',
                             '--disable-setuid-sandbox',
@@ -109,14 +194,15 @@ class WhatsAppManager {
                         ]
                     },
                     catchQR: (base64Qrimg, asciiQR, attempts, urlCode) => {
+                        const qrImage = this._normalizeQrImage(base64Qrimg);
                         const state = this.states.get(tenantId);
                         if (state) {
                             state.status = 'QUERY_QR';
-                            state.lastQr = base64Qrimg; // Already base64 data URI from WPPConnect
+                            state.lastQr = qrImage;
                             this.updateActivity(tenantId);
                         }
                         // Emit the base64 QR directly — frontend expects a data URI
-                        this.emitToTenant(tenantId, 'qr', base64Qrimg);
+                        this.emitToTenant(tenantId, 'qr', qrImage);
                         this.emitToTenant(tenantId, 'status', 'يا هلا! امسح الباركود عشان نربط الواتساب');
                     },
                     statusFind: (statusSession, session) => {
@@ -238,6 +324,17 @@ class WhatsAppManager {
                 break;
 
             case 'notLogged':
+                if (state) {
+                    state.status = state.lastQr ? 'QUERY_QR' : 'INITIALIZING';
+                    state.phone = null;
+                    this.updateActivity(tenantId);
+                }
+                await db.query(
+                    'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = NULL WHERE id = $2',
+                    ['disconnected', tenantId]
+                ).catch(err => log.error('Failed to update tenant status (not logged):', err.message));
+                break;
+
             case 'browserClose':
             case 'desconnectedMobile':
             case 'deleteToken':
@@ -247,6 +344,7 @@ class WhatsAppManager {
                     state.lastQr = null;
                 }
                 this.emitToTenant(tenantId, 'status', 'تم قطع الاتصال بالواتساب.');
+                this.emitToTenant(tenantId, 'disconnected');
                 this.clients.delete(tenantId);
                 await db.query(
                     'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = NULL WHERE id = $2',
@@ -308,11 +406,9 @@ class WhatsAppManager {
         ).catch(err => log.error('Failed to update tenant status (logout):', err.message));
 
         log.info(`Re-initializing client for tenant ${tenantId} (fresh QR)`);
-        try {
-            await this.getClient(tenantId);
-        } catch (err) {
+        this.getClient(tenantId).catch((err) => {
             log.error(`Re-init after logout failed for tenant ${tenantId}:`, err.message);
-        }
+        });
     }
 
     async stopClient(tenantId) {
@@ -341,6 +437,8 @@ class WhatsAppManager {
             state.lastQr = null;
         }
         this.emitToTenant(tenantId, 'status', 'تم إيقاف الجلسة. يمكنك إعادة الاتصال.');
+
+        this.emitToTenant(tenantId, 'disconnected');
 
         await db.query(
             'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = NULL WHERE id = $2',

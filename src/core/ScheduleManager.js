@@ -192,6 +192,41 @@ class ScheduleManager {
         );
     }
 
+    async cancelCampaignBatches(campaignId, tenantId, options = {}) {
+        await this._ensureStarted();
+        await ensureSmartScheduleSchema();
+
+        const deleteRows = options.deleteRows !== false;
+        const result = await db.query(
+            `SELECT id, schedule_job_id
+             FROM campaign_batches
+             WHERE campaign_id = $1 AND tenant_id = $2`,
+            [campaignId, tenantId]
+        );
+
+        for (const batch of result.rows) {
+            await this._cancelJob(batch.schedule_job_id);
+        }
+
+        if (deleteRows) {
+            await db.query(
+                'DELETE FROM campaign_batches WHERE campaign_id = $1 AND tenant_id = $2',
+                [campaignId, tenantId]
+            );
+            return;
+        }
+
+        await db.query(
+            `UPDATE campaign_batches
+             SET schedule_job_id = NULL,
+                 schedule_attempts = 0,
+                 schedule_last_error = NULL,
+                 schedule_last_attempt_at = NULL
+             WHERE campaign_id = $1 AND tenant_id = $2`,
+            [campaignId, tenantId]
+        );
+    }
+
     async reconcileScheduledCampaigns() {
         await this._ensureStarted();
         await ensureSmartScheduleSchema();

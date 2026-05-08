@@ -31,7 +31,7 @@ function handleCampaignUpload(req, res, next) {
 
 async function createSmartCampaignBatches(tenantId, campaignId, contactsCount, options) {
     await ensureSmartScheduleSchema();
-    await db.query('DELETE FROM campaign_batches WHERE tenant_id = $1 AND campaign_id = $2', [tenantId, campaignId]);
+    await ScheduleManager.cancelCampaignBatches(campaignId, tenantId);
     const batches = buildSmartBatches(contactsCount, options);
 
     for (const batch of batches) {
@@ -213,6 +213,7 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
         const status = scheduleBody.isScheduled ? 'scheduled' : 'active';
 
         await ScheduleManager.cancelCampaign(req.params.id, req.tenantId, existing.schedule_job_id);
+        await ScheduleManager.cancelCampaignBatches(req.params.id, req.tenantId);
 
         let query = `
             UPDATE campaigns
@@ -312,6 +313,7 @@ router.delete('/:id', isAuthenticated, tenantScope, async (req, res) => {
         const existing = existingRes.rows[0];
         if (existing) {
             await ScheduleManager.cancelCampaign(req.params.id, req.tenantId, existing.schedule_job_id);
+            await ScheduleManager.cancelCampaignBatches(req.params.id, req.tenantId);
         }
 
         await db.query('DELETE FROM campaigns WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenantId]);

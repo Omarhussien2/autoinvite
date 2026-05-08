@@ -441,21 +441,27 @@
                 formData.append('canvas_config', JSON.stringify(canvasConfig));
             }
 
-            // Scheduling — convert user's local datetime to UTC for server comparison
-            // The server stores and compares in UTC, so toISOString() is correct
-            if (window.CAMPAIGN_SCHEDULE_MODE === 'later') {
+            // Scheduling — send both local wall-clock time and timezone so the server
+            // can store the exact intended instant in UTC.
+            const scheduleMode = window.CAMPAIGN_SCHEDULE_MODE || 'immediate';
+            const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Riyadh';
+            formData.append('schedule_mode', scheduleMode);
+            formData.append('timezone', browserTimezone);
+
+            if (scheduleMode === 'later') {
                 const dateVal = document.getElementById('schedule-date').value;
                 const timeVal = document.getElementById('schedule-time').value;
                 if (dateVal && timeVal) {
                     // Create Date from user's local timezone input, then convert to UTC ISO
-                    const localDate = new Date(dateVal + 'T' + timeVal);
+                    const scheduledLocal = dateVal + 'T' + timeVal;
+                    const localDate = new Date(scheduledLocal);
                     if (isNaN(localDate.getTime())) {
                         showToast('تاريخ أو وقت غير صالح', 'error');
                         btn.textContent = origText;
                         btn.disabled = false;
                         return;
                     }
-                    formData.append('timezone', Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Riyadh');
+                    formData.append('scheduled_at_local', scheduledLocal);
                     formData.append('scheduled_at', localDate.toISOString());
                 } else {
                     showToast('يرجى اختيار التاريخ والوقت', 'error');
@@ -463,6 +469,14 @@
                     btn.disabled = false;
                     return;
                 }
+            } else if (scheduleMode === 'smart') {
+                formData.append('smart_schedule_enabled', 'true');
+                formData.append('daily_limit', document.getElementById('dailyLimit').value || '100');
+                formData.append('safety_mode', document.getElementById('safetyMode').value || 'balanced');
+                formData.append('send_window_start', document.getElementById('sendWindowStart').value || '10:00');
+                formData.append('send_window_end', document.getElementById('sendWindowEnd').value || '20:00');
+                formData.append('min_delay_seconds', document.getElementById('minDelaySeconds').value || '120');
+                formData.append('max_delay_seconds', document.getElementById('maxDelaySeconds').value || '240');
             }
 
             // Validate: voice mode requires an audio file (create only)

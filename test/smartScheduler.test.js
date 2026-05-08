@@ -80,3 +80,17 @@ test('reduces daily batch size when the send window cannot fit the requested lim
     assert.ok(capacity < 200);
     assert.ok(batches.every((batch) => batch.messageCount <= capacity));
 });
+
+test('starts smart scheduling on the next day when the send window already ended', () => {
+    const batches = buildSmartBatches(25, {
+        smart_schedule_enabled: true,
+        daily_limit: 100,
+        send_window_start: '10:00',
+        send_window_end: '20:00',
+        min_delay_seconds: 30,
+        max_delay_seconds: 30,
+        timezone: 'Asia/Riyadh',
+    }, new Date('2026-05-08T19:30:00.000Z'));
+
+    assert.equal(batches[0].scheduledAt.toISOString(), '2026-05-09T07:00:00.000Z');
+});

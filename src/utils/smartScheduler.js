@@ -51,6 +51,20 @@ function minutesFromClock(value) {
     return (hours * 60) + minutes;
 }
 
+function isWithinWindow(minuteOfDay, startClock, endClock) {
+    const start = minutesFromClock(startClock);
+    const end = minutesFromClock(endClock);
+    if (end > start) return minuteOfDay >= start && minuteOfDay < end;
+    return minuteOfDay >= start || minuteOfDay < end;
+}
+
+function isBeforeWindowStart(minuteOfDay, startClock, endClock) {
+    const start = minutesFromClock(startClock);
+    const end = minutesFromClock(endClock);
+    if (end > start) return minuteOfDay < start;
+    return minuteOfDay >= end && minuteOfDay < start;
+}
+
 function getSafetyPreset(mode) {
     return SAFETY_PRESETS[mode] || SAFETY_PRESETS.balanced;
 }
@@ -111,18 +125,23 @@ function estimateWindowCapacity(options) {
     return Math.max(1, Math.floor(windowSeconds / estimatedSecondsPerMessage));
 }
 
-function getDateParts(date, timeZone) {
+function getDateTimeParts(date, timeZone) {
     const parts = new Intl.DateTimeFormat('en-CA', {
         timeZone,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
     }).formatToParts(date);
 
     return {
         year: parseInt(parts.find((part) => part.type === 'year').value, 10),
         month: parseInt(parts.find((part) => part.type === 'month').value, 10),
         day: parseInt(parts.find((part) => part.type === 'day').value, 10),
+        hour: parseInt(parts.find((part) => part.type === 'hour').value, 10) % 24,
+        minute: parseInt(parts.find((part) => part.type === 'minute').value, 10),
     };
 }
 
@@ -175,7 +194,12 @@ function buildSmartBatches(totalContacts, rawOptions = {}, now = new Date()) {
 
     const windowCapacity = estimateWindowCapacity(options);
     const maxPerDay = Math.max(1, Math.min(options.dailyLimit, windowCapacity, HARD_DAILY_LIMIT));
-    const startParts = getDateParts(rawOptions.startAt ? new Date(rawOptions.startAt) : now, options.timezone);
+    const startDate = rawOptions.startAt ? new Date(rawOptions.startAt) : now;
+    const startDateTimeParts = getDateTimeParts(startDate, options.timezone);
+    const nowMinutes = (startDateTimeParts.hour * 60) + startDateTimeParts.minute;
+    const startsToday = isWithinWindow(nowMinutes, options.sendWindowStart, options.sendWindowEnd)
+        || isBeforeWindowStart(nowMinutes, options.sendWindowStart, options.sendWindowEnd);
+    const startParts = addDaysToParts(startDateTimeParts, startsToday ? 0 : 1);
     const batches = [];
     let remaining = contactsCount;
     let startRow = 1;
@@ -190,8 +214,8 @@ function buildSmartBatches(totalContacts, rawOptions = {}, now = new Date()) {
         const messageCount = Math.min(remaining, dayLimit, HARD_DAILY_LIMIT);
         const dateParts = addDaysToParts(startParts, dayIndex);
         let scheduledAt = zonedTimeToUtc(dateParts, options.sendWindowStart, options.timezone);
-        if (dayIndex === 0 && scheduledAt.getTime() <= now.getTime()) {
-            scheduledAt = new Date(now.getTime() + 60 * 1000);
+        if (dayIndex === 0 && isWithinWindow(nowMinutes, options.sendWindowStart, options.sendWindowEnd)) {
+            scheduledAt = new Date(startDate.getTime() + 60 * 1000);
         }
 
         batches.push({

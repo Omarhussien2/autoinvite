@@ -1,6 +1,7 @@
 const db = require('../database/pg-client');
 const { loadContacts } = require('../core');
 const { normalizePhone } = require('../utils/dataProcessor');
+const { getDefaultTimezone, parseScheduledAtFromBody } = require('../utils/scheduleTime');
 const { createLogger } = require('../utils/logger');
 const log = createLogger('campaign.service');
 
@@ -38,35 +39,21 @@ async function getTenantSchedulingPolicy(tenantId) {
 
     return {
         maxDailyLimit: tenant.max_daily_limit || 200,
-        timezone: 'Asia/Riyadh',
+        timezone: getDefaultTimezone(),
     };
 }
 
-function parseScheduleBody(body) {
-    const scheduledRaw = body.scheduled_at;
-    const isScheduled = scheduledRaw && scheduledRaw.trim() !== '';
-    if (!isScheduled) {
-        return { isScheduled: false, scheduledAt: null, timezone: null };
-    }
+function parseScheduleBody(body, now = new Date()) {
+    const parsed = parseScheduledAtFromBody(body);
+    if (!parsed.isScheduled) return parsed;
 
-    const scheduledAt = new Date(scheduledRaw);
-    if (Number.isNaN(scheduledAt.getTime())) {
-        const err = new Error('Invalid scheduled time');
-        err.statusCode = 400;
-        throw err;
-    }
-
-    if (scheduledAt.getTime() <= Date.now()) {
+    if (parsed.scheduledAt.getTime() <= now.getTime()) {
         const err = new Error('Scheduled time must be in the future');
         err.statusCode = 400;
         throw err;
     }
 
-    return {
-        isScheduled: true,
-        scheduledAt,
-        timezone: body.timezone || 'Asia/Riyadh',
-    };
+    return parsed;
 }
 
 module.exports = {

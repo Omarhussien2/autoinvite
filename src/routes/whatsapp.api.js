@@ -16,7 +16,9 @@ router.use(tenantScope);
 // WhatsApp Initialization Trigger
 router.post('/init', async (req, res) => {
     try {
-        await WhatsAppManager.getClient(req.tenantId);
+        WhatsAppManager.getClient(req.tenantId).catch((err) => {
+            log.error(`WhatsApp init failed for tenant ${req.tenantId}:`, err.message);
+        });
         res.json({ success: true, message: 'Initialization started' });
     } catch (err) {
         res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });

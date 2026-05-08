@@ -525,7 +525,9 @@ io.on('connection', async (socket) => {
 
     log.info(`Socket connected: Tenant ${tenantId}`);
 
-    try { await WhatsAppManager.getClient(tenantId); } catch (e) { }
+    WhatsAppManager.getClient(tenantId).catch((err) => {
+        log.error(`WhatsApp socket init failed for tenant ${tenantId}:`, err.message);
+    });
 
     const state = WhatsAppManager.getTenantState(tenantId);
     if (state.status === 'QUERY_QR' && state.lastQr) {
