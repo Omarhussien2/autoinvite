@@ -167,6 +167,102 @@ function normalizeContactColumns(rows) {
     })).filter(r => r.Phone !== '');
 }
 
+function splitDelimitedLine(line) {
+    const out = [];
+    let value = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        const next = line[i + 1];
+
+        if (ch === '"' && inQuotes && next === '"') {
+            value += '"';
+            i++;
+            continue;
+        }
+
+        if (ch === '"') {
+            inQuotes = !inQuotes;
+            continue;
+        }
+
+        if (!inQuotes && (ch === ',' || ch === ';' || ch === '\t')) {
+            out.push(value.trim());
+            value = '';
+            continue;
+        }
+
+        value += ch;
+    }
+
+    out.push(value.trim());
+    return out.map(v => v.replace(/^\uFEFF/, '').trim()).filter(v => v !== '');
+}
+
+function parseFlatContactTokens(tokens) {
+    const cleaned = tokens.map(t => String(t || '').trim()).filter(Boolean);
+    if (cleaned.length < 2) return [];
+
+    const isNameHeader = value => ['name', 'fullname', 'full_name', 'الاسم', 'الإسم', 'اسم'].includes(value.toLowerCase());
+    const isPhoneHeader = value => ['phone', 'mobile', 'number', 'رقم', 'جوال', 'هاتف', 'رقم الجوال', 'رقم الهاتف'].includes(value.toLowerCase());
+
+    let data = cleaned;
+    for (let i = 0; i < cleaned.length - 1; i++) {
+        if (isNameHeader(cleaned[i]) && isPhoneHeader(cleaned[i + 1])) {
+            data = cleaned.slice(i + 2);
+            break;
+        }
+    }
+
+    if (data.length % 2 === 1 && !/\d/.test(data[0])) {
+        data = data.slice(1);
+    }
+
+    const contacts = [];
+    for (let i = 0; i < data.length - 1; i += 2) {
+        contacts.push({ Name: data[i], Phone: data[i + 1] });
+    }
+
+    return contacts.filter(c => c.Phone && /\d/.test(c.Phone));
+}
+
+function parseLooseContactsText(text) {
+    const lines = String(text || '')
+        .replace(/^\uFEFF/, '')
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean);
+
+    if (lines.length === 0) return [];
+
+    const rows = lines.map(splitDelimitedLine).filter(row => row.length > 0);
+    if (rows.length > 1 && rows[0].length >= 2) {
+        const headers = rows[0].map(header => header.trim());
+        const tableRows = rows.slice(1).map(row => {
+            const entry = {};
+            headers.forEach((header, index) => {
+                entry[header || `column_${index + 1}`] = row[index] == null ? '' : row[index];
+            });
+            return entry;
+        });
+        const normalized = normalizeContactColumns(tableRows);
+        if (normalized.length > 0) return normalized;
+    }
+
+    const tokens = rows.flat();
+    return parseFlatContactTokens(tokens);
+}
+
+function shouldUseLooseContactFallback(normalizedRows) {
+    if (!normalizedRows || normalizedRows.length === 0) return true;
+    if (normalizedRows.length > 1) return false;
+
+    const only = normalizedRows[0];
+    const phone = String(only.Phone || '');
+    return phone.includes(',') || phone.includes(';') || /name|phone|mobile/i.test(phone);
+}
+
 async function loadContacts(customFilePath = null) {
     const filePath = customFilePath || path.resolve(__dirname, '../../data/data - Sheet1.csv');
 
@@ -179,13 +275,39 @@ async function loadContacts(customFilePath = null) {
                 fs.createReadStream(filePath)
                     .pipe(csv())
                     .on('data', (data) => rows.push(data))
-                    .on('end', () => resolve(normalizeContactColumns(rows)))
+                    .on('end', async () => {
+                        try {
+                            const normalized = normalizeContactColumns(rows);
+                            if (!shouldUseLooseContactFallback(normalized)) {
+                                resolve(normalized);
+                                return;
+                            }
+
+                            const text = await fs.readFile(filePath, 'utf8');
+                            const looseContacts = parseLooseContactsText(text);
+                            resolve(looseContacts.length > 0 ? looseContacts : normalized);
+                        } catch (err) {
+                            reject(err);
+                        }
+                    })
                     .on('error', (err) => reject(err));
             } else if (ext === 'xlsx' || ext === 'xls') {
                 readXlsxFile(filePath)
                     .then((rows) => {
                         if (!rows || rows.length === 0) {
                             resolve([]);
+                            return;
+                        }
+
+                        if (!Array.isArray(rows[0])) {
+                            const normalized = normalizeContactColumns(rows);
+                            if (shouldUseLooseContactFallback(normalized)) {
+                                const tokens = rows.flatMap(row => Object.values(row || {}).flatMap(value => splitDelimitedLine(String(value || ''))));
+                                const looseContacts = parseFlatContactTokens(tokens);
+                                resolve(looseContacts.length > 0 ? looseContacts : normalized);
+                                return;
+                            }
+                            resolve(normalized);
                             return;
                         }
 
@@ -198,7 +320,15 @@ async function loadContacts(customFilePath = null) {
                             return entry;
                         });
 
-                        resolve(normalizeContactColumns(dataRows));
+                        const normalized = normalizeContactColumns(dataRows);
+                        if (shouldUseLooseContactFallback(normalized)) {
+                            const tokens = rows.flatMap(row => row.flatMap(value => splitDelimitedLine(String(value || ''))));
+                            const looseContacts = parseFlatContactTokens(tokens);
+                            resolve(looseContacts.length > 0 ? looseContacts : normalized);
+                            return;
+                        }
+
+                        resolve(normalized);
                     })
                     .catch((err) => reject(err));
             } else {

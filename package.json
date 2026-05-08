@@ -12,7 +12,7 @@
     "build:css": "npx tailwindcss -i src/styles/input.css -o public/css/tailwind.css --minify",
     "build:landing": "cd landing-autoinvite && npm install && npm run build",
     "postinstall": "npm run build:css && (npm run build:landing || echo 'Landing page build skipped')",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/*.test.js"
   },
   "keywords": [],
   "author": "",
@@ -45,6 +45,7 @@
     "pg-boss": "10.4.2",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
+    "read-excel-file": "^9.0.9",
     "socket.io": "^4.8.3",
     "stripe": "^22.0.0",
     "xlsx": "^0.18.5"

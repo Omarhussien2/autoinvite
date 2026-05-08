@@ -2,7 +2,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
 const ALLOWED_CONTACT_TYPES = [
     'text/csv',
     'application/vnd.ms-excel',
@@ -34,8 +34,10 @@ const storage = multer.diskStorage({
 
 function fileFilter(req, file, cb) {
     if (file.fieldname === 'template') {
-        if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
-            return cb(new Error('نوع الصورة غير مدعوم. المسموح: JPG, PNG, WEBP, GIF فقط'), false);
+        const ext = path.extname(file.originalname).toLowerCase();
+        const allowedExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+        if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype) && !allowedExts.includes(ext)) {
+            return cb(new Error('نوع الصورة غير مدعوم. استخدم JPG أو PNG أو WEBP فقط. صور HEIC/AVIF تحتاج تحويل قبل الرفع.'), false);
         }
     } else if (file.fieldname === 'contacts') {
         const ext = path.extname(file.originalname).toLowerCase();
@@ -57,7 +59,7 @@ const upload = multer({
     storage,
     fileFilter,
     limits: {
-        fileSize: 16 * 1024 * 1024,
+        fileSize: 32 * 1024 * 1024,
         files: 3
     }
 });

@@ -9,6 +9,20 @@ const ScheduleManager = require('../core/ScheduleManager');
 const { normalizeMessageTemplates } = require('../utils/messageTemplates');
 
 const router = express.Router();
+const campaignUpload = upload.fields([{ name: 'template' }, { name: 'contacts' }, { name: 'voicenote' }]);
+
+function handleCampaignUpload(req, res, next) {
+    campaignUpload(req, res, (err) => {
+        if (!err) return next();
+
+        const message = err.code === 'LIMIT_FILE_SIZE'
+            ? 'حجم الملف كبير. الحد الأقصى الحالي 32MB لكل ملف.'
+            : (err.message || 'فشل رفع الملف');
+
+        console.error('[Campaigns] Upload failed:', message);
+        return res.status(400).json({ success: false, message });
+    });
+}
 
 function parseScheduleBody(body) {
     const scheduledRaw = body.scheduled_at;
@@ -61,7 +75,7 @@ async function importContacts(tenantId, campaignId, contactsPath) {
 }
 
 // Create Campaign - quota guard applies (uploading contacts is a pre-launch step)
-router.post('/', isAuthenticated, tenantScope, quotaGuard, upload.fields([{ name: 'template' }, { name: 'contacts' }, { name: 'voicenote' }]), async (req, res) => {
+router.post('/', isAuthenticated, tenantScope, quotaGuard, handleCampaignUpload, async (req, res) => {
     try {
         const { name, message_templates, canvas_config } = req.body;
         const files = req.files || {};
@@ -141,7 +155,7 @@ router.get('/:id', isAuthenticated, tenantScope, async (req, res) => {
 });
 
 // Update Campaign (Edit)
-router.put('/:id', isAuthenticated, tenantScope, upload.fields([{ name: 'template' }, { name: 'contacts' }, { name: 'voicenote' }]), async (req, res) => {
+router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (req, res) => {
     try {
         const { name, message_templates, canvas_config } = req.body;
         const files = req.files || {};
