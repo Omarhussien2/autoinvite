@@ -256,11 +256,21 @@ function parseLooseContactsText(text) {
 
 function shouldUseLooseContactFallback(normalizedRows) {
     if (!normalizedRows || normalizedRows.length === 0) return true;
-    if (normalizedRows.length > 1) return false;
 
+    // Check if the first row's Name or Phone looks like a corrupted merged column
     const only = normalizedRows[0];
     const phone = String(only.Phone || '');
-    return phone.includes(',') || phone.includes(';') || /name|phone|mobile/i.test(phone);
+    const name = String(only.Name || '');
+    
+    const isCorrupted = 
+        phone.includes(',') || phone.includes(';') || /name|phone|mobile/i.test(phone) || phone.length > 30 ||
+        name.includes(',') || name.includes(';') || /name|phone|mobile/i.test(name) || name.length > 30;
+
+    if (isCorrupted) return true;
+
+    if (normalizedRows.length > 1) return false;
+
+    return false;
 }
 
 async function loadContacts(customFilePath = null) {

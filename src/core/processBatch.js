@@ -181,14 +181,11 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                 let imagePath = null;
                 try {
                     imagePath = await generateImage(name, normalizedPhone, templatePath, canvasConfig);
-                    const imgBase64 = `data:image/png;base64,${fs.readFileSync(imagePath).toString('base64')}`;
-
                     // Retry up to 3 times for transient WhatsApp media errors
-                    // NOTE: WPPConnect has sendImage (file path) vs sendImageFromBase64 (base64 data URI)
                     let mediaRetries = 3;
                     while (!imageSent) {
                         try {
-                            await client.sendImageFromBase64(chatId, imgBase64, 'invitation.png', message);
+                            await client.sendImage(chatId, imagePath, 'invitation.png', message);
                             imageSent = true;
                         } catch (mediaErr) {
                             const errObj = mediaErr && mediaErr.message ? mediaErr : { message: String(mediaErr), raw: mediaErr };
