@@ -181,44 +181,44 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                 let imagePath = null;
                 try {
                     imagePath = await generateImage(name, normalizedPhone, templatePath, canvasConfig);
-                    // Retry up to 3 times for transient WhatsApp media errors
-                    let mediaRetries = 3;
-                    while (!imageSent) {
-                        try {
-                            await client.sendImage(chatId, imagePath, 'invitation.png', message);
-                            imageSent = true;
-                        } catch (mediaErr) {
-                            const errObj = mediaErr && mediaErr.message ? mediaErr : { message: String(mediaErr), raw: mediaErr };
-                            const errStr = JSON.stringify(errObj.raw || errObj.message);
-                            if (errStr.includes('msgChunks')) {
-                                // WPPConnect bug: message was sent but WA-JS couldn't fetch it back
+                        const imgBase64 = `data:image/png;base64,${fs.readFileSync(imagePath).toString('base64')}`;
+                        let mediaRetries = 3;
+                        while (!imageSent) {
+                            try {
+                                await client.sendImageFromBase64(chatId, imgBase64, 'invitation.png', message);
                                 imageSent = true;
-                            } else if (mediaRetries > 0 && (errStr.includes('InvalidMedia') || errStr.includes('RepairFailed') || errStr.includes('FailedType'))) {
-                                mediaRetries--;
-                                onLog(`[Retry] خطأ مؤقت في الوسائط (${3 - mediaRetries}/3)، إعادة المحاولة بعد 3 ثوانٍ...`, 'WARN');
-                                await AntiBanEngine.sleep(3000);
-                            } else {
-                                throw mediaErr;
+                            } catch (mediaErr) {
+                                const errObj = mediaErr && mediaErr.message ? mediaErr : { message: String(mediaErr), raw: mediaErr };
+                                const errStr = JSON.stringify(errObj.raw || errObj.message);
+                                if (errStr.includes('msgChunks')) {
+                                    // WPPConnect bug: message was sent but WA-JS couldn't fetch it back
+                                    imageSent = true;
+                                } else if (mediaRetries > 0 && (errStr.includes('InvalidMedia') || errStr.includes('RepairFailed') || errStr.includes('FailedType'))) {
+                                    mediaRetries--;
+                                    onLog(`[Retry] خطأ مؤقت في الوسائط (${3 - mediaRetries}/3)، إعادة المحاولة بعد 3 ثوانٍ...`, 'WARN');
+                                    await AntiBanEngine.sleep(3000);
+                                } else {
+                                    throw mediaErr;
+                                }
                             }
                         }
-                    }
-                } catch (imgErr) {
-                    const errStr = String(imgErr && imgErr.message ? imgErr.message : imgErr);
-                    if (errStr.includes('msgChunks')) {
-                        // ignore, message sent
-                    } else {
-                        // Fallback: send text-only message if image fails
-                        onLog(`[Fallback] فشل إرسال الصورة لـ ${name}: ${errStr} — إرسال نص فقط`, 'WARN');
-                        WhatsAppManager.emitToTenant(tenantId, 'log', { message: `فشل إرسال الصورة لـ ${name}، يتم الإرسال نص فقط`, type: 'WARN' });
-                        await client.sendText(chatId, message).catch(e => {
-                            if (!String(e).includes('msgChunks')) throw e;
-                        });
-                    }
-                } finally {
-                    // Always cleanup temp image
-                    if (imagePath) {
-                        await fs.remove(imagePath).catch(err => console.error('[processBatch] Failed to cleanup temp image:', err.message));
-                    }
+                    } catch (imgErr) {
+                        const errStr = String(imgErr && imgErr.message ? imgErr.message : imgErr);
+                        if (errStr.includes('msgChunks')) {
+                            // ignore, message sent
+                        } else {
+                            // Fallback: send text-only message if image fails
+                            onLog(`[Fallback] فشل إرسال الصورة لـ ${name}: ${errStr} — إرسال نص فقط`, 'WARN');
+                            WhatsAppManager.emitToTenant(tenantId, 'log', { message: `فشل إرسال الصورة لـ ${name}، يتم الإرسال نص فقط`, type: 'WARN' });
+                            await client.sendText(chatId, message).catch(e => {
+                                if (!String(e).includes('msgChunks')) throw e;
+                            });
+                        }
+                    } finally {
+                        // Always cleanup temp image
+                        if (imagePath) {
+                            await fs.remove(imagePath).catch(err => console.error('[processBatch] Failed to cleanup temp image:', err.message));
+                        }
                 }
             } else {
                 await client.sendText(chatId, message).catch(e => {
