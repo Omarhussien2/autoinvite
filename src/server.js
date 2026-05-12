@@ -221,6 +221,10 @@ app.get('/login', (req, res) => {
     res.render('auth/login');
 });
 
+app.get('/terms', (req, res) => {
+    res.render('auth/terms');
+});
+
 // 3. Protected Dashboard Overview
 app.get('/dashboard', isAuthenticated, subscriptionGuard(), async (req, res) => {
     try {

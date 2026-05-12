@@ -7,6 +7,17 @@ const { createLogger } = require('../utils/logger');
 const log = createLogger('Auth');
 
 const router = express.Router();
+const TERMS_VERSION = '2026-05-12';
+
+function buildTermsAcceptance(req, method) {
+    return {
+        terms_accepted_at: new Date().toISOString(),
+        terms_version: TERMS_VERSION,
+        terms_acceptance_method: method,
+        terms_acceptance_ip: req.ip || null,
+        terms_acceptance_user_agent: String(req.headers['user-agent'] || '').slice(0, 500)
+    };
+}
 
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -36,6 +47,17 @@ router.post('/login', authLimiter, async (req, res) => {
         const match = await bcrypt.compare(password, tenant.password_hash);
 
         if (match) {
+            try {
+                await db.query(
+                    `UPDATE tenants
+                     SET settings = COALESCE(settings, '{}'::jsonb) || $2::jsonb
+                     WHERE id = $1`,
+                    [tenant.id, JSON.stringify(buildTermsAcceptance(req, 'login'))]
+                );
+            } catch (termsErr) {
+                log.warn('Failed to record terms acceptance:', termsErr.message);
+            }
+
             req.session.tenantId = tenant.id;
             req.session.tenantName = tenant.name;
             req.session.tenantRole = tenant.role || 'user';
@@ -105,7 +127,20 @@ router.post('/register', authLimiter, async (req, res) => {
         const result = await db.query(
             `INSERT INTO tenants (name, username, password_hash, settings, subscription_plan, subscription_status, message_quota, trial_ends_at, stripe_customer_id)
              VALUES ($1, $2, $3, $4, 'free', 'trialing', $5, $6, $7) RETURNING id, name`,
-            [name, username, hashedPassword, JSON.stringify({ min_delay: 20, max_delay: 60, safe_mode: true }), freeQuota, trialEnd, stripeCustomerId]
+            [
+                name,
+                username,
+                hashedPassword,
+                JSON.stringify({
+                    min_delay: 20,
+                    max_delay: 60,
+                    safe_mode: true,
+                    ...buildTermsAcceptance(req, 'register')
+                }),
+                freeQuota,
+                trialEnd,
+                stripeCustomerId
+            ]
         );
 
         const newTenant = result.rows[0];
