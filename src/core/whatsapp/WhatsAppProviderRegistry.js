@@ -87,6 +87,26 @@ class WhatsAppProviderRegistry {
         await Promise.allSettled(stopTasks);
     }
 
+    getActiveClientCount() {
+        let total = 0;
+        for (const provider of this.providers.values()) {
+            if (typeof provider.getActiveClientCount === 'function') {
+                total += provider.getActiveClientCount();
+            }
+        }
+        return total;
+    }
+
+    getMaxClientCount() {
+        let total = 0;
+        for (const provider of this.providers.values()) {
+            if (typeof provider.getMaxClientCount === 'function') {
+                total += provider.getMaxClientCount();
+            }
+        }
+        return total;
+    }
+
     listProviderNames() {
         return Array.from(this.providers.keys());
     }

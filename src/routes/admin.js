@@ -208,8 +208,8 @@ router.get('/health', isAuthenticated, isAdmin, (req, res) => {
     res.json({
         success: true,
         health: {
-            activeInstances: WhatsAppProviders.getDefaultProvider().getActiveClientCount(),
-            maxCapacity: WhatsAppProviders.getDefaultProvider().getMaxClientCount(),
+            activeInstances: WhatsAppProviders.getActiveClientCount(),
+            maxCapacity: WhatsAppProviders.getMaxClientCount(),
             uptime: formatUptime(uptimeSec),
             uptimeSeconds: Math.floor(uptimeSec),
             memoryRSS: formatBytes(mem.rss),

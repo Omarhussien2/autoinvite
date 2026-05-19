@@ -160,6 +160,11 @@ async function gracefulShutdown(signal) {
     WhatsAppProviders.stopSleepMonitor();
     ScheduleManager.stop();
 
+    const forceShutdownTimer = setTimeout(() => {
+        log.error('Forced shutdown after 10s timeout.');
+        process.exit(1);
+    }, 10000);
+
     await WhatsAppProviders.stopAllClients()
         .catch(err => log.error('Error stopping WhatsApp clients:', err.message));
 
@@ -168,14 +173,10 @@ async function gracefulShutdown(signal) {
 
     // Close HTTP server
     server.close(() => {
+        clearTimeout(forceShutdownTimer);
         log.info('HTTP server closed.');
         process.exit(0);
     });
-
-    setTimeout(() => {
-        log.error('Forced shutdown after 10s timeout.');
-        process.exit(1);
-    }, 10000);
 }
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

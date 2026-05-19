@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+const db = require('../src/database/pg-client');
+const WhatsAppProviders = require('../src/core/whatsapp');
 const WPPConnectProvider = require('../src/core/whatsapp/providers/WPPConnectProvider');
 
 test('WPPConnect provider delegates tenant lifecycle calls to the manager', async () => {
@@ -49,4 +51,78 @@ test('WPPConnect provider delegates tenant lifecycle calls to the manager', asyn
         ['stopSleepMonitor'],
         ['emitToTenant', 'tenant-2', 'log', { message: 'ok' }],
     ]);
+});
+
+test('provider registry resolves tenant provider settings and falls back when settings cannot load', async () => {
+    const originalProviders = WhatsAppProviders.providers;
+    const originalDefault = WhatsAppProviders.defaultProviderName;
+    const originalQuery = db.query;
+
+    const wppProvider = { name: 'wppconnect' };
+    const wahaProvider = { name: 'waha' };
+
+    try {
+        WhatsAppProviders.providers = new Map();
+        WhatsAppProviders.defaultProviderName = 'wppconnect';
+        WhatsAppProviders.register(wppProvider);
+        WhatsAppProviders.register(wahaProvider);
+
+        db.query = async () => ({ rows: [{ settings: { whatsapp_provider: ' WAHA ' } }] });
+        assert.equal(await WhatsAppProviders.getProviderNameForTenant('tenant-1'), 'waha');
+        assert.equal(await WhatsAppProviders.getProviderForTenant('tenant-1'), wahaProvider);
+
+        db.query = async () => ({ rows: [{ settings: {} }] });
+        assert.equal(await WhatsAppProviders.getProviderForTenant('tenant-2'), wppProvider);
+
+        db.query = async () => {
+            throw new Error('database unavailable');
+        };
+        assert.equal(await WhatsAppProviders.getProviderForTenant('tenant-3'), wppProvider);
+    } finally {
+        db.query = originalQuery;
+        WhatsAppProviders.providers = originalProviders;
+        WhatsAppProviders.defaultProviderName = originalDefault;
+    }
+});
+
+test('provider registry aggregates active clients and settles shutdown across providers', async () => {
+    const originalProviders = WhatsAppProviders.providers;
+    const originalDefault = WhatsAppProviders.defaultProviderName;
+    const stoppedTenants = [];
+
+    const firstProvider = {
+        name: 'first',
+        getActiveClientCount: () => 2,
+        getMaxClientCount: () => 5,
+        getActiveTenantIds: () => ['a', 'b'],
+        stopClient: async (tenantId) => {
+            stoppedTenants.push(`first:${tenantId}`);
+            if (tenantId === 'b') throw new Error('close failed');
+        },
+    };
+    const secondProvider = {
+        name: 'second',
+        getActiveClientCount: () => 1,
+        getMaxClientCount: () => 3,
+        getActiveTenantIds: () => ['c'],
+        stopClient: async (tenantId) => {
+            stoppedTenants.push(`second:${tenantId}`);
+        },
+    };
+
+    try {
+        WhatsAppProviders.providers = new Map();
+        WhatsAppProviders.defaultProviderName = 'first';
+        WhatsAppProviders.register(firstProvider);
+        WhatsAppProviders.register(secondProvider);
+
+        assert.equal(WhatsAppProviders.getActiveClientCount(), 3);
+        assert.equal(WhatsAppProviders.getMaxClientCount(), 8);
+
+        await assert.doesNotReject(() => WhatsAppProviders.stopAllClients());
+        assert.deepEqual(stoppedTenants.sort(), ['first:a', 'first:b', 'second:c']);
+    } finally {
+        WhatsAppProviders.providers = originalProviders;
+        WhatsAppProviders.defaultProviderName = originalDefault;
+    }
 });
