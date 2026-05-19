@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const db = require('../database/pg-client');
 const { isAuthenticated } = require('../middleware/auth');
-const WhatsAppManager = require('../core/WhatsAppManager');
+const { WhatsAppProviders } = require('../core');
 const { createLogger } = require('../utils/logger');
 const log = createLogger('Admin');
 
@@ -37,14 +37,15 @@ router.get('/dashboard', isAuthenticated, isAdmin, async (req, res) => {
             ORDER BY t.created_at DESC
         `);
 
-        const tenants = tenantsRes.rows.map(t => {
-            const state = WhatsAppManager.getTenantState(t.id);
+        const tenants = await Promise.all(tenantsRes.rows.map(async (t) => {
+            const provider = await WhatsAppProviders.getProviderForTenant(t.id);
+            const state = provider.getTenantState(t.id);
             return {
                 ...t,
                 whatsapp_status: state.status || 'DISCONNECTED',
                 whatsapp_phone: state.phone || null
             };
-        });
+        }));
 
         res.renderPage('admin/dashboard', {
             pageTitle: 'لوحة تحكم المشرف',
@@ -149,7 +150,8 @@ router.delete('/tenants/:id', isAuthenticated, isAdmin, async (req, res) => {
             return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
         }
 
-        await WhatsAppManager.stopClient(id);
+        const provider = await WhatsAppProviders.getProviderForTenant(id);
+        await provider.stopClient(id);
 
         await db.query('DELETE FROM sent_logs WHERE tenant_id = $1', [id]);
         await db.query('DELETE FROM contacts WHERE tenant_id = $1', [id]);
@@ -168,11 +170,12 @@ router.post('/tenants/:id/disconnect', isAuthenticated, isAdmin, async (req, res
     try {
         const { id } = req.params;
 
-        if (!WhatsAppManager.clients.has(id)) {
+        const provider = await WhatsAppProviders.getProviderForTenant(id);
+        if (!provider.hasClient(id)) {
             return res.json({ success: true, message: 'الواتساب غير متصل بالفعل' });
         }
 
-        await WhatsAppManager.stopClient(id);
+        await provider.stopClient(id);
         res.json({ success: true, message: 'تم قطع اتصال الواتساب بنجاح' });
     } catch (err) {
         log.error('Disconnect WhatsApp Error:', err);
@@ -205,8 +208,8 @@ router.get('/health', isAuthenticated, isAdmin, (req, res) => {
     res.json({
         success: true,
         health: {
-            activeInstances: WhatsAppManager.clients.size,
-            maxCapacity: parseInt(WhatsAppManager.MAX_TOTAL_CLIENTS),
+            activeInstances: WhatsAppProviders.getDefaultProvider().getActiveClientCount(),
+            maxCapacity: WhatsAppProviders.getDefaultProvider().getMaxClientCount(),
             uptime: formatUptime(uptimeSec),
             uptimeSeconds: Math.floor(uptimeSec),
             memoryRSS: formatBytes(mem.rss),

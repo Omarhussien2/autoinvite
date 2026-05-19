@@ -9,7 +9,7 @@ const session = require('express-session');
 const connectPgSimple = require('connect-pg-simple');
 const db = require('./database/pg-client');
 const { ensureSmartScheduleSchema } = require('./database/ensure_smart_schedule_schema');
-const { WhatsAppManager, loadContacts } = require('./core');
+const { WhatsAppProviders, loadContacts } = require('./core');
 const ScheduleManager = require('./core/ScheduleManager');
 const authRoutes = require('./routes/auth');
 const campaignRoutes = require('./routes/campaigns');
@@ -50,8 +50,8 @@ app.set('views', path.join(__dirname, 'views'));
 // because Express thinks the connection is HTTP (Nginx→Node is plain HTTP).
 app.set('trust proxy', 1);
 
-WhatsAppManager.setIo(io);
-WhatsAppManager.startSleepMonitor(8 * 60 * 60 * 1000);
+WhatsAppProviders.setIo(io);
+WhatsAppProviders.startSleepMonitor(8 * 60 * 60 * 1000);
 ScheduleManager.setIo(io);
 ensureSmartScheduleSchema()
     .then(() => ScheduleManager.start())
@@ -155,16 +155,13 @@ process.on('unhandledRejection', (reason) => {
 });
 
 // ── BUG-8: Graceful shutdown — clean up WhatsApp clients & intervals on SIGTERM ──
-function gracefulShutdown(signal) {
+async function gracefulShutdown(signal) {
     log.info(`${signal} received — shutting down gracefully...`);
-    WhatsAppManager.stopSleepMonitor();
+    WhatsAppProviders.stopSleepMonitor();
     ScheduleManager.stop();
 
-    // Stop all active WhatsApp clients
-    for (const [tenantId] of WhatsAppManager.clients.entries()) {
-        log.info(`Stopping WhatsApp client for tenant ${tenantId}`);
-        WhatsAppManager.stopClient(tenantId).catch(err => log.error('Error stopping WA client:', err.message));
-    }
+    await WhatsAppProviders.stopAllClients()
+        .catch(err => log.error('Error stopping WhatsApp clients:', err.message));
 
     // Close database pool
     try { db.pool.end(); } catch (_) {}
@@ -529,16 +526,21 @@ io.on('connection', async (socket) => {
 
     log.info(`Socket connected: Tenant ${tenantId}`);
 
-    WhatsAppManager.getClient(tenantId).catch((err) => {
-        log.error(`WhatsApp socket init failed for tenant ${tenantId}:`, err.message);
-    });
+    try {
+        const provider = await WhatsAppProviders.getProviderForTenant(tenantId);
+        provider.getClient(tenantId).catch((err) => {
+            log.error(`WhatsApp socket init failed for tenant ${tenantId}:`, err.message);
+        });
 
-    const state = WhatsAppManager.getTenantState(tenantId);
-    if (state.status === 'QUERY_QR' && state.lastQr) {
+        const state = provider.getTenantState(tenantId);
+        if (state.status === 'QUERY_QR' && state.lastQr) {
         // WPPConnect catchQR already provides base64 data URI — emit directly
-        socket.emit('qr', state.lastQr);
-    } else if (state.status === 'READY') {
-        socket.emit('ready', { phone: state.phone });
+            socket.emit('qr', state.lastQr);
+        } else if (state.status === 'READY') {
+            socket.emit('ready', { phone: state.phone });
+        }
+    } catch (err) {
+        log.error(`WhatsApp provider lookup failed for tenant ${tenantId}:`, err.message);
     }
 });
 

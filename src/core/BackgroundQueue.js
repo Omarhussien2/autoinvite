@@ -1,4 +1,5 @@
 const { processBatch } = require('./processBatch');
+const WhatsAppProviders = require('./whatsapp');
 const db = require('../database/pg-client');
 const { WhatsAppSessionError } = require('./WhatsAppSessionError');
 const { createLogger } = require('../utils/logger');
@@ -32,17 +33,16 @@ class BackgroundQueue {
             await db.query('UPDATE campaigns SET status = $1 WHERE id = $2', ['running', campaignId]);
         }
 
+        const provider = await WhatsAppProviders.getProviderForTenant(tenantId);
+
         processBatch(contacts, startRow, endRow, messages, campaignId, hasTemplate, (message, type) => {
-            const WhatsAppManager = require('./WhatsAppManager');
-            WhatsAppManager.emitToTenant(tenantId, 'log', { message, type });
+            provider.emitToTenant(tenantId, 'log', { message, type });
         }, templatePath, canvasConfig, tenantId, voicenotePath)
             .then(async (result) => {
-                const WhatsAppManager = require('./WhatsAppManager');
-                const state = WhatsAppManager.states.get(tenantId);
-                if (state) state.status = 'READY';
+                provider.setTenantState(tenantId, { status: 'READY' });
 
-                WhatsAppManager.emitToTenant(tenantId, 'working_state', false);
-                WhatsAppManager.emitToTenant(tenantId, 'log', { message: 'Batch processing finished.', type: 'DONE' });
+                provider.emitToTenant(tenantId, 'working_state', false);
+                provider.emitToTenant(tenantId, 'log', { message: 'Batch processing finished.', type: 'DONE' });
                 this.jobs.delete(tenantId);
 
                 if (global.stopBatchRequested) {
@@ -59,12 +59,12 @@ class BackgroundQueue {
                     await db.query('UPDATE campaigns SET last_sent_row = $1, status = $2 WHERE id = $3', [endRow, finalStatus, campaignId]);
 
                     if (finalStatus === 'partial_failure') {
-                        WhatsAppManager.emitToTenant(tenantId, 'log', {
+                        provider.emitToTenant(tenantId, 'log', {
                             message: `الحملة اكتملت مع أخطاء (${successCount} نجح، ${failCount} فشل)`,
                             type: 'WARN'
                         });
                     } else {
-                        WhatsAppManager.emitToTenant(tenantId, 'log', {
+                        provider.emitToTenant(tenantId, 'log', {
                             message: 'تم إكمال الحملة بنجاح',
                             type: 'SUCCESS'
                         });
@@ -72,26 +72,24 @@ class BackgroundQueue {
                 }
             })
             .catch(async (error) => {
-                const WhatsAppManager = require('./WhatsAppManager');
                 const isSessionError = error instanceof WhatsAppSessionError;
-                const state = WhatsAppManager.states.get(tenantId);
-                if (state) state.status = isSessionError ? 'DISCONNECTED' : 'READY';
+                provider.setTenantState(tenantId, { status: isSessionError ? 'DISCONNECTED' : 'READY' });
 
-                WhatsAppManager.emitToTenant(tenantId, 'working_state', false);
+                provider.emitToTenant(tenantId, 'working_state', false);
                 log.error(`Job failed for tenant ${tenantId}:`, error);
 
                 if (isSessionError) {
-                    WhatsAppManager.emitToTenant(tenantId, 'session_lost', {
+                    provider.emitToTenant(tenantId, 'session_lost', {
                         currentRow: error.currentRow,
                         message: 'انقطع اتصال واتساب. أعد الربط ثم أكمل من الصف المحفوظ.'
                     });
-                    WhatsAppManager.emitToTenant(tenantId, 'log', {
+                    provider.emitToTenant(tenantId, 'log', {
                         message: `انقطع اتصال واتساب. تم إيقاف الحملة عند الصف ${error.currentRow || startRow}. أعد الربط ثم أكمل من الصف المحفوظ.`,
                         type: 'WARN'
                     });
                 } else {
                     const bgErrMsg = error && error.message ? error.message : (error && error.text ? error.text : (typeof error === 'object' ? JSON.stringify(error) : String(error)));
-                    WhatsAppManager.emitToTenant(tenantId, 'log', { message: `خطأ: ${bgErrMsg}`, type: 'ERROR' });
+                    provider.emitToTenant(tenantId, 'log', { message: `خطأ: ${bgErrMsg}`, type: 'ERROR' });
                 }
 
                 this.jobs.delete(tenantId);

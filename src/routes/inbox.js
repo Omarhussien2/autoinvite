@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../database/pg-client');
 const { isAuthenticated } = require('../middleware/auth');
-const WhatsAppManager = require('../core/WhatsAppManager');
+const { WhatsAppProviders } = require('../core');
 const { createLogger } = require('../utils/logger');
 const log = createLogger('Inbox');
 
@@ -38,7 +38,8 @@ router.post('/:phone/reply', isAuthenticated, async (req, res) => {
             return res.status(400).json({ success: false, message: 'الرسالة فارغة' });
         }
 
-        const client = await WhatsAppManager.getClient(tenantId);
+        const provider = await WhatsAppProviders.getProviderForTenant(tenantId);
+        const client = await provider.getClient(tenantId);
         const chatId = `${phone}@c.us`;
 
         await client.sendText(chatId, body.trim());

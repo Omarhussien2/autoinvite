@@ -6,7 +6,7 @@ const { generateImage } = require('../utils/generator');
 const { logResult, createLogger } = require('../utils/logger');
 const log = createLogger('processBatch');
 const db = require('../database/pg-client');
-const WhatsAppManager = require('./WhatsAppManager');
+const WhatsAppProviders = require('./whatsapp');
 const AntiBanEngine = require('./AntiBanEngine');
 const { convertToOggOpus } = require('../utils/audioConverter');
 const { normalizeMessageTemplates, pickWeightedMessage } = require('../utils/messageTemplates');
@@ -46,8 +46,9 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
 
     onLog(`\nProcessing ${subset.length} contacts (Rows ${startRow} to ${endRow})...\n`, 'INFO');
 
-    WhatsAppManager.updateActivity(tenantId);
-    const client = await WhatsAppManager.getClient(tenantId);
+    const WhatsAppProvider = await WhatsAppProviders.getProviderForTenant(tenantId);
+    WhatsAppProvider.updateActivity(tenantId);
+    const client = await WhatsAppProvider.getClient(tenantId);
     if (!client) {
         onLog('خطأ: الواتساب غير متصل. أعد الربط أولاً.', 'ERROR');
         throw new Error('WhatsApp client not connected');
@@ -97,7 +98,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
     let stoppedRow = null;
 
     for (const [index, contact] of subset.entries()) {
-        WhatsAppManager.updateActivity(tenantId);
+        WhatsAppProvider.updateActivity(tenantId);
 
         if (global.stopBatchRequested && global.stopBatchRequested[tenantId]) {
             onLog('تم إيقاف الإرسال بنجاح.', 'WARN');
@@ -139,7 +140,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             const quotaRow = quotaRes.rows[0];
             if (quotaRow && quotaRow.messages_used >= quotaRow.message_quota) {
                 onLog(`تم استنفاد الحصة (${quotaRow.messages_used}/${quotaRow.message_quota}). أوقف الإرسال.`, 'ERROR');
-                WhatsAppManager.emitToTenant(tenantId, 'log', { message: `تم استنفاد الحصة — توقف الإرسال. تواصل مع الإدارة لزيادة الحصة.`, type: 'ERROR' });
+                WhatsAppProvider.emitToTenant(tenantId, 'log', { message: `تم استنفاد الحصة — توقف الإرسال. تواصل مع الإدارة لزيادة الحصة.`, type: 'ERROR' });
                 break;
             }
         } catch (quotaErr) {
@@ -183,7 +184,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     await logResult(normalizedPhone, name, 'SKIP', 'Failed - No WhatsApp');
                     const saudiMsg = `الرقم مو مسجل في الواتساب`;
                     onLog(`Skipping ${name}: ${saudiMsg}`, 'WARN');
-                    WhatsAppManager.emitToTenant(tenantId, 'log', { message: saudiMsg, type: 'WARN' });
+                    WhatsAppProvider.emitToTenant(tenantId, 'log', { message: saudiMsg, type: 'WARN' });
                     if (campaignId) {
                         await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(err => log.error('Failed to update failed_count (skip):', err.message));
                         await db.query(
@@ -247,7 +248,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     } else {
                         // Fallback: send text-only message if image fails
                         onLog(`[Fallback] فشل إرسال الصورة لـ ${name}: إرسال نص فقط`, 'WARN');
-                        WhatsAppManager.emitToTenant(tenantId, 'log', { message: `فشل إرسال الصورة لـ ${name}، يتم الإرسال نص فقط`, type: 'WARN' });
+                        WhatsAppProvider.emitToTenant(tenantId, 'log', { message: `فشل إرسال الصورة لـ ${name}، يتم الإرسال نص فقط`, type: 'WARN' });
                         await client.sendText(chatId, message).catch(e => {
                             if (!safeStringify(e).includes('msgChunks')) throw e;
                         });
@@ -320,7 +321,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
 
             if (isWhatsAppSessionError(error)) {
                 onLog(`WhatsApp session lost while processing row ${currentRow}. Campaign paused so remaining contacts are not marked failed.`, 'SESSION_ERROR');
-                WhatsAppManager.emitToTenant(tenantId, 'log', {
+                WhatsAppProvider.emitToTenant(tenantId, 'log', {
                     message: 'انقطع اتصال واتساب أثناء الإرسال. تم إيقاف الحملة مؤقتا حتى لا يتم احتساب باقي الأرقام كفشل.',
                     type: 'SESSION_ERROR'
                 });
@@ -333,7 +334,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                 }
 
                 try {
-                    await WhatsAppManager.stopClient(tenantId);
+                    await WhatsAppProvider.stopClient(tenantId);
                 } catch (stopErr) {
                     log.error('Failed to stop stale WhatsApp client:', stopErr.message);
                 }
@@ -345,8 +346,8 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             const saudiMsg = getSaudiErrorMessage(name, errMsg);
             onLog(`Failed: ${name} - ${saudiMsg}`, 'ERROR');
             log.error(`Error for ${name} (${normalizedPhone}):`, error);
-            WhatsAppManager.emitToTenant(tenantId, 'log', { message: saudiMsg, type: 'ERROR' });
-            WhatsAppManager.emitToTenant(tenantId, 'log', { message: `[تفاصيل] ${errMsg}`, type: 'WARN' });
+            WhatsAppProvider.emitToTenant(tenantId, 'log', { message: saudiMsg, type: 'ERROR' });
+            WhatsAppProvider.emitToTenant(tenantId, 'log', { message: `[تفاصيل] ${errMsg}`, type: 'WARN' });
             failCount++;
 
             if (campaignId) {

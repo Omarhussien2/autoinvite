@@ -3,7 +3,7 @@ const { isAuthenticated } = require('../middleware/auth');
 const { tenantScope } = require('../middleware/tenantScope');
 const { quotaGuard } = require('../middleware/quotaGuard');
 const BackgroundQueue = require('../core/BackgroundQueue');
-const { WhatsAppManager, loadContacts } = require('../core');
+const { WhatsAppProviders, loadContacts } = require('../core');
 const db = require('../database/pg-client');
 const { createLogger } = require('../utils/logger');
 const log = createLogger('WhatsAppAPI');
@@ -16,7 +16,8 @@ router.use(tenantScope);
 // WhatsApp Initialization Trigger
 router.post('/init', async (req, res) => {
     try {
-        WhatsAppManager.getClient(req.tenantId).catch((err) => {
+        const provider = await WhatsAppProviders.getProviderForTenant(req.tenantId);
+        provider.getClient(req.tenantId).catch((err) => {
             log.error(`WhatsApp init failed for tenant ${req.tenantId}:`, err.message);
         });
         res.json({ success: true, message: 'Initialization started' });
@@ -30,12 +31,13 @@ router.post('/start', quotaGuard, async (req, res) => {
     const { startRow, endRow, campaignId } = req.body;
     const tenantId = req.tenantId;
 
-    const curState = WhatsAppManager.getTenantState(tenantId);
-    if (curState.status === 'WORKING') {
-        return res.status(400).json({ success: false, message: 'الجهاز يعمل مسبقا' });
-    }
-
     try {
+        const provider = await WhatsAppProviders.getProviderForTenant(tenantId);
+        const curState = provider.getTenantState(tenantId);
+        if (curState.status === 'WORKING') {
+            return res.status(400).json({ success: false, message: 'الجهاز يعمل مسبقا' });
+        }
+
         let contactsPath = null;
         let messages;
         let hasTemplate = false;
@@ -95,12 +97,8 @@ router.post('/start', quotaGuard, async (req, res) => {
         if (!global.stopBatchRequested) global.stopBatchRequested = {};
         global.stopBatchRequested[tenantId] = false;
 
-        if (!WhatsAppManager.states.has(tenantId)) {
-            WhatsAppManager.states.set(tenantId, { status: 'WORKING', lastQr: null, lastActive: Date.now(), phone: null });
-        } else {
-            WhatsAppManager.states.get(tenantId).status = 'WORKING';
-        }
-        WhatsAppManager.emitToTenant(tenantId, 'working_state', true);
+        provider.setTenantState(tenantId, { status: 'WORKING', lastQr: null, lastActive: Date.now(), phone: null });
+        provider.emitToTenant(tenantId, 'working_state', true);
 
         BackgroundQueue.addJob(tenantId, campaignId, contacts, start, end, messages, hasTemplate, templatePath, canvasConfig, voicenotePath)
             .catch(console.error);
@@ -139,7 +137,8 @@ router.post('/test', quotaGuard, async (req, res) => {
         }
 
         const chatId = `${targetPhone}@c.us`;
-        const client = await WhatsAppManager.getClient(tenantId);
+        const provider = await WhatsAppProviders.getProviderForTenant(tenantId);
+        const client = await provider.getClient(tenantId);
 
         await client.sendText(chatId, 'تجربة عزام: هلا والله! النظام شغال 🚀');
         res.json({ success: true, message: 'Test message sent' });
@@ -150,15 +149,22 @@ router.post('/test', quotaGuard, async (req, res) => {
 });
 
 // Client Status
-router.get('/status', (req, res) => {
-    const state = WhatsAppManager.getTenantState(req.tenantId);
-    res.json({ success: true, state });
+router.get('/status', async (req, res) => {
+    try {
+        const provider = await WhatsAppProviders.getProviderForTenant(req.tenantId);
+        const state = provider.getTenantState(req.tenantId);
+        res.json({ success: true, state });
+    } catch (err) {
+        log.error('Status error:', err.message);
+        res.status(500).json({ success: false, message: 'Ø®Ø·Ø£ Ø¯Ø§Ø®Ù„ÙŠ ÙÙŠ Ø§Ù„Ø³ÙŠØ±ÙØ±' });
+    }
 });
 
 // Disconnect Session
 router.post('/disconnect', async (req, res) => {
     try {
-        await WhatsAppManager.stopClient(req.tenantId);
+        const provider = await WhatsAppProviders.getProviderForTenant(req.tenantId);
+        await provider.stopClient(req.tenantId);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
@@ -168,7 +174,8 @@ router.post('/disconnect', async (req, res) => {
 // Deep Logout — unlink device + delete tokens + fresh QR
 router.post('/logout', async (req, res) => {
     try {
-        await WhatsAppManager.logoutClient(req.tenantId);
+        const provider = await WhatsAppProviders.getProviderForTenant(req.tenantId);
+        await provider.logoutClient(req.tenantId);
         res.json({ success: true, message: 'تم قطع الاتصال وجاري توليد باركود جديد' });
     } catch (err) {
         log.error('Logout error:', err.message);

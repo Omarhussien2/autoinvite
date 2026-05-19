@@ -19,7 +19,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@wppconnect-team/wppconnect": "^2.0.2",
+    "@wppconnect-team/wppconnect": "^2.1.0",
     "bcrypt": "^6.0.0",
     "canvas": "^3.2.1",
     "connect-pg-simple": "^10.0.0",
@@ -39,7 +39,6 @@
     "multer": "^2.0.2",
     "pg": "^8.20.0",
     "pg-boss": "10.4.2",
-
     "read-excel-file": "^9.0.9",
     "socket.io": "^4.8.3",
     "stripe": "^22.0.0"
