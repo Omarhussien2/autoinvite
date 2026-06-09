@@ -10,7 +10,7 @@ class BackgroundQueue {
         this.jobs = new Map(); // tenantId -> job
     }
 
-    async addJob(tenantId, campaignId, contacts, startRow, endRow, messages, hasTemplate, templatePath, canvasConfig, voicenotePath = null) {
+    async addJob(tenantId, campaignId, contacts, startRow, endRow, messages, hasTemplate, templatePath, canvasConfig, voicenotePath = null, runOptions = {}) {
         if (this.jobs.has(tenantId)) {
             throw new Error('A job is already running for this tenant.');
         }
@@ -37,7 +37,7 @@ class BackgroundQueue {
 
         processBatch(contacts, startRow, endRow, messages, campaignId, hasTemplate, (message, type) => {
             provider.emitToTenant(tenantId, 'log', { message, type });
-        }, templatePath, canvasConfig, tenantId, voicenotePath)
+        }, templatePath, canvasConfig, tenantId, voicenotePath, runOptions)
             .then(async (result) => {
                 provider.setTenantState(tenantId, { status: 'READY' });
 

@@ -19,7 +19,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@wppconnect-team/wppconnect": "^2.1.0",
+    "@wppconnect-team/wppconnect": "^2.2.1",
     "bcrypt": "^6.0.0",
     "canvas": "^3.2.1",
     "connect-pg-simple": "^10.0.0",

@@ -16,7 +16,7 @@ async function quotaGuard(req, res, next) {
         if (tenant.messages_used >= tenant.message_quota) {
             return res.status(403).json({
                 success: false,
-                message: 'خلص رصيدك من الرسائل! تواصل مع الإدارة لتجديد الباقة 📩'
+                message: 'خلص رصيدك من الرسائل! تواصل مع الإدارة لتجديد الباقة'
             });
         }
 

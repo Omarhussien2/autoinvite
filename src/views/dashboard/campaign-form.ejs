@@ -37,7 +37,7 @@
                                     class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
                                 <div
                                     class="w-full px-4 py-2.5 rounded-xl border border-dashed border-gray-300 text-xs text-center text-gray-500 group-hover:border-brand-green transition">
-                                    <%= campaign ? 'تغيير الصورة 🖼️' : 'اضغط لرفع الصورة 🖼️' %>
+                                    <%= campaign ? 'تغيير الصورة' : 'اضغط لرفع الصورة' %>
                                 </div>
                             </div>
                         </div>
@@ -50,15 +50,15 @@
                                 z-10">
                                 <div id="contactsUploadLabel"
                                     class="w-full px-4 py-2.5 rounded-xl border border-dashed border-gray-300 text-xs text-center text-gray-500 group-hover:border-brand-green transition text-ellipsis overflow-hidden whitespace-nowrap">
-                                    <%= campaign && campaign.contacts_path ? '📊 ' + campaign.contacts_path.split('/').pop() : (campaign ? 'تحديث ملف الأرقام 📊' : 'ارفع ملف الأسماء 📊') %>
+                                    <%= campaign && campaign.contacts_path ? campaign.contacts_path.split('/').pop() : (campaign ? 'تحديث ملف الأرقام' : 'ارفع ملف الأسماء') %>
                                 </div>
                             </div>
                         </div>
                     </div>
                     <p class="text-[10px] text-gray-400">
-                        💡 تأكد إن ملف الأرقام يحتوي على عمود "Name" وعمود "Phone".
+                        تأكد إن ملف الأرقام يحتوي على عمود "Name" وعمود "Phone".
                         <a href="/assets/template.xlsx" download class="text-brand-green font-medium hover:underline mr-1">
-                            📥 حمّل النموذج (Excel)
+                            حمّل النموذج (Excel)
                         </a>
                     </p>
                 </div>
@@ -87,7 +87,7 @@
 
                 <!-- Text Tab Content -->
                 <div id="content-text">
-                    <p class="text-xs text-brand-green mb-4">💡 استخدم <code>[الاسم]</code> ليتم استبداله باسم الضيف تلقائياً.</p>
+                    <p class="text-xs text-brand-green mb-4">استخدم <code>[الاسم]</code> ليتم استبداله باسم الضيف تلقائياً.</p>
                     <div id="messages-list" class="space-y-4">
                     <% let msgs=[{ text: '' , weight: '3' }]; if (campaign && campaign.message_templates) { try {
                         msgs = Array.isArray(campaign.message_templates) ? campaign.message_templates : JSON.parse(campaign.message_templates);
@@ -99,9 +99,9 @@
                                 <div class="flex items-center justify-between mb-2">
                                     <select
                                         class="msg-weight text-[10px] bg-white border border-gray-200 rounded px-2 py-1 outline-none">
-                                        <option value="3" <%=m.weight=='3' ? 'selected' : '' %>>🌟 عالي (50%)</option>
-                                        <option value="2" <%=m.weight=='2' ? 'selected' : '' %>>⚖️ متوسط (30%)</option>
-                                        <option value="1" <%=m.weight=='1' ? 'selected' : '' %>>🔽 منخفض (20%)</option>
+                                        <option value="3" <%=m.weight=='3' ? 'selected' : '' %>>عالي (50%)</option>
+                                        <option value="2" <%=m.weight=='2' ? 'selected' : '' %>>متوسط (30%)</option>
+                                        <option value="1" <%=m.weight=='1' ? 'selected' : '' %>>منخفض (20%)</option>
                                     </select>
                                     <button type="button"
                                         class="remove-msg text-gray-300 hover:text-red-500 transition">
@@ -211,7 +211,7 @@
                             <% let voiceMsgs=[{ text: '' , weight: '3' }]; if (campaign && campaign.message_templates) { try { voiceMsgs=JSON.parse(campaign.message_templates); } catch(e) {} } %>
                             <% voiceMsgs.forEach(function(m, i) { %>
                             <div class="message-box-voice bg-gray-50/80 px-4 py-3 rounded-xl border border-gray-100 hover:border-brand-green transition">
-                                <textarea name="message_voice[]" rows="2" placeholder="حياك الله يا [الاسم] 🎙️"
+                                <textarea name="message_voice[]" rows="2" placeholder="حياك الله يا [الاسم]"
                                     class="w-full bg-transparent border-none text-sm focus:ring-0 resize-none outline-none text-gray-700 placeholder-gray-300"><%= m.text %></textarea>
                             </div>
                             <% }) %>
@@ -307,7 +307,7 @@
                     class="text-gray-400 text-sm hover:text-gray-600">إلغاء</button>
                 <button type="submit" id="save-btn"
                     class="bg-brand-dark text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:opacity-90 transition">
-                    <%= campaign ? 'حفظ التعديلات' : 'إنشاء الحملة 🚀' %>
+                    <%= campaign ? 'حفظ التعديلات' : 'إنشاء الحملة' %>
                 </button>
             </div>
         </div>

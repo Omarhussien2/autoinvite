@@ -88,7 +88,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
         onLog('[VoiceNote] جاري تحويل الملف الصوتي لصيغة WhatsApp...', 'INFO');
         pttOggPath = await convertToOggOpus(absVoicePath);
         pttBase64 = `data:audio/ogg;codecs=opus;base64,${fs.readFileSync(pttOggPath).toString('base64')}`;
-        onLog('[VoiceNote] تم التحويل بنجاح ✓', 'INFO');
+        onLog('[VoiceNote] تم التحويل بنجاح', 'INFO');
     }
 
     // ── BUG-7: Track success/fail counts for partial failure detection ──

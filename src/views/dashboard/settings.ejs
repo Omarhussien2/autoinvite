@@ -144,7 +144,7 @@
             });
             const result = await res.json();
             if (result.success) {
-                alert('تم حفظ الإعدادات بنجاح! ✨');
+                alert('تم حفظ الإعدادات بنجاح!');
             } else {
                 alert('حدث خطأ: ' + result.message);
             }
@@ -191,7 +191,7 @@
             });
             const result = await res.json();
             if (result.success) {
-                alert('تم تغيير كلمة المرور بنجاح ✅');
+                alert('تم تغيير كلمة المرور بنجاح');
                 passwordForm.reset();
             } else {
                 alert('حدث خطأ: ' + result.message);

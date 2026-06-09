@@ -140,7 +140,7 @@ router.post('/test', quotaGuard, async (req, res) => {
         const provider = await WhatsAppProviders.getProviderForTenant(tenantId);
         const client = await provider.getClient(tenantId);
 
-        await client.sendText(chatId, 'تجربة عزام: هلا والله! النظام شغال 🚀');
+        await client.sendText(chatId, 'تجربة عزام: هلا والله! النظام شغال');
         res.json({ success: true, message: 'Test message sent' });
     } catch (err) {
         log.error('Test send error:', err);

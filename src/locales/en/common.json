@@ -30,7 +30,7 @@
     },
     "dashboard": {
         "title": "Dashboard",
-        "welcome": "Welcome back, {{name}} 👋",
+        "welcome": "Welcome back, {{name}}",
         "add_contact": "Add Contact",
         "create_campaign": "Create Campaign",
         "create_template": "Create Template",

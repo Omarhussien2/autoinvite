@@ -30,7 +30,7 @@ AutoInvite is a **multi-tenant SaaS** for sending bulk WhatsApp invitations. Eac
 | Sessions | express-session + connect-pg-simple (stored in `user_sessions` table) |
 | Views | EJS with layout middleware (`res.renderPage()`) |
 | Real-time | Socket.IO (campaign progress, QR codes) |
-| WhatsApp | WPPConnect 2.0.2 (QR-based auth) |
+| WhatsApp | WPPConnect 2.2.1 via WhatsAppProvider registry (default: WPPConnect, QR-based auth) |
 | Scheduling | pg-boss 10.4.2 (durable job queue for scheduled campaigns) |
 | Billing | Stripe (subscriptions, webhooks, checkout) |
 | Landing Page | React + Vite + TypeScript (built to `landing-autoinvite/dist/`) |
@@ -264,7 +264,7 @@ POST /auth/login → bcrypt.compare → req.session.tenantId = tenant.id
 3. User creates campaign → saved to campaigns table
 4. If smart schedule → buildSmartBatches() creates campaign_batches rows + pg-boss jobs
 5. User clicks "Run" → run-campaign.ejs + Socket.IO
-6. WhatsAppManager.getClient(tenantId) gets/creates WPPConnect session
+6. WhatsAppProviders.getProviderForTenant(tenantId).getClient(tenantId) gets/creates the tenant WhatsApp session
 7. BackgroundQueue.js → processBatch.js processes contacts in loop
 8. Each message: AntiBanEngine.delay() → client.sendImageFromBase64/sendText → sent_logs
 9. Real-time progress via Socket.IO (tenant_{id} room)

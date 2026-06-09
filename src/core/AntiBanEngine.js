@@ -157,7 +157,7 @@ class AntiBanEngine {
             const scaleFactor = 1 + Math.min(2.0, overBy / 50); // Up to 3x delay after 100 over limit
             effectiveMin = Math.round(effectiveMin * scaleFactor);
             effectiveMax = Math.round(effectiveMax * scaleFactor);
-            if (onLog) onLog(`[HumanBehavior] ⚠️ تجاوز الحد اليومي الآمن (${session.sentToday} رسالة) — تباطؤ تلقائي`, 'WARN');
+            if (onLog) onLog(`[HumanBehavior] تجاوز الحد اليومي الآمن (${session.sentToday} رسالة) — تباطؤ تلقائي`, 'WARN');
         }
 
         // ── 4. Gaussian delay calculation ───────────────────────────────────
@@ -173,7 +173,7 @@ class AntiBanEngine {
         if (Math.random() < this.MICRO_BREAK_CHANCE) {
             // 3-8 minutes break
             const breakMs = this._gaussianRandom(5.5 * 60000, 1.5 * 60000, 3 * 60000, 8 * 60000);
-            if (onLog) onLog(`[HumanBehavior] 🧘 استراحة قصيرة (${Math.round(breakMs / 60000)} دقيقة)...`, 'INFO');
+            if (onLog) onLog(`[HumanBehavior] استراحة قصيرة (${Math.round(breakMs / 60000)} دقيقة)...`, 'INFO');
             await this.sleep(breakMs);
         }
     }
