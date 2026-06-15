@@ -87,6 +87,23 @@ test('loadContacts: loads flat exported contacts with all data in one field', as
     ]);
 });
 
+test('loadContacts: handles sheet-name prefix before Arabic customer headers', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'autoinvite-contacts-'));
+    const file = path.join(dir, 'contacts.csv');
+    await fs.writeFile(
+        file,
+        'الورقة1\nاسم العميل,رقم الجوال,وسام الشامي,+966532094995,أيوب أبو سلمان,+966506305383\n',
+        'utf8'
+    );
+
+    const contacts = await loadContacts(file);
+
+    assert.deepEqual(contacts, [
+        { Name: 'وسام الشامي', Phone: '+966532094995' },
+        { Name: 'أيوب أبو سلمان', Phone: '+966506305383' },
+    ]);
+});
+
 test('loadContacts: handles BOM and mixed delimiters', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'autoinvite-test-'));
     const file = path.join(dir, 'contacts.csv');

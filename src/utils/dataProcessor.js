@@ -205,8 +205,18 @@ function parseFlatContactTokens(tokens) {
     const cleaned = tokens.map(t => String(t || '').trim()).filter(Boolean);
     if (cleaned.length < 2) return [];
 
-    const isNameHeader = value => ['name', 'fullname', 'full_name', 'الاسم', 'الإسم', 'اسم'].includes(value.toLowerCase());
-    const isPhoneHeader = value => ['phone', 'mobile', 'number', 'رقم', 'جوال', 'هاتف', 'رقم الجوال', 'رقم الهاتف'].includes(value.toLowerCase());
+    const headerText = value => String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const isNameHeader = value => {
+        const text = headerText(value);
+        return ['name', 'fullname', 'full_name', 'customer name', 'client name'].includes(text)
+            || ['الاسم', 'الإسم', 'اسم', 'اسم العميل', 'العميل', 'اسم الزبون'].includes(text);
+    };
+    const isPhoneHeader = value => {
+        const text = headerText(value);
+        return ['phone', 'mobile', 'number', 'phone number', 'mobile number'].includes(text)
+            || ['رقم', 'جوال', 'هاتف', 'رقم الجوال', 'رقم الهاتف', 'رقم العميل'].includes(text);
+    };
+    const looksLikePhone = value => normalizePhone(value) !== null;
 
     let data = cleaned;
     for (let i = 0; i < cleaned.length - 1; i++) {
@@ -216,16 +226,20 @@ function parseFlatContactTokens(tokens) {
         }
     }
 
-    if (data.length % 2 === 1 && !/\d/.test(data[0])) {
+    while (data.length > 1 && !looksLikePhone(data[0]) && !looksLikePhone(data[1])) {
         data = data.slice(1);
     }
 
     const contacts = [];
     for (let i = 0; i < data.length - 1; i += 2) {
-        contacts.push({ Name: data[i], Phone: data[i + 1] });
+        if (looksLikePhone(data[i]) && !looksLikePhone(data[i + 1])) {
+            contacts.push({ Name: data[i + 1], Phone: data[i] });
+        } else {
+            contacts.push({ Name: data[i], Phone: data[i + 1] });
+        }
     }
 
-    return contacts.filter(c => c.Phone && /\d/.test(c.Phone));
+    return contacts.filter(c => looksLikePhone(c.Phone));
 }
 
 function parseLooseContactsText(text) {
@@ -262,6 +276,15 @@ function shouldUseLooseContactFallback(normalizedRows) {
     const only = normalizedRows[0];
     const phone = String(only.Phone || '');
     const name = String(only.Name || '');
+    const normalizedName = name.toLowerCase().trim();
+    const normalizedPhone = phone.toLowerCase().trim();
+
+    const looksLikeHeaderRow = (
+        ['name', 'fullname', 'full_name', 'الاسم', 'الإسم', 'اسم', 'اسم العميل'].includes(normalizedName)
+        && ['phone', 'mobile', 'number', 'رقم', 'جوال', 'هاتف', 'رقم الجوال', 'رقم الهاتف'].includes(normalizedPhone)
+    );
+
+    if (looksLikeHeaderRow) return true;
     
     const isCorrupted = 
         phone.includes(',') || phone.includes(';') || /name|phone|mobile/i.test(phone) || phone.length > 30 ||
