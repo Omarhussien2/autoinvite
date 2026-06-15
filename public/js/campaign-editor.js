@@ -382,6 +382,15 @@
     }
 
     /* ──────────── Form Submit ──────────── */
+    function getContactRepairMessage(report) {
+        if (!report || !report.validCount) return '';
+        const parts = [`تم تجهيز ملف الأرقام: ${report.validCount} جهة اتصال صالحة`];
+        if (report.repairedFormat) parts.push('تم توحيد التنسيق تلقائيا');
+        if (report.duplicateCount) parts.push(`تم حذف ${report.duplicateCount} رقم مكرر`);
+        if (report.invalidCount) parts.push(`تم استبعاد ${report.invalidCount} صف غير صالح`);
+        return parts.join('، ') + '.';
+    }
+
     async function onFormSubmit(e) {
         e.preventDefault();
 
@@ -496,10 +505,18 @@
             const result = await res.json();
 
             if (result.success) {
-                showToast('تم حفظ الحملة بنجاح ✅', 'success');
+                const repairMessage = getContactRepairMessage(result.contactRepair);
+                if (repairMessage) {
+                    sessionStorage.setItem('contactRepairNotice', JSON.stringify({
+                        type: result.contactRepair.invalidCount ? 'warning' : 'success',
+                        message: repairMessage
+                    }));
+                }
+                showToast('success', 'تم حفظ الحملة بنجاح');
                 setTimeout(() => { window.location.href = '/campaigns'; }, 1000);
             } else {
-                showToast('خطأ: ' + (result.message || 'فشل الحفظ'), 'error');
+                const repairMessage = getContactRepairMessage(result.contactRepair);
+                showToast('error', (result.message || 'فشل الحفظ') + (repairMessage ? ' ' + repairMessage : ''));
                 btn.textContent = origText;
                 btn.disabled = false;
             }

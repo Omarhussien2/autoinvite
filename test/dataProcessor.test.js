@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 
-const { loadContacts, normalizePhone, processContacts } = require('../src/utils/dataProcessor');
+const { loadContacts, normalizePhone, processContacts, repairContactsFile } = require('../src/utils/dataProcessor');
 const { normalizeMessageTemplates, pickWeightedMessage } = require('../src/utils/messageTemplates');
 
 // ────────────────────────── Phone Normalization ──────────────────────────
@@ -102,6 +102,25 @@ test('loadContacts: handles sheet-name prefix before Arabic customer headers', a
         { Name: 'وسام الشامي', Phone: '+966532094995' },
         { Name: 'أيوب أبو سلمان', Phone: '+966506305383' },
     ]);
+});
+
+test('repairContactsFile: rewrites messy exports to normalized campaign-ready CSV', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'autoinvite-repair-'));
+    const file = path.join(dir, 'contacts.csv');
+    await fs.writeFile(
+        file,
+        'الورقة1\nاسم العميل,رقم الجوال,وسام الشامي,+966532094995,أيوب أبو سلمان,+966506305383,مكرر,+966506305383,خطأ,123\n',
+        'utf8'
+    );
+
+    const result = await repairContactsFile(file);
+    const rewritten = await fs.readFile(file, 'utf8');
+
+    assert.equal(result.report.validCount, 2);
+    assert.equal(result.report.duplicateCount, 1);
+    assert.equal(result.report.invalidCount, 1);
+    assert.equal(result.report.repairedFormat, true);
+    assert.equal(rewritten, 'Name,Phone\nوسام الشامي,966532094995\nأيوب أبو سلمان,966506305383\n');
 });
 
 test('loadContacts: handles BOM and mixed delimiters', async () => {

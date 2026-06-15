@@ -175,6 +175,16 @@ function showToast(type, message) {
   container.appendChild(toast);
   setTimeout(() => { toast.style.animation = 'toastSlideOut 0.3s ease forwards'; setTimeout(() => toast.remove(), 300); }, 4000);
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+  try {
+    const rawNotice = sessionStorage.getItem('contactRepairNotice');
+    if (!rawNotice) return;
+    sessionStorage.removeItem('contactRepairNotice');
+    const notice = JSON.parse(rawNotice);
+    if (notice && notice.message) showToast(notice.type || 'info', notice.message);
+  } catch (_) {}
+});
 </script>
 
 <style>

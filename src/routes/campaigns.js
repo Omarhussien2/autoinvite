@@ -5,6 +5,7 @@ const { tenantScope } = require('../middleware/tenantScope');
 const { quotaGuard } = require('../middleware/quotaGuard');
 const { upload } = require('../middleware/uploadStorage');
 const { loadContacts } = require('../core');
+const { repairContactsFile } = require('../utils/dataProcessor');
 const ScheduleManager = require('../core/ScheduleManager');
 const { ensureSmartScheduleSchema } = require('../database/ensure_smart_schedule_schema');
 const { normalizeMessageTemplates } = require('../utils/messageTemplates');
@@ -92,9 +93,14 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, handleCampaignUpload,
             return res.status(400).json({ success: false, message: 'Name, messages, and contact file are required' });
         }
 
-        const contactList = await loadContacts(contactsPath);
+        const contactRepair = await repairContactsFile(contactsPath);
+        const contactList = contactRepair.contacts;
         if (!contactList || contactList.length === 0) {
-            return res.status(400).json({ success: false, message: 'Contacts file is empty or invalid' });
+            return res.status(400).json({
+                success: false,
+                message: 'لم يتم العثور على أرقام صالحة داخل ملف جهات الاتصال. تأكد من وجود عمود للاسم وعمود لرقم الجوال.',
+                contactRepair: contactRepair.report,
+            });
         }
 
         const scheduleBody = isSmartSchedule
@@ -149,7 +155,7 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, handleCampaignUpload,
             });
         }
 
-        res.json({ success: true, campaignId });
+        res.json({ success: true, campaignId, contactRepair: contactRepair.report });
     } catch (error) {
         log.error('Create failed:', error.message);
         res.status(error.statusCode || 500).json({
@@ -266,6 +272,18 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
             query += `, voicenote_path = $${params.length}`;
         }
 
+        let contactRepair = null;
+        if (contactsPath) {
+            contactRepair = await repairContactsFile(contactsPath);
+            if (!contactRepair.contacts || contactRepair.contacts.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'لم يتم العثور على أرقام صالحة داخل ملف جهات الاتصال. تأكد من وجود عمود للاسم وعمود لرقم الجوال.',
+                    contactRepair: contactRepair.report,
+                });
+            }
+        }
+
         params.push(scheduleBody.scheduledAt ? scheduleBody.scheduledAt.toISOString() : null);
         query += `, scheduled_at = $${params.length}`;
         query += ', schedule_job_id = NULL, schedule_attempts = 0, schedule_last_error = NULL, schedule_last_attempt_at = NULL';
@@ -282,7 +300,7 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
 
         if (isSmartSchedule) {
             const effectiveContactsPath = contactsPath || existing.contacts_path;
-            const contactList = await loadContacts(effectiveContactsPath);
+            const contactList = contactRepair ? contactRepair.contacts : await loadContacts(effectiveContactsPath);
             await createSmartCampaignBatches(req.tenantId, req.params.id, contactList.length, smartOptions);
         } else if (scheduleBody.isScheduled) {
             await ScheduleManager.scheduleCampaign(req.params.id, req.tenantId, {
@@ -291,7 +309,7 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
             });
         }
 
-        res.json({ success: true });
+        res.json({ success: true, contactRepair: contactRepair ? contactRepair.report : null });
     } catch (error) {
         log.error('Update failed:', error.message);
         res.status(error.statusCode || 500).json({

@@ -239,7 +239,7 @@ function parseFlatContactTokens(tokens) {
         }
     }
 
-    return contacts.filter(c => looksLikePhone(c.Phone));
+    return contacts.filter(c => c.Phone && /\d/.test(String(c.Phone)));
 }
 
 function parseLooseContactsText(text) {
@@ -414,4 +414,68 @@ function processContacts(contacts) {
     return result;
 }
 
-module.exports = { normalizePhone, processContacts, processName, loadContacts };
+function csvEscape(value) {
+    const text = String(value == null ? '' : value);
+    if (!/[",\n\r]/.test(text)) return text;
+    return `"${text.replace(/"/g, '""')}"`;
+}
+
+function getContactName(contact) {
+    return contact['Name'] || contact['name'] || contact['الاسم'] || contact['الإسم'] || contact['اسم'] || 'ضيف';
+}
+
+function getContactRawPhone(contact) {
+    return contact['Phone'] || contact['phone'] || contact['mobile'] || contact['رقم الجوال'] || contact['جوال'] || contact['هاتف'] || '';
+}
+
+function buildContactRepairSummary({ sourceCount, valid, duplicates, invalid, repairedFormat }) {
+    const notes = [];
+    if (repairedFormat) notes.push('تم توحيد تنسيق الملف إلى عمودين: الاسم ورقم الجوال.');
+    if (duplicates.length > 0) notes.push(`تم حذف ${duplicates.length} رقم مكرر.`);
+    if (invalid.length > 0) notes.push(`تم استبعاد ${invalid.length} صف لا يحتوي على رقم صالح.`);
+    if (valid.length > 0) notes.push(`تم اعتماد ${valid.length} جهة اتصال صالحة من أصل ${sourceCount}.`);
+
+    return {
+        sourceCount,
+        validCount: valid.length,
+        duplicateCount: duplicates.length,
+        invalidCount: invalid.length,
+        repairedFormat,
+        message: notes.join(' '),
+    };
+}
+
+async function repairContactsFile(filePath) {
+    const loadedContacts = await loadContacts(filePath);
+    const processed = processContacts(loadedContacts);
+    const valid = processed.valid;
+    const duplicates = processed.duplicates;
+    const invalid = processed.invalid;
+
+    const repairedFormat = valid.some((contact) => {
+        const rawPhone = getContactRawPhone(contact.original);
+        const rawName = getContactName(contact.original);
+        return String(rawPhone).trim() !== contact.phone || String(rawName).trim() !== contact.name;
+    }) || duplicates.length > 0 || invalid.length > 0;
+
+    if (valid.length > 0) {
+        const csvBody = [
+            'Name,Phone',
+            ...valid.map(contact => `${csvEscape(contact.name)},${csvEscape(contact.phone)}`),
+        ].join('\n') + '\n';
+        await fs.writeFile(filePath, csvBody, 'utf8');
+    }
+
+    return {
+        contacts: valid.map(contact => ({ Name: contact.name, Phone: contact.phone })),
+        report: buildContactRepairSummary({
+            sourceCount: loadedContacts.length,
+            valid,
+            duplicates,
+            invalid,
+            repairedFormat,
+        }),
+    };
+}
+
+module.exports = { normalizePhone, processContacts, processName, loadContacts, repairContactsFile };
