@@ -313,6 +313,29 @@ async function loadLooseContactsFromText(filePath) {
     return parseLooseContactsText(text);
 }
 
+/**
+ * Detects the actual file format by reading the magic bytes,
+ * regardless of file extension.
+ * @param {string} filePath
+ * @returns {'xlsx'|'xls'|'text'}
+ */
+function detectFileFormat(filePath) {
+    const fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(8);
+    try {
+        fs.readSync(fd, buf, 0, 8, 0);
+    } finally {
+        fs.closeSync(fd);
+    }
+
+    // OOXML (.xlsx) is a ZIP archive: PK\x03\x04
+    if (buf[0] === 0x50 && buf[1] === 0x4B && buf[2] === 0x03 && buf[3] === 0x04) return 'xlsx';
+    // OLE2 Compound Document (.xls / .doc / .ppt): D0 CF 11 E0
+    if (buf[0] === 0xD0 && buf[1] === 0xCF && buf[2] === 0x11 && buf[3] === 0xE0) return 'xls';
+    // Everything else (CSV / text files possibly mislabeled as .xlsx)
+    return 'text';
+}
+
 function shouldUseLooseContactFallback(normalizedRows) {
     if (!normalizedRows || normalizedRows.length === 0) return true;
 
@@ -371,6 +394,28 @@ async function loadContacts(customFilePath = null) {
                     })
                     .on('error', (err) => reject(err));
             } else if (ext === 'xlsx' || ext === 'xls') {
+                const format = detectFileFormat(filePath);
+
+                if (format === 'xls') {
+                    const err = new Error(
+                        'صيغة Excel 97-2003 (.xls) غير مدعومة حالياً. ' +
+                        'يرجى فتح الملف في Excel وحفظه بصيغة "مصنف Excel (.xlsx)" أو "CSV (.csv)" ثم إعادة الرفع.'
+                    );
+                    err.statusCode = 400;
+                    reject(err);
+                    return;
+                }
+
+                if (format === 'text') {
+                    // File has xlsx/xls extension but is actually a text/CSV file
+                    log.warn(`File ${path.basename(filePath)} has .${ext} extension but is actually a text file; reading as CSV.`);
+                    loadLooseContactsFromText(filePath)
+                        .then(contacts => resolve(contacts))
+                        .catch(textErr => reject(textErr));
+                    return;
+                }
+
+                // format === 'xlsx' — genuine OOXML spreadsheet
                 readXlsxFile(filePath)
                     .then((rows) => {
                         if (!rows || rows.length === 0) {

@@ -166,6 +166,36 @@ test('loadContacts: reads legacy repaired CSV content saved with xlsx extension'
     ]);
 });
 
+test('loadContacts: rejects old .xls (Excel 97-2003) with clear error', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'autoinvite-xls-'));
+    const file = path.join(dir, 'contacts.xls');
+    // OLE2 magic bytes: D0 CF 11 E0 A1 1A B1 A1 + padding
+    const buf = Buffer.alloc(512, 0);
+    buf[0] = 0xD0; buf[1] = 0xCF; buf[2] = 0x11; buf[3] = 0xE0;
+    buf[4] = 0xA1; buf[5] = 0x1A; buf[6] = 0xB1; buf[7] = 0xA1;
+    await fs.writeFile(file, buf);
+
+    await assert.rejects(
+        () => loadContacts(file),
+        (err) => {
+            assert.ok(err.message.includes('.xls'), 'Error should mention .xls format');
+            assert.equal(err.statusCode, 400, 'Should be a 400 client error');
+            return true;
+        }
+    );
+});
+
+test('loadContacts: reads CSV files mislabeled with .xlsx extension', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'autoinvite-csvxlsx-'));
+    const file = path.join(dir, 'contacts.xlsx');
+    // This is a plain CSV text file saved with .xlsx extension
+    await fs.writeFile(file, 'Name,Phone\nأحمد,0501234567\nسارة,0551234567\n', 'utf8');
+
+    const contacts = await loadContacts(file);
+    assert.ok(contacts.length >= 2, `Expected at least 2 contacts, got ${contacts.length}`);
+    assert.equal(contacts[0].Name, 'أحمد');
+});
+
 test('loadContacts: handles BOM and mixed delimiters', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'autoinvite-test-'));
     const file = path.join(dir, 'contacts.csv');
