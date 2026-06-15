@@ -82,7 +82,7 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, handleCampaignUpload,
         const { name, message_templates, canvas_config } = req.body;
         const files = req.files || {};
         const templatePath = files.template ? files.template[0].path : null;
-        const contactsPath = files.contacts ? files.contacts[0].path : null;
+        let contactsPath = files.contacts ? files.contacts[0].path : null;
         const voicenotePath = files.voicenote ? files.voicenote[0].path : null;
 
         const normalizedMessages = normalizeMessageTemplates(message_templates);
@@ -94,6 +94,7 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, handleCampaignUpload,
         }
 
         const contactRepair = await repairContactsFile(contactsPath);
+        contactsPath = contactRepair.filePath || contactsPath;
         const contactList = contactRepair.contacts;
         if (!contactList || contactList.length === 0) {
             return res.status(400).json({
@@ -195,7 +196,7 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
         const { name, message_templates, canvas_config } = req.body;
         const files = req.files || {};
         const templatePath = files.template ? files.template[0].path : null;
-        const contactsPath = files.contacts ? files.contacts[0].path : null;
+        let contactsPath = files.contacts ? files.contacts[0].path : null;
         const voicenotePath = files.voicenote ? files.voicenote[0].path : null;
 
         const normalizedMessages = normalizeMessageTemplates(message_templates);
@@ -263,10 +264,6 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
             params.push(templatePath);
             query += `, template_path = $${params.length}`;
         }
-        if (contactsPath) {
-            params.push(contactsPath);
-            query += `, contacts_path = $${params.length}`;
-        }
         if (voicenotePath) {
             params.push(voicenotePath);
             query += `, voicenote_path = $${params.length}`;
@@ -282,6 +279,9 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
                     contactRepair: contactRepair.report,
                 });
             }
+            contactsPath = contactRepair.filePath || contactsPath;
+            params.push(contactsPath);
+            query += `, contacts_path = $${params.length}`;
         }
 
         params.push(scheduleBody.scheduledAt ? scheduleBody.scheduledAt.toISOString() : null);
@@ -355,10 +355,19 @@ router.get('/:id/stats', isAuthenticated, tenantScope, async (req, res) => {
         let totalContacts = 0;
         try {
             const dataProcessor = require('../utils/dataProcessor');
-            const contacts = await dataProcessor.processContacts(campaign.contacts_path, tenantId, campaignId);
-            totalContacts = contacts.valid.length;
+            const rawContacts = await dataProcessor.loadContacts(campaign.contacts_path);
+            const processed = dataProcessor.processContacts(rawContacts);
+            totalContacts = processed.valid.length;
         } catch (e) {
             log.error('Error loading contacts for stats:', e.message);
+            // Fallback: count from DB contacts table
+            try {
+                const cntRes = await db.query(
+                    'SELECT COUNT(*) FROM contacts WHERE campaign_id = $1 AND tenant_id = $2',
+                    [campaignId, tenantId]
+                );
+                totalContacts = parseInt(cntRes.rows[0].count, 10);
+            } catch (_) {}
         }
 
         const sentRes = await db.query(

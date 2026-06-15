@@ -307,6 +307,12 @@ function parseLooseContactsText(text) {
     return parseFlatContactTokens(tokens);
 }
 
+async function loadLooseContactsFromText(filePath) {
+    const text = await fs.readFile(filePath, 'utf8');
+    if (text.includes('\u0000')) return [];
+    return parseLooseContactsText(text);
+}
+
 function shouldUseLooseContactFallback(normalizedRows) {
     if (!normalizedRows || normalizedRows.length === 0) return true;
 
@@ -403,7 +409,19 @@ async function loadContacts(customFilePath = null) {
 
                         resolve(normalized);
                     })
-                    .catch((err) => reject(err));
+                    .catch(async (err) => {
+                        try {
+                            const looseContacts = await loadLooseContactsFromText(filePath);
+                            if (looseContacts.length > 0) {
+                                log.warn(`Excel parser failed for ${path.basename(filePath)}; loaded contacts as delimited text fallback.`);
+                                resolve(looseContacts);
+                                return;
+                            }
+                        } catch (fallbackError) {
+                            log.warn(`Delimited text fallback failed for ${path.basename(filePath)}: ${fallbackError.message}`);
+                        }
+                        reject(err);
+                    });
             } else {
                 reject(new Error(`نوع الملف غير مدعوم: ${ext}. المدعوم: CSV, XLSX, XLS`));
             }
@@ -497,15 +515,24 @@ async function repairContactsFile(filePath) {
         return String(rawPhone).trim() !== contact.phone || String(rawName).trim() !== contact.name;
     }) || duplicates.length > 0 || invalid.length > 0;
 
+    let repairedFilePath = filePath;
     if (valid.length > 0) {
         const csvBody = [
             'Name,Phone',
             ...valid.map(contact => `${csvEscape(contact.name)},${csvEscape(contact.phone)}`),
         ].join('\n') + '\n';
-        await fs.writeFile(filePath, csvBody, 'utf8');
+
+        const ext = path.extname(filePath).toLowerCase();
+        if (ext === '.xlsx' || ext === '.xls') {
+            const parsed = path.parse(filePath);
+            repairedFilePath = path.join(parsed.dir, `${parsed.name}.clean.csv`);
+        }
+
+        await fs.writeFile(repairedFilePath, csvBody, 'utf8');
     }
 
     return {
+        filePath: repairedFilePath,
         contacts: valid.map(contact => ({ Name: contact.name, Phone: contact.phone })),
         report: buildContactRepairSummary({
             sourceCount: loadedContacts.length,

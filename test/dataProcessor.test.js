@@ -139,6 +139,33 @@ test('repairContactsFile: rewrites messy exports to normalized campaign-ready CS
     assert.equal(rewritten, 'Name,Phone\nوسام الشامي,966532094995\nأيوب أبو سلمان,966506305383\n');
 });
 
+test('repairContactsFile: writes Excel uploads to a readable clean CSV path', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'autoinvite-xlsx-repair-'));
+    const file = path.join(dir, 'contacts.xlsx');
+    const minimalXlsxBase64 = 'UEsDBBQAAAAIAK6Ez1ywXVXT/gAAADMCAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbK1RvU7DMBDeeQrLaxU7ZUAINe1QYASG8gCHfUms+E8+t6Rvj5NCB1QQA9Pp7vuVvdqMzrIDJjLBN3wpas7Qq6CN7xr+unusbjmjDF6DDR4bfkTim/XVaneMSKyIPTW8zzneSUmqRwckQkRfkDYkB7msqZMR1AAdyuu6vpEq+Iw+V3ny4MXsHlvY28wexnI/NUloibPtiTmFNRxitEZBLrg8eP0tpvqMEEU5c6g3kRaFwOXliAn6OeFL+FweJxmN7AVSfgJXaHK08j2k4S2EQfzucqFnaFujUAe1d0UiKCYETT1idlbMUzgwfvGHAjOb5DyW/9zk7H8uIuc/X38AUEsDBBQAAAAIAK6Ez1x+b8CFsQAAACoBAAALAAAAX3JlbHMvLnJlbHONzzsOwjAMBuCdU0TeaVoGhFBDF4TUFZUDhNR9qEkcJQHa25MRKgZGy/4/22U1G82e6MNIVkCR5cDQKmpH2wu4NZftAViI0rZSk0UBCwaoTpvyilrGlAnD6AJLiA0ChhjdkfOgBjQyZOTQpk5H3siYSt9zJ9Uke+S7PN9z/2nACmV1K8DXbQGsWRz+g1PXjQrPpB4GbfyxYzWRZOl7jAJmzV/kpzvRlCUUeDqGf714egNQSwMEFAAAAAgAroTPXG8lzyC0AAAAKwEAABoAAAB4bC9fcmVscy93b3JrYm9vay54bWwucmVsc43PzQrCMAwA4LtPUXJ32TyIyLpdRNhV5gOULvthW1ua+rO3t3gQFQ+eQhLyJcnL+zyJK3kerJGQJSkIMto2g+kknOvjegeCgzKNmqwhCQsxlMUqP9GkQpzhfnAsImJYQh+C2yOy7mlWnFhHJnZa62cVYuo7dEqPqiPcpOkW/bsBX6ioGgm+ajIQ9eLoH9y27aDpYPVlJhN+7MCb9SP3RCGiyncUJLxKjM+QJVEFjNfgx4/FA1BLAwQUAAAACACuhM9cdPlqlr8AAAAeAQAADwAAAHhsL3dvcmtib29rLnhtbI1PMW7DMAzc8wqBeyO7Q1EYtrMUBTKneYBq0bEQizRIpU1+H6Zu9053xOGOd+3ummf3haKJqYN6W4FDGjgmOnVw/Hh/egWnJVAMMxN2cEOFXb9pv1nOn8xnZ37SDqZSlsZ7HSbMQbe8IJkysuRQ7JST10UwRJ0QS579c1W9+BwSwZrQyH8yeBzTgG88XDJSWUME51CsvU5pUbBqPy+0X9FRyFb78OC1TXngPtpScNIkI7KPNfi+9b+2Tev/tvV3UEsDBBQAAAAIAK6Ez1z/tOcI9AAAACsCAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1slZFBS8QwEIXv/oowV3GTbWzZSpqgiHjwpv6AoY3bYJuUTHD135stUj1sF8xp8ob3vgejzOc4sA8byQXfwHYjgFnfhs75fQOvLw9XO2CU0Hc4BG8b+LIERl+oQ4jv1FubWA7w1ECf0nTDObW9HZE2YbI+b95CHDHlb9xzmqLFbjaNAy+EqPiIzkNOm8V7TJjnGA4s5iqgVXscbrfAUgPOD87b5xSz7kirpI0xzMxP8aQVP6q8/XHd/dfFM/eXXiz0Yj3nHH7NdllXVSkLUV/XdXmugVwayJWoJ3QDskckQn+qwppPlKKSopQ7eZLP/x6DL3fW31BLAQIUABQAAAAIAK6Ez1ywXVXT/gAAADMCAAATAAAAAAAAAAAAAACAAQAAAABbQ29udGVudF9UeXBlc10ueG1sUEsBAhQAFAAAAAgAroTPXH5vwIWxAAAAKgEAAAsAAAAAAAAAAAAAAIABLwEAAF9yZWxzLy5yZWxzUEsBAhQAFAAAAAgAroTPXG8lzyC0AAAAKwEAABoAAAAAAAAAAAAAAIABCQIAAHhsL19yZWxzL3dvcmtib29rLnhtbC5yZWxzUEsBAhQAFAAAAAgAroTPXHT5apa/AAAAHgEAAA8AAAAAAAAAAAAAAIAB9QIAAHhsL3dvcmtib29rLnhtbFBLAQIUABQAAAAIAK6Ez1z/tOcI9AAAACsCAAAYAAAAAAAAAAAAAACAAeEDAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwUGAAAAAAUABQBFAQAACwUAAAAA';
+    await fs.writeFile(file, Buffer.from(minimalXlsxBase64, 'base64'));
+
+    const result = await repairContactsFile(file);
+    const repairedContacts = await loadContacts(result.filePath);
+
+    assert.equal(path.extname(result.filePath), '.csv');
+    assert.equal(result.filePath.endsWith('contacts.clean.csv'), true);
+    assert.deepEqual(repairedContacts.map(contact => contact.Phone), ['966532094995', '966506305383']);
+});
+
+test('loadContacts: reads legacy repaired CSV content saved with xlsx extension', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'autoinvite-legacy-xlsx-'));
+    const file = path.join(dir, 'contacts.xlsx');
+    await fs.writeFile(file, 'Name,Phone\nWesam,+966532094995\nAyoub,+966506305383\n', 'utf8');
+
+    const contacts = await loadContacts(file);
+
+    assert.deepEqual(contacts, [
+        { Name: 'Wesam', Phone: '+966532094995' },
+        { Name: 'Ayoub', Phone: '+966506305383' },
+    ]);
+});
+
 test('loadContacts: handles BOM and mixed delimiters', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'autoinvite-test-'));
     const file = path.join(dir, 'contacts.csv');
