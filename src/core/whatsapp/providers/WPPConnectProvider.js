@@ -47,6 +47,10 @@ class WPPConnectProvider {
         return this.manager.clients.has(tenantId);
     }
 
+    hasStoredSession(tenantId) {
+        return this.manager.hasStoredSession(tenantId);
+    }
+
     getActiveClientCount() {
         return this.manager.clients.size;
     }

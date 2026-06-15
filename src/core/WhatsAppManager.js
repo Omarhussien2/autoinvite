@@ -72,6 +72,19 @@ class WhatsAppManager {
         return this.states.get(tenantId) || { status: 'DISCONNECTED', lastQr: null, phone: null };
     }
 
+    hasStoredSession(tenantId) {
+        const sessionPath = path.join(
+            process.env.DATA_DIR || path.join(__dirname, '../../'),
+            'storage', `tenant_${tenantId}`, 'wpp_tokens', `tenant_${tenantId}`
+        );
+
+        try {
+            return fs.existsSync(sessionPath) && fs.readdirSync(sessionPath).length > 0;
+        } catch (_) {
+            return false;
+        }
+    }
+
     updateActivity(tenantId) {
         if (this.states.has(tenantId)) {
             const state = this.states.get(tenantId);

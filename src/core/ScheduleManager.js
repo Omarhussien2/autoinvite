@@ -7,6 +7,7 @@ const log = createLogger('ScheduleManager');
 const QUEUE_NAME = 'campaign.schedule.start';
 const MAX_RETRIES = 3;
 const RETRY_DELAYS_MS = [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000];
+const WHATSAPP_WAKE_TIMEOUT_MS = 60 * 1000;
 
 function asDate(value) {
     const date = value instanceof Date ? value : new Date(value);
@@ -35,6 +36,15 @@ function parseJsonObject(value) {
     } catch (_) {
         return null;
     }
+}
+
+function withTimeout(promise, timeoutMs, message) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    });
+
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 class ScheduleManager {
@@ -430,8 +440,10 @@ class ScheduleManager {
         const tenantId = batch.tenant_id;
         const campaignId = batch.campaign_id;
 
-        if (batch.whatsapp_status !== 'connected') {
-            await this._retryOrPauseBatch(batch, new Error(`WhatsApp is not connected (${batch.whatsapp_status || 'unknown'})`));
+        try {
+            await this._ensureWhatsAppReady(tenantId, batch.whatsapp_status);
+        } catch (err) {
+            await this._retryOrPauseBatch(batch, err);
             return;
         }
 
@@ -508,8 +520,10 @@ class ScheduleManager {
         const tenantId = campaign.tenant_id;
         const campaignId = campaign.id;
 
-        if (campaign.whatsapp_status !== 'connected') {
-            await this._retryOrPause(campaign, new Error(`WhatsApp is not connected (${campaign.whatsapp_status || 'unknown'})`));
+        try {
+            await this._ensureWhatsAppReady(tenantId, campaign.whatsapp_status);
+        } catch (err) {
+            await this._retryOrPause(campaign, err);
             return;
         }
 
@@ -578,6 +592,40 @@ class ScheduleManager {
              WHERE id = $1`,
             [campaignId]
         );
+    }
+
+    async _ensureWhatsAppReady(tenantId, dbStatus) {
+        const WhatsAppProviders = require('./whatsapp');
+        const provider = await WhatsAppProviders.getProviderForTenant(tenantId);
+        const hasClient = typeof provider.hasClient === 'function' && provider.hasClient(tenantId);
+        const hasStoredSession = typeof provider.hasStoredSession === 'function' && provider.hasStoredSession(tenantId);
+
+        if (!hasClient && dbStatus !== 'connected' && !hasStoredSession) {
+            throw new Error(`WhatsApp is not connected (${dbStatus || 'unknown'}). Open WhatsApp connection page and scan the QR first.`);
+        }
+
+        if (!hasClient && hasStoredSession) {
+            log.info(`Waking stored WhatsApp session for tenant ${tenantId} before scheduled campaign.`);
+        }
+
+        const client = await withTimeout(
+            provider.getClient(tenantId),
+            WHATSAPP_WAKE_TIMEOUT_MS,
+            'WhatsApp session wake-up timed out. Open WhatsApp connection page to refresh the QR/session.'
+        );
+
+        if (!client) {
+            throw new Error('WhatsApp client is not ready.');
+        }
+
+        const state = typeof provider.getTenantState === 'function'
+            ? provider.getTenantState(tenantId)
+            : null;
+        if (state && ['QUERY_QR', 'ERROR', 'DISCONNECTED'].includes(state.status)) {
+            throw new Error(`WhatsApp is not ready (${state.status}). Open WhatsApp connection page and scan the QR if shown.`);
+        }
+
+        return client;
     }
 
     async _retryOrPause(campaign, error) {

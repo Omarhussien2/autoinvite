@@ -18,6 +18,7 @@ test('WPPConnect provider delegates tenant lifecycle calls to the manager', asyn
         updateActivity: (tenantId) => calls.push(['updateActivity', tenantId]),
         stopClient: async (tenantId) => calls.push(['stopClient', tenantId]),
         logoutClient: async (tenantId) => calls.push(['logoutClient', tenantId]),
+        hasStoredSession: (tenantId) => tenantId === 'tenant-1',
         startSleepMonitor: (idleMs) => calls.push(['startSleepMonitor', idleMs]),
         stopSleepMonitor: () => calls.push(['stopSleepMonitor']),
     };
@@ -28,6 +29,8 @@ test('WPPConnect provider delegates tenant lifecycle calls to the manager', asyn
     assert.deepEqual(await provider.getClient('tenant-2'), { tenantId: 'tenant-2' });
     assert.deepEqual(provider.getTenantState('tenant-2'), { tenantId: 'tenant-2', status: 'READY' });
     assert.equal(provider.hasClient('tenant-1'), true);
+    assert.equal(provider.hasStoredSession('tenant-1'), true);
+    assert.equal(provider.hasStoredSession('tenant-2'), false);
     assert.equal(provider.getActiveClientCount(), 1);
     assert.equal(provider.getMaxClientCount(), 7);
     assert.deepEqual(provider.getActiveTenantIds(), ['tenant-1']);
