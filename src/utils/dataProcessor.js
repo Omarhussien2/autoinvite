@@ -147,20 +147,58 @@ function normalizeContactColumns(rows) {
 
     const keys = Object.keys(rows[0]);
 
+    const normalizeHeader = value => String(value || '').toLowerCase().replace(/[_\-./]+/g, ' ').replace(/\s+/g, ' ').trim();
     const nameSynonyms = new Set([
         'name', 'الاسم', 'الإسم', 'اسم', 'fullname', 'full_name',
         'customer_name', 'client_name', 'الأسماء', 'الأسم', 'العميل',
-        'الاسم الكامل', 'اسم العميل', 'الشخص'
+        'الاسم الكامل', 'اسم العميل', 'الشخص', 'full name', 'customer', 'client'
     ]);
     const phoneSynonyms = new Set([
         'phone', 'mobile', 'رقم الجوال', 'رقم', 'جوال', 'موبايل',
         'هاتف', 'telephone', 'tel', 'number', 'الهاتف', 'الجوال',
         'رقم الهاتف', 'رقم الموبايل', 'رقم التليفون', 'تليفون',
-        'phone number', 'mobile number', 'contact'
+        'phone number', 'mobile number', 'contact', 'whatsapp', 'whats app',
+        'wa', 'mobile no', 'phone no', 'رقم الواتساب', 'واتساب', 'رقم التواصل', 'التواصل'
     ]);
 
-    const nameKey = keys.find(k => nameSynonyms.has(k.toLowerCase().trim())) || keys[0];
-    const phoneKey = keys.find(k => phoneSynonyms.has(k.toLowerCase().trim())) || (keys.length > 1 ? keys[1] : keys[0]);
+    const phoneHeaderScore = key => {
+        const header = normalizeHeader(key);
+        if (phoneSynonyms.has(header)) return 10;
+        if (/(phone|mobile|whatsapp|whats app|wa|tel|number|contact)/i.test(header)) return 7;
+        if (/(رقم|جوال|هاتف|موبايل|واتساب|تواصل)/.test(header)) return 7;
+        return 0;
+    };
+
+    const nameHeaderScore = key => {
+        const header = normalizeHeader(key);
+        if (nameSynonyms.has(header)) return 10;
+        if (/(name|customer|client|person)/i.test(header)) return 7;
+        if (/(اسم|عميل|شخص|الاسم)/.test(header)) return 7;
+        return 0;
+    };
+
+    const valuePhoneScore = key => rows.reduce((score, row) => {
+        const value = row[key];
+        if (normalizePhone(value)) return score + 3;
+        if (value && /\d{7,}/.test(String(value).replace(/\D/g, ''))) return score + 1;
+        return score;
+    }, 0);
+
+    const phoneKey = keys
+        .map(key => ({ key, score: phoneHeaderScore(key) + valuePhoneScore(key) }))
+        .sort((a, b) => b.score - a.score)[0]?.key || (keys.length > 1 ? keys[1] : keys[0]);
+
+    const nameKey = keys
+        .filter(key => key !== phoneKey)
+        .map(key => ({
+            key,
+            score: nameHeaderScore(key) + rows.reduce((score, row) => {
+                const value = row[key];
+                if (!value || normalizePhone(value)) return score;
+                return score + 1;
+            }, 0),
+        }))
+        .sort((a, b) => b.score - a.score)[0]?.key || keys.find(key => key !== phoneKey) || keys[0];
 
     return rows.map(row => ({
         Name: (row[nameKey] !== undefined && row[nameKey] !== null) ? row[nameKey].toString().trim() : '',
@@ -284,6 +322,7 @@ function shouldUseLooseContactFallback(normalizedRows) {
         && ['phone', 'mobile', 'number', 'رقم', 'جوال', 'هاتف', 'رقم الجوال', 'رقم الهاتف'].includes(normalizedPhone)
     );
 
+    if (['name', 'fullname', 'full_name', 'الاسم', 'الإسم', 'اسم', 'اسم العميل'].includes(normalizedName)) return true;
     if (looksLikeHeaderRow) return true;
     
     const isCorrupted = 

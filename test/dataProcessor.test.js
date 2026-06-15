@@ -73,6 +73,22 @@ test('loadContacts: loads Arabic-header CSV (الاسم, رقم الجوال)', 
     assert.equal(contacts[0].Phone, '0501234567');
 });
 
+test('loadContacts: detects phone column from values when headers are non-standard', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'autoinvite-test-'));
+    const file = path.join(dir, 'contacts.csv');
+    await fs.writeFile(
+        file,
+        'Status,Full Name,WhatsApp,Notes\nnew,Laila Hassan,+966532094995,vip\nnew,وسام الشامي,0506305383,\n',
+        'utf8'
+    );
+
+    const contacts = await loadContacts(file);
+    assert.deepEqual(contacts, [
+        { Name: 'Laila Hassan', Phone: '+966532094995' },
+        { Name: 'وسام الشامي', Phone: '0506305383' },
+    ]);
+});
+
 test('loadContacts: loads flat exported contacts with all data in one field', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'autoinvite-contacts-'));
     const file = path.join(dir, 'contacts.csv');
