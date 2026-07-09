@@ -32,6 +32,79 @@ function getSaudiErrorMessage(name, error) {
     return `صارت مشكلة غير متوقعة`;
 }
 
+async function sendTextSafely(client, chatId, message) {
+    if (!message) return;
+    await client.sendText(chatId, message).catch(e => {
+        if (!safeStringify(e).includes('msgChunks')) throw e;
+    });
+}
+
+async function sendPersonalizedImageOrText({
+    client,
+    chatId,
+    name,
+    normalizedPhone,
+    templatePath,
+    canvasConfig,
+    message,
+    onLog,
+    WhatsAppProvider,
+    tenantId,
+}) {
+    let imageSent = false;
+    let imagePath = null;
+
+    try {
+        onLog(`[InviteImage] جاري تجهيز صورة الدعوة المخصصة لـ ${name}...`, 'INFO');
+        imagePath = await generateImage(name, normalizedPhone, templatePath, canvasConfig);
+        const imgBase64 = `data:image/png;base64,${fs.readFileSync(imagePath).toString('base64')}`;
+        let mediaRetries = 3;
+
+        while (!imageSent) {
+            try {
+                await client.sendImageFromBase64(chatId, imgBase64, 'invitation.png', message);
+                imageSent = true;
+            } catch (mediaErr) {
+                const errStr = safeStringify(mediaErr);
+                if (errStr.includes('msgChunks')) {
+                    imageSent = true;
+                } else if (mediaRetries > 0 && (errStr.includes('InvalidMedia') || errStr.includes('RepairFailed') || errStr.includes('FailedType'))) {
+                    mediaRetries--;
+                    onLog(`[Retry] خطأ مؤقت في الوسائط (${3 - mediaRetries}/3)، إعادة المحاولة بعد 3 ثوان...`, 'WARN');
+                    await AntiBanEngine.sleep(3000);
+                } else {
+                    throw mediaErr;
+                }
+            }
+        }
+
+        onLog(`[InviteImage] تم إرسال صورة الدعوة المخصصة لـ ${name}`, 'SUCCESS');
+        return true;
+    } catch (imgErr) {
+        const errStr = safeStringify(imgErr);
+        if (errStr.includes('msgChunks')) {
+            return true;
+        }
+
+        if (!message) {
+            onLog(`[Fallback] فشل إرسال صورة الدعوة المخصصة لـ ${name} ولا يوجد نص بديل`, 'ERROR');
+            throw imgErr;
+        }
+
+        onLog(`[Fallback] فشل إرسال صورة الدعوة المخصصة لـ ${name}: سيتم إرسال النص فقط`, 'WARN');
+        WhatsAppProvider.emitToTenant(tenantId, 'log', {
+            message: `فشل إرسال الصورة المخصصة لـ ${name}. تم إرسال النص فقط. التفاصيل: ${errStr}`,
+            type: 'WARN'
+        });
+        await sendTextSafely(client, chatId, message);
+        return false;
+    } finally {
+        if (imagePath) {
+            await fs.remove(imagePath).catch(err => log.error('Failed to cleanup temp image:', err.message));
+        }
+    }
+}
+
 const { HARD_DAILY_LIMIT } = require('../utils/smartScheduler');
 
 async function processBatch(contacts, startRow, endRow, messages, campaignId = null, hasTemplate = false, onLog = console.log, templatePath = null, canvasConfig = null, tenantId, voicenotePath = null, runOptions = {}) {
@@ -213,56 +286,37 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             if (voicenotePath && pttBase64) {
                 // Send pre-converted OGG/Opus as base64 PTT
                 await client.sendPttFromBase64(chatId, pttBase64, 'voice.ogg');
-                // Send text caption separately if present
-                if (message) await client.sendText(chatId, message);
-            } else if (hasTemplate && templatePath) {
-                // ── Image send with retry + fallback to text-only ──
-                let imageSent = false;
-                let imagePath = null;
-
-                try {
-                    imagePath = await generateImage(name, normalizedPhone, templatePath, canvasConfig);
-                    const imgBase64 = `data:image/png;base64,${fs.readFileSync(imagePath).toString('base64')}`;
-                    let mediaRetries = 3;
-                    while (!imageSent) {
-                        try {
-                            await client.sendImageFromBase64(chatId, imgBase64, 'invitation.png', message);
-                            imageSent = true;
-                        } catch (mediaErr) {
-                            const errStr = safeStringify(mediaErr);
-                            if (errStr.includes('msgChunks')) {
-                                imageSent = true;
-                            } else if (mediaRetries > 0 && (errStr.includes('InvalidMedia') || errStr.includes('RepairFailed') || errStr.includes('FailedType'))) {
-                                mediaRetries--;
-                                onLog(`[Retry] خطأ مؤقت في الوسائط (${3 - mediaRetries}/3)، إعادة المحاولة بعد 3 ثوانٍ...`, 'WARN');
-                                await AntiBanEngine.sleep(3000);
-                            } else {
-                                throw mediaErr;
-                            }
-                        }
-                    }
-                } catch (imgErr) {
-                    const errStr = safeStringify(imgErr);
-                    if (errStr.includes('msgChunks')) {
-                        // ignore, message sent
-                    } else {
-                        // Fallback: send text-only message if image fails
-                        onLog(`[Fallback] فشل إرسال الصورة لـ ${name}: إرسال نص فقط`, 'WARN');
-                        WhatsAppProvider.emitToTenant(tenantId, 'log', { message: `فشل إرسال الصورة لـ ${name}، يتم الإرسال نص فقط`, type: 'WARN' });
-                        await client.sendText(chatId, message).catch(e => {
-                            if (!safeStringify(e).includes('msgChunks')) throw e;
-                        });
-                    }
-                } finally {
-                    // Always cleanup temp image
-                    if (imagePath) {
-                        await fs.remove(imagePath).catch(err => log.error('Failed to cleanup temp image:', err.message));
-                    }
+                if (hasTemplate && templatePath) {
+                    await sendPersonalizedImageOrText({
+                        client,
+                        chatId,
+                        name,
+                        normalizedPhone,
+                        templatePath,
+                        canvasConfig,
+                        message,
+                        onLog,
+                        WhatsAppProvider,
+                        tenantId,
+                    });
+                } else {
+                    await sendTextSafely(client, chatId, message);
                 }
-            } else {
-                await client.sendText(chatId, message).catch(e => {
-                    if (!safeStringify(e).includes('msgChunks')) throw e;
+            } else if (hasTemplate && templatePath) {
+                await sendPersonalizedImageOrText({
+                    client,
+                    chatId,
+                    name,
+                    normalizedPhone,
+                    templatePath,
+                    canvasConfig,
+                    message,
+                    onLog,
+                    WhatsAppProvider,
+                    tenantId,
                 });
+            } else {
+                await sendTextSafely(client, chatId, message);
             }
 
             // ── Step 6: Record sent & apply inter-message anti-ban delay ───

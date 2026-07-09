@@ -52,8 +52,22 @@ function renderMessage(text, name) {
     return String(text || '')
         .replace(/\[\u0627\u0644\u0627\u0633\u0645\]/g, name)
         .replace(/\[\u0627\u0644\u0625\u0633\u0645\]/g, name)
+        .replace(/\[\s*\u0627?\u0633\u0645\s*\]/g, name)
+        .replace(/\[\s*\u0627\u0644\u0636\u064a\u0641\s*\]/g, name)
+        .replace(/\{\{\s*\u0627\u0644\u0627\u0633\u0645\s*\}\}/g, name)
+        .replace(/\{\{\s*\u0627\u0644\u0625\u0633\u0645\s*\}\}/g, name)
+        .replace(/\{\{\s*\u0627\u0644\u0636\u064a\u0641\s*\}\}/g, name)
+        .replace(/\{\{\s*\u0627?\u0633\u0645\s*\}\}/g, name)
+        .replace(/\{\s*\u0627\u0644\u0627\u0633\u0645\s*\}/g, name)
+        .replace(/\{\s*\u0627\u0644\u0625\u0633\u0645\s*\}/g, name)
+        .replace(/\{\s*\u0627\u0644\u0636\u064a\u0641\s*\}/g, name)
+        .replace(/\{\s*\u0627?\u0633\u0645\s*\}/g, name)
         .replace(/\{\{\s*name\s*\}\}/gi, name)
-        .replace(/\{\s*name\s*\}/gi, name);
+        .replace(/\{\{\s*guest\s*\}\}/gi, name)
+        .replace(/\[\s*name\s*\]/gi, name)
+        .replace(/\[\s*guest\s*\]/gi, name)
+        .replace(/\{\s*name\s*\}/gi, name)
+        .replace(/\{\s*guest\s*\}/gi, name);
 }
 
 function pickWeightedMessage(messages, name, position = 0) {

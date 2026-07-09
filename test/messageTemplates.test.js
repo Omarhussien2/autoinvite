@@ -18,6 +18,22 @@ test('normalizes message templates from JSON strings and alternate text keys', (
     assert.deepEqual(messages.map((message) => message.text), ['A {name}', 'B {{name}}', 'C [الاسم]']);
 });
 
+test('renders common Arabic and English name placeholder variants', () => {
+    const name = '\u0623\u062d\u0645\u062f';
+    const examples = [
+        ['\u064a\u0627 {\u0627\u0644\u0627\u0633\u0645}', `\u064a\u0627 ${name}`],
+        ['\u062d\u064a\u0627\u0643 {{\u0627\u0644\u0625\u0633\u0645}}', `\u062d\u064a\u0627\u0643 ${name}`],
+        ['\u0645\u0631\u062d\u0628\u0627 [\u0627\u0633\u0645]', `\u0645\u0631\u062d\u0628\u0627 ${name}`],
+        ['\u0623\u0647\u0644\u0627 {{\u0627\u0644\u0636\u064a\u0641}}', `\u0623\u0647\u0644\u0627 ${name}`],
+        ['Hello [name]', `Hello ${name}`],
+        ['Guest {guest}', `Guest ${name}`],
+    ];
+
+    for (const [template, expected] of examples) {
+        assert.equal(pickWeightedMessage([{ text: template }], name, 0), expected);
+    }
+});
+
 test('uses deterministic weighted rotation instead of repeatedly picking the first message', () => {
     const messages = normalizeMessageTemplates([
         { text: 'A {name}', weight: 3 },
