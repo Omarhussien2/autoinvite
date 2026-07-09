@@ -50,15 +50,98 @@ class BackgroundQueue {
                 }
 
                 if (campaignId) {
-                    const { successCount = 0, failCount = 0 } = result || {};
+                    const {
+                        successCount = 0,
+                        failCount = 0,
+                        stoppedReason = null,
+                        lastRow = endRow,
+                    } = result || {};
+                    const isSmartBatch = !!(runOptions && runOptions.batchId);
+                    const finalLastRow = lastRow || endRow;
                     let finalStatus = 'completed';
-                    if (failCount > successCount) {
+                    let pausedReason = null;
+
+                    if (stoppedReason) {
+                        finalStatus = 'paused';
+                        pausedReason = stoppedReason;
+                    } else if (failCount > successCount) {
                         finalStatus = 'partial_failure';
                     }
 
-                    await db.query('UPDATE campaigns SET last_sent_row = $1, status = $2 WHERE id = $3', [endRow, finalStatus, campaignId]);
+                    if (isSmartBatch) {
+                        await db.query(
+                            `UPDATE campaign_batches
+                             SET status = $1,
+                                 sent_count = $2,
+                                 failed_count = $3,
+                                 last_sent_row = $4,
+                                 schedule_job_id = NULL,
+                                 schedule_last_error = $5,
+                                 schedule_last_attempt_at = NOW()
+                             WHERE id = $6 AND tenant_id = $7`,
+                            [
+                                stoppedReason ? 'paused' : 'completed',
+                                successCount,
+                                failCount,
+                                finalLastRow,
+                                pausedReason,
+                                runOptions.batchId,
+                                tenantId,
+                            ]
+                        );
 
-                    if (finalStatus === 'partial_failure') {
+                        if (!stoppedReason) {
+                            const batchStateRes = await db.query(
+                                `SELECT
+                                     COUNT(*) FILTER (WHERE status IN ('scheduled', 'running'))::int AS pending_count,
+                                     COUNT(*) FILTER (WHERE status = 'paused')::int AS paused_count,
+                                     COALESCE(SUM(sent_count), 0)::int AS total_sent,
+                                     COALESCE(SUM(failed_count), 0)::int AS total_failed
+                                 FROM campaign_batches
+                                 WHERE campaign_id = $1 AND tenant_id = $2`,
+                                [campaignId, tenantId]
+                            );
+                            const batchState = batchStateRes.rows[0] || {};
+                            const pendingCount = parseInt(batchState.pending_count || 0, 10) || 0;
+                            const pausedCount = parseInt(batchState.paused_count || 0, 10) || 0;
+                            const totalSent = parseInt(batchState.total_sent || successCount, 10) || 0;
+                            const totalFailed = parseInt(batchState.total_failed || failCount, 10) || 0;
+
+                            if (pausedCount > 0) {
+                                finalStatus = 'paused';
+                                pausedReason = 'smart_batch_paused';
+                            } else if (pendingCount > 0) {
+                                finalStatus = 'scheduled';
+                                pausedReason = null;
+                            } else if (totalFailed > totalSent) {
+                                finalStatus = 'partial_failure';
+                                pausedReason = null;
+                            } else {
+                                finalStatus = 'completed';
+                                pausedReason = null;
+                            }
+                        }
+                    }
+
+                    await db.query(
+                        'UPDATE campaigns SET last_sent_row = $1, status = $2, paused_reason = $3 WHERE id = $4 AND tenant_id = $5',
+                        [finalLastRow, finalStatus, pausedReason, campaignId, tenantId]
+                    );
+
+                    if (finalStatus === 'paused') {
+                        const reasonText = pausedReason === 'daily_limit_reached'
+                            ? `تم الوصول للحد اليومي. توقفت الحملة مؤقتا عند الصف ${finalLastRow} ويمكن استكمالها في نافذة الإرسال التالية.`
+                            : `تم إيقاف الحملة مؤقتا عند الصف ${finalLastRow}.`;
+                        provider.emitToTenant(tenantId, 'log', {
+                            message: reasonText,
+                            type: 'WARN'
+                        });
+                    } else if (isSmartBatch && finalStatus === 'scheduled') {
+                        provider.emitToTenant(tenantId, 'log', {
+                            message: `اكتملت الدفعة الحالية (${successCount} نجح، ${failCount} فشل). الدفعات القادمة ما زالت مجدولة.`,
+                            type: 'SUCCESS'
+                        });
+                    } else if (finalStatus === 'partial_failure') {
                         provider.emitToTenant(tenantId, 'log', {
                             message: `الحملة اكتملت مع أخطاء (${successCount} نجح، ${failCount} فشل)`,
                             type: 'WARN'
