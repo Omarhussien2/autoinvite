@@ -22,6 +22,10 @@ class WPPConnectProvider {
         return this.manager.getTenantState(tenantId);
     }
 
+    async refreshClientState(tenantId, options) {
+        return this.manager.refreshClientState(tenantId, options);
+    }
+
     setTenantState(tenantId, patch) {
         const current = this.manager.states.get(tenantId) || {};
         this.manager.states.set(tenantId, {

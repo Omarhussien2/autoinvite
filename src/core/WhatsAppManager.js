@@ -47,9 +47,10 @@ class WhatsAppManager {
 
     async getClient(tenantId) {
         if (this.clients.has(tenantId)) {
-            const client = this.clients.get(tenantId);
-            this.updateActivity(tenantId);
-            return client;
+            const refreshedState = await this.refreshClientState(tenantId, { emit: true });
+            if (refreshedState.status === 'READY' && this.clients.has(tenantId)) {
+                return this.clients.get(tenantId);
+            }
         }
 
         if (this.initializing.has(tenantId)) {
@@ -70,6 +71,65 @@ class WhatsAppManager {
 
     getTenantState(tenantId) {
         return this.states.get(tenantId) || { status: 'DISCONNECTED', lastQr: null, phone: null };
+    }
+
+    async refreshClientState(tenantId, { emit = false } = {}) {
+        const client = this.clients.get(tenantId);
+        if (!client) return this.getTenantState(tenantId);
+
+        try {
+            const hostDevice = await client.getHostDevice();
+            const phone = hostDevice && hostDevice.wid ? hostDevice.wid.user : 'Unknown';
+            const state = {
+                ...this.getTenantState(tenantId),
+                status: 'READY',
+                lastQr: null,
+                lastActive: Date.now(),
+                phone,
+            };
+
+            this.states.set(tenantId, state);
+
+            if (emit) {
+                this.emitToTenant(tenantId, 'ready', { phone });
+                this.emitToTenant(tenantId, 'status', `الواتساب جاهز ومتصل بالرقم (${phone})`);
+            }
+
+            await db.query(
+                'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = $2 WHERE id = $3',
+                ['connected', phone, tenantId]
+            ).catch(err => log.error('Failed to refresh tenant WhatsApp status:', err.message));
+
+            return state;
+        } catch (err) {
+            const state = {
+                ...this.getTenantState(tenantId),
+                status: 'DISCONNECTED',
+                lastQr: null,
+                phone: null,
+                lastActive: Date.now(),
+            };
+            this.states.set(tenantId, state);
+            try {
+                if (typeof client.close === 'function') await client.close();
+            } catch (closeErr) {
+                log.warn(`Failed to close stale WhatsApp client for tenant ${tenantId}:`, closeErr.message);
+            }
+            this.clients.delete(tenantId);
+
+            if (emit) {
+                this.emitToTenant(tenantId, 'disconnected');
+                this.emitToTenant(tenantId, 'status', 'تعذر تأكيد اتصال واتساب. أعد الربط من جديد.');
+            }
+
+            await db.query(
+                'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = NULL WHERE id = $2',
+                ['disconnected', tenantId]
+            ).catch(dbErr => log.error('Failed to mark tenant disconnected after refresh:', dbErr.message));
+
+            log.warn(`Failed to refresh WhatsApp client state for tenant ${tenantId}:`, err.message);
+            return state;
+        }
     }
 
     hasStoredSession(tenantId) {

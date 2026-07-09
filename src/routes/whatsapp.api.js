@@ -17,10 +17,25 @@ router.use(tenantScope);
 router.post('/init', async (req, res) => {
     try {
         const provider = await WhatsAppProviders.getProviderForTenant(req.tenantId);
+        let state = provider.getTenantState(req.tenantId);
+
+        if (typeof provider.refreshClientState === 'function') {
+            state = await provider.refreshClientState(req.tenantId, { emit: true });
+        }
+
+        if (state.status === 'READY') {
+            return res.json({ success: true, message: 'WhatsApp already connected', state });
+        }
+
+        if (state.status === 'QUERY_QR' && state.lastQr) {
+            provider.emitToTenant(req.tenantId, 'qr', state.lastQr);
+            return res.json({ success: true, message: 'QR already available', state });
+        }
+
         provider.getClient(req.tenantId).catch((err) => {
             log.error(`WhatsApp init failed for tenant ${req.tenantId}:`, err.message);
         });
-        res.json({ success: true, message: 'Initialization started' });
+        res.json({ success: true, message: 'Initialization started', state: provider.getTenantState(req.tenantId) });
     } catch (err) {
         res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
     }
@@ -152,8 +167,17 @@ router.post('/test', quotaGuard, async (req, res) => {
 router.get('/status', async (req, res) => {
     try {
         const provider = await WhatsAppProviders.getProviderForTenant(req.tenantId);
-        const state = provider.getTenantState(req.tenantId);
-        res.json({ success: true, state });
+        const state = typeof provider.refreshClientState === 'function'
+            ? await provider.refreshClientState(req.tenantId, { emit: true })
+            : provider.getTenantState(req.tenantId);
+
+        res.json({
+            success: true,
+            state,
+            hasStoredSession: typeof provider.hasStoredSession === 'function'
+                ? provider.hasStoredSession(req.tenantId)
+                : false,
+        });
     } catch (err) {
         log.error('Status error:', err.message);
         res.status(500).json({ success: false, message: 'Ø®Ø·Ø£ Ø¯Ø§Ø®Ù„ÙŠ ÙÙŠ Ø§Ù„Ø³ÙŠØ±ÙØ±' });

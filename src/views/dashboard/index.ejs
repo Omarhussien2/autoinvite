@@ -188,8 +188,11 @@
                     </svg>
                     ربط الواتساب
                 </button>
+                <button onclick="resetWhatsappSession()"
+                    class="inline-flex items-center justify-center text-xs text-red-600 border border-red-200 hover:bg-red-50 px-4 py-2 rounded-xl font-medium transition w-full">
+                    توليد QR جديد
+                </button>
             </div>
-
             <!-- Connected State -->
             <div id="connected-section"
                 class="hidden flex-1 flex flex-col items-center justify-center text-center gap-3">
@@ -302,6 +305,13 @@
             document.getElementById('disconnected-section').classList.add('hidden');
             document.getElementById('connected-section').classList.remove('hidden');
             document.getElementById('qr-section').classList.add('hidden');
+        } else if (state === 'loading') {
+            dot.className = 'w-2 h-2 rounded-full bg-blue-500 animate-pulse';
+            statusText.textContent = 'جاري الربط';
+            badge.className = 'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border bg-blue-50 border-blue-200 text-blue-700';
+            document.getElementById('disconnected-section').classList.remove('hidden');
+            document.getElementById('connected-section').classList.add('hidden');
+            document.getElementById('qr-section').classList.add('hidden');
         } else if (state === 'qr') {
             dot.className = 'w-2 h-2 rounded-full bg-amber-400';
             statusText.textContent = 'في انتظار الربط';
@@ -323,9 +333,71 @@
     socket.on('ready', (data) => { setWaStatus('connected'); if (data && data.phone) document.getElementById('connected-phone').textContent = data.phone; });
     socket.on('disconnected', () => setWaStatus('disconnected'));
 
-    async function initWhatsapp() {
-        try { await fetch('/api/whatsapp/init', { method: 'POST' }); } catch (e) { console.error(e); }
+    function applyWhatsappState(data) {
+        const state = data && data.state ? data.state : null;
+        if (!state) return;
+
+        if (state.status === 'READY') {
+            setWaStatus('connected');
+            if (state.phone) document.getElementById('connected-phone').textContent = state.phone;
+            return;
+        }
+
+        if (state.status === 'QUERY_QR' && state.lastQr) {
+            document.getElementById('qr-image').src = state.lastQr;
+            setWaStatus('qr');
+            return;
+        }
+
+        if (state.status === 'INITIALIZING') {
+            setWaStatus('loading');
+            return;
+        }
+
+        setWaStatus('disconnected');
     }
+
+    async function initWhatsapp() {
+        setWaStatus('loading');
+        try {
+            const res = await fetch('/api/whatsapp/init', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) applyWhatsappState(data);
+            else setWaStatus('disconnected');
+        } catch (e) {
+            console.error(e);
+            setWaStatus('disconnected');
+        }
+    }
+
+    async function resetWhatsappSession() {
+        if (!confirm('سيتم حذف جلسة واتساب الحالية وتوليد QR جديد. هل تريد المتابعة؟')) return;
+        setWaStatus('loading');
+        try {
+            const res = await fetch('/api/whatsapp/logout', { method: 'POST' });
+            const data = await res.json();
+            if (!data.success) {
+                setWaStatus('disconnected');
+                showToast('error', data.message || 'تعذر توليد QR جديد');
+            }
+        } catch (e) {
+            console.error(e);
+            setWaStatus('disconnected');
+            showToast('error', 'خطأ في الاتصال');
+        }
+    }
+
+    async function checkInitialWhatsAppStatus() {
+        try {
+            const res = await fetch('/api/whatsapp/status');
+            const data = await res.json();
+            if (data.success) applyWhatsappState(data);
+        } catch (e) {
+            // Keep the default visual state.
+        }
+    }
+
+    checkInitialWhatsAppStatus();
 
     document.getElementById('btnDisconnectWa').addEventListener('click', async function () {
         if (!confirm('هل أنت متأكد من قطع الاتصال؟ ستحتاج لمسح الكود من جديد')) return;
@@ -340,13 +412,13 @@
             const res = await fetch('/api/whatsapp/logout', { method: 'POST' });
             const data = await res.json();
             if (data.success) {
-                showToast('تم قطع الاتصال — امسح الباركود الجديد', 'success');
+                showToast('success', 'تم قطع الاتصال، امسح QR الجديد');
             } else {
-                showToast(data.message || 'حدث خطأ', 'error');
+                showToast('error', data.message || 'حدث خطأ');
             }
         } catch (e) {
             console.error('Logout failed:', e);
-            showToast('خطأ في الاتصال', 'error');
+            showToast('error', 'خطأ في الاتصال');
         } finally {
             btn.disabled = false;
             btn.innerHTML = originalHTML;
