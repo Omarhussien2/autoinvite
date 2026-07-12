@@ -15,12 +15,37 @@ SET stop_requested_at = COALESCE(stop_requested_at, NOW()),
     status = CASE WHEN status IN ('running', 'scheduled') THEN 'paused' ELSE status END,
     paused_reason = CASE WHEN status IN ('running', 'scheduled') THEN 'release_rollback' ELSE paused_reason END;
 UPDATE campaign_batches
-SET status = CASE WHEN status IN ('running', 'scheduled') THEN 'paused' ELSE status END,
-    schedule_job_id = NULL
+SET status = CASE WHEN status IN ('running', 'scheduled') THEN 'paused' ELSE status END
 WHERE status IN ('running', 'scheduled');
 COMMIT;
 SQL
 pm2 stop autoinvite
+```
+
+Cancel durable jobs while the Campaign Continuity release code is still checked out:
+
+```bash
+node <<'NODE'
+const db = require('./src/database/pg-client');
+const scheduler = require('./src/core/ScheduleManager');
+(async () => {
+  await scheduler.start();
+  const { rows } = await db.query(`
+    SELECT DISTINCT campaign.id, campaign.tenant_id
+    FROM campaigns campaign
+    LEFT JOIN campaign_batches batch ON batch.campaign_id = campaign.id
+    WHERE campaign.schedule_job_id IS NOT NULL OR batch.schedule_job_id IS NOT NULL
+  `);
+  for (const campaign of rows) await scheduler.requestStop(campaign.id, campaign.tenant_id);
+  await scheduler.stop();
+  await db.pool.end();
+})().catch(async error => {
+  console.error(error);
+  await scheduler.stop().catch(() => {});
+  await db.pool.end().catch(() => {});
+  process.exit(1);
+});
+NODE
 ```
 
 ## Restore application code

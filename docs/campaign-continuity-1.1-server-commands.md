@@ -61,14 +61,34 @@ UPDATE tenants SET messaging_enabled = FALSE;
 UPDATE campaigns
 SET status = CASE WHEN status IN ('running', 'scheduled') THEN 'paused' ELSE status END,
     paused_reason = CASE WHEN status IN ('running', 'scheduled') THEN 'release_deploy' ELSE paused_reason END,
-    stop_requested_at = CASE WHEN status IN ('running', 'scheduled') THEN NOW() ELSE stop_requested_at END,
-    schedule_job_id = CASE WHEN status IN ('running', 'scheduled') THEN NULL ELSE schedule_job_id END;
+    stop_requested_at = CASE WHEN status IN ('running', 'scheduled') THEN NOW() ELSE stop_requested_at END;
 UPDATE campaign_batches
-SET status = CASE WHEN status IN ('running', 'scheduled') THEN 'paused' ELSE status END,
-    schedule_job_id = NULL
+SET status = CASE WHEN status IN ('running', 'scheduled') THEN 'paused' ELSE status END
 WHERE status IN ('running', 'scheduled');
 COMMIT;
 SQL
+node <<'NODE'
+const db = require('./src/database/pg-client');
+const scheduler = require('./src/core/ScheduleManager');
+(async () => {
+  await scheduler.start();
+  const { rows } = await db.query(`
+    SELECT DISTINCT campaign.id, campaign.tenant_id
+    FROM campaigns campaign
+    LEFT JOIN campaign_batches batch ON batch.campaign_id = campaign.id
+    WHERE campaign.schedule_job_id IS NOT NULL OR batch.schedule_job_id IS NOT NULL
+  `);
+  for (const campaign of rows) await scheduler.requestStop(campaign.id, campaign.tenant_id);
+  await scheduler.stop();
+  await db.pool.end();
+  console.log(`Cancelled durable jobs for ${rows.length} campaigns.`);
+})().catch(async error => {
+  console.error(error);
+  await scheduler.stop().catch(() => {});
+  await db.pool.end().catch(() => {});
+  process.exit(1);
+});
+NODE
 pm2 restart autoinvite --update-env
 pm2 status autoinvite
 pm2 logs autoinvite --lines 150 --nostream
