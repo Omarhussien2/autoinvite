@@ -70,8 +70,10 @@ function getSafetyPreset(mode) {
 }
 
 function normalizeSmartScheduleOptions(input = {}, policy = {}) {
-    const safetyMode = ['conservative', 'balanced', 'faster'].includes(input.safety_mode)
-        ? input.safety_mode
+    const requestedScheduleMode = input.schedule_mode || input.scheduleMode || 'immediate';
+    const safetyModeInput = input.safety_mode || input.safetyMode;
+    const safetyMode = ['conservative', 'balanced', 'faster'].includes(safetyModeInput)
+        ? safetyModeInput
         : 'balanced';
     const preset = getSafetyPreset(safetyMode);
     const tenantMaxDailyLimit = clamp(policy.maxDailyLimit || HARD_DAILY_LIMIT, 1, HARD_DAILY_LIMIT);
@@ -92,8 +94,8 @@ function normalizeSmartScheduleOptions(input = {}, policy = {}) {
     );
 
     return {
-        enabled: parseBoolean(input.smart_schedule_enabled) || input.schedule_mode === 'smart',
-        scheduleMode: input.schedule_mode === 'smart' ? 'smart' : (input.schedule_mode || 'immediate'),
+        enabled: parseBoolean(input.smart_schedule_enabled) || ['smart', 'fixed'].includes(requestedScheduleMode),
+        scheduleMode: requestedScheduleMode,
         safetyMode,
         dailyLimit,
         sendWindowStart,
@@ -208,9 +210,11 @@ function buildSmartBatches(totalContacts, rawOptions = {}, now = new Date()) {
     while (remaining > 0) {
         const isFirstDay = dayIndex === 0;
         const variation = DAILY_VARIATION[dayIndex % DAILY_VARIATION.length];
-        const dayLimit = isFirstDay
-            ? Math.max(1, Math.floor(maxPerDay * options.firstDayFactor))
-            : Math.max(1, Math.floor(maxPerDay * variation));
+        const dayLimit = options.scheduleMode === 'fixed'
+            ? maxPerDay
+            : (isFirstDay
+                ? Math.max(1, Math.floor(maxPerDay * options.firstDayFactor))
+                : Math.max(1, Math.floor(maxPerDay * variation)));
         const messageCount = Math.min(remaining, dayLimit, HARD_DAILY_LIMIT);
         const dateParts = addDaysToParts(startParts, dayIndex);
         let scheduledAt = zonedTimeToUtc(dateParts, options.sendWindowStart, options.timezone);
@@ -244,11 +248,73 @@ function buildSmartBatches(totalContacts, rawOptions = {}, now = new Date()) {
     return batches;
 }
 
+function formatCampaignTime(date, timezone) {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).format(date);
+}
+
+function reductionReason(options, windowCapacity, messageCount) {
+    const requested = options.dailyLimit;
+    if (requested > HARD_DAILY_LIMIT) return 'hard_daily_limit';
+    if (windowCapacity < requested) return 'send_window_capacity';
+    if (messageCount < requested) return 'safety_distribution';
+    return null;
+}
+
+function buildCampaignPlan(totalContacts, rawOptions = {}, now = new Date()) {
+    const fixedMode = rawOptions.schedule_mode === 'fixed';
+    const parsedRequestedCount = parseInt(rawOptions.daily_limit || rawOptions.dailyLimit || 100, 10);
+    const requestedCount = Number.isNaN(parsedRequestedCount) ? 100 : Math.max(1, parsedRequestedCount);
+    const options = normalizeSmartScheduleOptions(rawOptions);
+    const fixedOptions = fixedMode ? { ...options, schedule_mode: 'fixed', firstDayFactor: 1 } : options;
+    const batches = buildSmartBatches(totalContacts, fixedOptions, now);
+    const windowCapacity = estimateWindowCapacity(options);
+
+    return batches.map(batch => ({
+        ...batch,
+        scheduledLocal: formatCampaignTime(batch.scheduledAt, batch.timezone),
+        requestedCount,
+        reductionReason: requestedCount > HARD_DAILY_LIMIT
+            ? 'hard_daily_limit'
+            : (windowCapacity < options.dailyLimit
+                ? 'send_window_capacity'
+            : (batch.messageCount < options.dailyLimit && batch.endRow === totalContacts
+                ? 'remaining_contacts'
+                : (fixedMode ? null : reductionReason(options, windowCapacity, batch.messageCount)))),
+    }));
+}
+
+function assignPlanToRecipientRows(plan, recipients) {
+    let recipientOffset = 0;
+    return plan.flatMap(plannedBatch => {
+        const batchRecipients = recipients.slice(
+            recipientOffset,
+            recipientOffset + plannedBatch.messageCount
+        );
+        recipientOffset += batchRecipients.length;
+        if (batchRecipients.length === 0) return [];
+        return [{
+            ...plannedBatch,
+            startRow: batchRecipients[0].sourceRow,
+            endRow: batchRecipients[batchRecipients.length - 1].sourceRow,
+        }];
+    });
+}
+
 module.exports = {
     HARD_DAILY_LIMIT,
     SAFETY_PRESETS,
     normalizeSmartScheduleOptions,
     estimateWindowCapacity,
     buildSmartBatches,
+    buildCampaignPlan,
+    assignPlanToRecipientRows,
     zonedTimeToUtc,
 };

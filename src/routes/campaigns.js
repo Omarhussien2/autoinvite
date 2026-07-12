@@ -8,11 +8,14 @@ const { loadContacts } = require('../core');
 const { repairContactsFile } = require('../utils/dataProcessor');
 const ScheduleManager = require('../core/ScheduleManager');
 const { ensureSmartScheduleSchema } = require('../database/ensure_smart_schedule_schema');
+const { ensureCampaignPreflightSchema } = require('../database/ensure_campaign_preflight_schema');
 const { normalizeMessageTemplates } = require('../utils/messageTemplates');
-const { buildSmartBatches, normalizeSmartScheduleOptions } = require('../utils/smartScheduler');
+const { assignPlanToRecipientRows, normalizeSmartScheduleOptions } = require('../utils/smartScheduler');
 const { createLogger } = require('../utils/logger');
 const { importContacts, getTenantSchedulingPolicy, parseScheduleBody } = require('../services/campaign.service');
+const { CampaignPreflightService } = require('../services/CampaignPreflightService');
 const log = createLogger('Campaigns');
+const campaignPreflight = new CampaignPreflightService();
 
 const router = express.Router();
 const campaignUpload = upload.fields([{ name: 'template' }, { name: 'contacts' }, { name: 'voicenote' }]);
@@ -30,10 +33,10 @@ function handleCampaignUpload(req, res, next) {
     });
 }
 
-async function createSmartCampaignBatches(tenantId, campaignId, contactsCount, options) {
+async function createSmartCampaignBatches(tenantId, campaignId, preflight) {
     await ensureSmartScheduleSchema();
     await ScheduleManager.cancelCampaignBatches(campaignId, tenantId);
-    const batches = buildSmartBatches(contactsCount, options);
+    const batches = assignPlanToRecipientRows(preflight.plan, preflight.remaining);
 
     for (const batch of batches) {
         const result = await db.query(
@@ -71,7 +74,41 @@ async function createSmartCampaignBatches(tenantId, campaignId, contactsCount, o
         });
     }
 
-    return batches;
+    return preflight.plan;
+}
+
+async function scheduleApprovedCampaign(tenantId, campaignId, preflight) {
+    const campaignQuery = await db.query(
+        'SELECT * FROM campaigns WHERE id = $1 AND tenant_id = $2',
+        [campaignId, tenantId]
+    );
+    const campaign = campaignQuery.rows[0];
+    if (!campaign) return;
+
+    await ScheduleManager.cancelCampaign(campaignId, tenantId, campaign.schedule_job_id);
+    await ScheduleManager.cancelCampaignBatches(campaignId, tenantId);
+
+    if (['smart', 'fixed'].includes(campaign.schedule_mode)) {
+        await createSmartCampaignBatches(tenantId, campaignId, preflight);
+        await db.query(
+            "UPDATE campaigns SET status = 'scheduled', stop_requested_at = NULL WHERE id = $1 AND tenant_id = $2",
+            [campaignId, tenantId]
+        );
+        return;
+    }
+
+    if (campaign.schedule_mode === 'later' && campaign.scheduled_at) {
+        await ScheduleManager.scheduleCampaign(campaignId, tenantId, {
+            scheduledAt: campaign.scheduled_at,
+            timezone: campaign.timezone,
+        });
+        return;
+    }
+
+    await db.query(
+        "UPDATE campaigns SET status = 'active', stop_requested_at = NULL WHERE id = $1 AND tenant_id = $2",
+        [campaignId, tenantId]
+    );
 }
 
 // Create Campaign - quota guard applies (uploading contacts is a pre-launch step)
@@ -107,7 +144,7 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, handleCampaignUpload,
         const scheduleBody = isSmartSchedule
             ? { isScheduled: true, scheduledAt: null, timezone: smartOptions.timezone }
             : parseScheduleBody(req.body);
-        const status = scheduleBody.isScheduled ? 'scheduled' : 'active';
+        const status = 'active';
 
         const result = await db.query(`
             INSERT INTO campaigns (
@@ -132,7 +169,7 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, handleCampaignUpload,
             scheduleBody.scheduledAt ? scheduleBody.scheduledAt.toISOString() : null,
             scheduleBody.timezone || smartOptions.timezone,
             isSmartSchedule,
-            isSmartSchedule ? 'smart' : (scheduleBody.isScheduled ? 'later' : 'immediate'),
+            isSmartSchedule ? smartOptions.scheduleMode : (scheduleBody.isScheduled ? 'later' : 'immediate'),
             smartOptions.dailyLimit,
             smartOptions.sendWindowStart,
             smartOptions.sendWindowEnd,
@@ -146,15 +183,6 @@ router.post('/', isAuthenticated, tenantScope, quotaGuard, handleCampaignUpload,
 
         const campaignId = result.rows[0].id;
         await importContacts(req.tenantId, campaignId, contactsPath);
-
-        if (isSmartSchedule) {
-            await createSmartCampaignBatches(req.tenantId, campaignId, contactList.length, smartOptions);
-        } else if (scheduleBody.isScheduled) {
-            await ScheduleManager.scheduleCampaign(campaignId, req.tenantId, {
-                scheduledAt: scheduleBody.scheduledAt,
-                timezone: scheduleBody.timezone,
-            });
-        }
 
         res.json({ success: true, campaignId, contactRepair: contactRepair.report });
     } catch (error) {
@@ -173,6 +201,90 @@ router.get('/', isAuthenticated, tenantScope, async (req, res) => {
         res.json({ success: true, campaigns: result.rows });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+router.post('/:id/preflight', isAuthenticated, tenantScope, async (req, res) => {
+    try {
+        await ensureCampaignPreflightSchema();
+        const preflight = await campaignPreflight.inspect(req.tenantId, req.params.id);
+        if (!preflight) return res.status(404).json({ success: false, message: 'Campaign not found' });
+        res.json({ success: true, preflight });
+    } catch (error) {
+        log.error('Preflight failed:', error.message);
+        res.status(500).json({ success: false, message: 'Campaign preflight failed' });
+    }
+});
+
+router.post('/:id/approve-plan', isAuthenticated, tenantScope, async (req, res) => {
+    try {
+        await ensureCampaignPreflightSchema();
+        if (!req.body.planHash) {
+            return res.status(400).json({ success: false, message: 'planHash is required' });
+        }
+        const approval = await campaignPreflight.approve(req.tenantId, req.params.id, req.body.planHash);
+        if (approval.status === 'not_found') {
+            return res.status(404).json({ success: false, message: 'Campaign not found' });
+        }
+        if (approval.status === 'changed') {
+            return res.status(409).json({ success: false, message: 'Campaign plan changed', preflight: approval.preflight });
+        }
+        await scheduleApprovedCampaign(req.tenantId, req.params.id, approval.preflight);
+        res.json({ success: true, planHash: approval.planHash, campaignStarted: false, planActivated: true });
+    } catch (error) {
+        log.error('Plan approval failed:', error.message);
+        res.status(500).json({ success: false, message: 'Campaign plan approval failed' });
+    }
+});
+
+router.get('/:id/execution-state', isAuthenticated, tenantScope, async (req, res) => {
+    try {
+        const campaignState = await db.query(`
+            SELECT campaign.status, campaign.last_sent_row, campaign.stop_requested_at,
+                   tenant.whatsapp_status
+            FROM campaigns campaign
+            JOIN tenants tenant ON tenant.id = campaign.tenant_id
+            WHERE campaign.id = $1 AND campaign.tenant_id = $2
+        `, [req.params.id, req.tenantId]);
+        if (!campaignState.rows[0]) {
+            return res.status(404).json({ success: false, message: 'Campaign not found' });
+        }
+        const recipientState = await db.query(`
+            SELECT status, phone, name, attempt_count, last_error, sent_at
+            FROM campaign_recipients
+            WHERE campaign_id = $1 AND tenant_id = $2
+            ORDER BY source_row NULLS LAST, created_at
+        `, [req.params.id, req.tenantId]);
+        const counts = { sent: 0, failed: 0, skipped: 0, pending: 0, needs_review: 0 };
+        const recipients = { pending: [], failed: [], needs_review: [] };
+        let lastSuccess = null;
+        for (const recipient of recipientState.rows) {
+            if (Object.prototype.hasOwnProperty.call(counts, recipient.status)) counts[recipient.status] += 1;
+            if (recipients[recipient.status]) recipients[recipient.status].push(recipient);
+            if (recipient.status === 'sent' && (!lastSuccess || recipient.sent_at > lastSuccess.sent_at)) {
+                lastSuccess = recipient;
+            }
+        }
+        const campaign = campaignState.rows[0];
+        const whatsappStatus = ({
+            connected: 'connected', preparing: 'preparing', starting: 'preparing',
+            qr: 'qr_required', query_qr: 'qr_required', restricted: 'restricted', stopped: 'stopped',
+        })[String(campaign.whatsapp_status || '').toLowerCase()] || 'disconnected';
+        res.json({
+            success: true,
+            state: {
+                campaignStatus: campaign.status,
+                stopState: campaign.stop_requested_at && campaign.status !== 'paused' ? 'requested' : null,
+                currentRow: campaign.last_sent_row || 0,
+                lastSuccess,
+                whatsappStatus,
+                counts,
+                recipients,
+            },
+        });
+    } catch (error) {
+        log.error('Execution state failed:', error.message);
+        res.status(500).json({ success: false, message: 'Campaign execution state failed' });
     }
 });
 
@@ -217,7 +329,7 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
         const scheduleBody = isSmartSchedule
             ? { isScheduled: true, scheduledAt: null, timezone: smartOptions.timezone }
             : parseScheduleBody(req.body);
-        const status = scheduleBody.isScheduled ? 'scheduled' : 'active';
+        const status = 'active';
 
         await ScheduleManager.cancelCampaign(req.params.id, req.tenantId, existing.schedule_job_id);
         await ScheduleManager.cancelCampaignBatches(req.params.id, req.tenantId);
@@ -248,7 +360,7 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
             status,
             scheduleBody.timezone || smartOptions.timezone,
             isSmartSchedule,
-            isSmartSchedule ? 'smart' : (scheduleBody.isScheduled ? 'later' : 'immediate'),
+            isSmartSchedule ? smartOptions.scheduleMode : (scheduleBody.isScheduled ? 'later' : 'immediate'),
             smartOptions.dailyLimit,
             smartOptions.sendWindowStart,
             smartOptions.sendWindowEnd,
@@ -287,6 +399,7 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
         params.push(scheduleBody.scheduledAt ? scheduleBody.scheduledAt.toISOString() : null);
         query += `, scheduled_at = $${params.length}`;
         query += ', schedule_job_id = NULL, schedule_attempts = 0, schedule_last_error = NULL, schedule_last_attempt_at = NULL';
+        query += ', plan_hash = NULL, plan_approved_at = NULL, stop_requested_at = NULL';
 
         params.push(req.params.id, req.tenantId);
         query += ` WHERE id = $${params.length - 1} AND tenant_id = $${params.length}`;
@@ -298,18 +411,7 @@ router.put('/:id', isAuthenticated, tenantScope, handleCampaignUpload, async (re
             await importContacts(req.tenantId, req.params.id, contactsPath);
         }
 
-        if (isSmartSchedule) {
-            const effectiveContactsPath = contactsPath || existing.contacts_path;
-            const contactList = contactRepair ? contactRepair.contacts : await loadContacts(effectiveContactsPath);
-            await createSmartCampaignBatches(req.tenantId, req.params.id, contactList.length, smartOptions);
-        } else if (scheduleBody.isScheduled) {
-            await ScheduleManager.scheduleCampaign(req.params.id, req.tenantId, {
-                scheduledAt: scheduleBody.scheduledAt,
-                timezone: scheduleBody.timezone,
-            });
-        }
-
-        res.json({ success: true, contactRepair: contactRepair ? contactRepair.report : null });
+        res.json({ success: true, campaignId: req.params.id, contactRepair: contactRepair ? contactRepair.report : null });
     } catch (error) {
         log.error('Update failed:', error.message);
         res.status(error.statusCode || 500).json({

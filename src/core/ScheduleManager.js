@@ -2,7 +2,9 @@ const PgBoss = require('pg-boss');
 const db = require('../database/pg-client');
 const { ensureSmartScheduleSchema } = require('../database/ensure_smart_schedule_schema');
 const { createLogger } = require('../utils/logger');
+const { CampaignPreflightService } = require('../services/CampaignPreflightService');
 const log = createLogger('ScheduleManager');
+const campaignPreflight = new CampaignPreflightService();
 
 const QUEUE_NAME = 'campaign.schedule.start';
 const MAX_RETRIES = 3;
@@ -237,6 +239,54 @@ class ScheduleManager {
         );
     }
 
+    async requestStop(campaignId, tenantId) {
+        const scheduledJobs = await db.query(`
+            SELECT schedule_job_id FROM campaigns WHERE id = $1 AND tenant_id = $2
+            UNION ALL
+            SELECT schedule_job_id FROM campaign_batches WHERE campaign_id = $1 AND tenant_id = $2
+        `, [campaignId, tenantId]);
+        for (const scheduledJob of scheduledJobs.rows) await this._cancelJob(scheduledJob.schedule_job_id);
+        await db.query(`
+            UPDATE campaigns
+            SET status = 'paused', paused_reason = 'stop_requested', stop_requested_at = NOW(), schedule_job_id = NULL
+            WHERE id = $1 AND tenant_id = $2
+        `, [campaignId, tenantId]);
+        await db.query(`
+            UPDATE campaign_batches
+            SET status = CASE WHEN status IN ('scheduled', 'running') THEN 'paused' ELSE status END,
+                schedule_job_id = NULL, schedule_last_error = 'stop_requested', schedule_last_attempt_at = NOW()
+            WHERE campaign_id = $1 AND tenant_id = $2
+        `, [campaignId, tenantId]);
+    }
+
+    async _hasValidPlanApproval(tenantId, campaignId, planHash, approvedAt) {
+        if (!planHash || !approvedAt) return false;
+        try {
+            return await campaignPreflight.verifyApproval(tenantId, campaignId);
+        } catch (error) {
+            log.warn(`Could not verify approved plan for campaign ${campaignId}: ${error.message}`);
+            return false;
+        }
+    }
+
+    async pauseCampaignBatches(campaignId, tenantId, reason) {
+        const scheduledJobs = await db.query(`
+            SELECT schedule_job_id FROM campaign_batches
+            WHERE campaign_id = $1 AND tenant_id = $2 AND status IN ('scheduled', 'running')
+        `, [campaignId, tenantId]);
+        for (const scheduledJob of scheduledJobs.rows) await this._cancelJob(scheduledJob.schedule_job_id);
+        await db.query(`
+            UPDATE campaign_batches
+            SET status = 'paused', schedule_job_id = NULL,
+                schedule_last_error = $3, schedule_last_attempt_at = NOW()
+            WHERE campaign_id = $1 AND tenant_id = $2 AND status IN ('scheduled', 'running')
+        `, [campaignId, tenantId, reason]);
+        await db.query(`
+            UPDATE campaigns SET status = 'paused', paused_reason = $3, schedule_job_id = NULL
+            WHERE id = $1 AND tenant_id = $2
+        `, [campaignId, tenantId, reason]);
+    }
+
     async reconcileScheduledCampaigns() {
         await this._ensureStarted();
         await ensureSmartScheduleSchema();
@@ -381,7 +431,7 @@ class ScheduleManager {
         }
 
         const result = await db.query(
-            `SELECT c.*, t.whatsapp_status, t.message_quota, t.messages_used
+            `SELECT c.*, t.whatsapp_status, t.message_quota, t.messages_used, t.messaging_enabled
              FROM campaigns c
              JOIN tenants t ON c.tenant_id = t.id
              WHERE c.id = $1 AND c.tenant_id = $2`,
@@ -412,7 +462,8 @@ class ScheduleManager {
 
         const result = await db.query(
             `SELECT b.*, c.name, c.message_templates, c.template_path, c.canvas_config, c.contacts_path, c.voicenote_path,
-                    t.whatsapp_status, t.message_quota, t.messages_used
+                    c.stop_requested_at, c.plan_hash, c.plan_approved_at,
+                    t.whatsapp_status, t.message_quota, t.messages_used, t.messaging_enabled
              FROM campaign_batches b
              JOIN campaigns c ON c.id = b.campaign_id AND c.tenant_id = b.tenant_id
              JOIN tenants t ON t.id = b.tenant_id
@@ -440,10 +491,25 @@ class ScheduleManager {
         const tenantId = batch.tenant_id;
         const campaignId = batch.campaign_id;
 
+        const approvalValid = await this._hasValidPlanApproval(
+            tenantId,
+            campaignId,
+            batch.plan_hash,
+            batch.plan_approved_at
+        );
+        if (!batch.messaging_enabled || batch.stop_requested_at || !approvalValid) {
+            const pauseReason = batch.stop_requested_at
+                ? 'stop_requested'
+                : (!batch.messaging_enabled ? 'messaging_disabled' : 'plan_not_approved');
+            await this._pauseBatch(batch, pauseReason);
+            return;
+        }
+
         try {
             await this._ensureWhatsAppReady(tenantId, batch.whatsapp_status);
         } catch (err) {
-            await this._retryOrPauseBatch(batch, err);
+            await this._pauseBatch(batch, 'whatsapp_session_lost');
+            await this.pauseCampaignBatches(campaignId, tenantId, 'whatsapp_session_lost');
             return;
         }
 
@@ -520,10 +586,25 @@ class ScheduleManager {
         const tenantId = campaign.tenant_id;
         const campaignId = campaign.id;
 
+        const approvalValid = await this._hasValidPlanApproval(
+            tenantId,
+            campaignId,
+            campaign.plan_hash,
+            campaign.plan_approved_at
+        );
+        if (!campaign.messaging_enabled || campaign.stop_requested_at || !approvalValid) {
+            const pauseReason = campaign.stop_requested_at
+                ? 'stop_requested'
+                : (!campaign.messaging_enabled ? 'messaging_disabled' : 'plan_not_approved');
+            await this._pauseCampaign(campaign, pauseReason);
+            return;
+        }
+
         try {
             await this._ensureWhatsAppReady(tenantId, campaign.whatsapp_status);
         } catch (err) {
-            await this._retryOrPause(campaign, err);
+            await this._pauseCampaign(campaign, 'whatsapp_session_lost');
+            await this.pauseCampaignBatches(campaignId, tenantId, 'whatsapp_session_lost');
             return;
         }
 

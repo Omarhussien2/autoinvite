@@ -36,7 +36,7 @@
     "i18next": "^26.0.2",
     "i18next-fs-backend": "^2.6.1",
     "i18next-http-middleware": "^3.9.2",
-    "multer": "^2.0.2",
+    "multer": "2.2.0",
     "pg": "^8.20.0",
     "pg-boss": "10.4.2",
     "read-excel-file": "^9.0.9",

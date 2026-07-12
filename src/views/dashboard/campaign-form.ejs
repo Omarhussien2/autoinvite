@@ -240,10 +240,16 @@
                             جدولة لوقت لاحق
                         </button>
                     </div>
-                    <button type="button" id="schedule-smart" onclick="setScheduleMode('smart')"
-                        class="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all duration-200 text-gray-500 hover:text-gray-700 border border-gray-100">
-                        Smart multi-day schedule
-                    </button>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" id="schedule-fixed" onclick="setScheduleMode('fixed')"
+                            class="flex items-center justify-center py-2 rounded-lg text-xs font-medium transition-all duration-200 text-gray-500 hover:text-gray-700 border border-gray-100">
+                            دفعات ثابتة
+                        </button>
+                        <button type="button" id="schedule-smart" onclick="setScheduleMode('smart')"
+                            class="flex items-center justify-center py-2 rounded-lg text-xs font-medium transition-all duration-200 text-gray-500 hover:text-gray-700 border border-gray-100">
+                            جدولة ذكية
+                        </button>
+                    </div>
                     <div id="schedule-datetime-wrap" class="hidden grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-medium text-gray-500 mb-1.5">التاريخ</label>
@@ -300,6 +306,53 @@
                     </div>
                 </div>
             </div>
+
+            <% if (campaign) { %>
+            <section id="preflight-panel" class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm space-y-5" dir="rtl">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-900">الفحص المسبق وخطة الإرسال</h3>
+                        <p class="text-xs text-gray-500 mt-1">راجع بيانات الخادم قبل اعتماد الخطة</p>
+                    </div>
+                    <button type="button" id="run-preflight" class="shrink-0 border border-brand-green text-brand-dark bg-brand-light px-4 py-2 rounded-xl text-xs font-semibold">تشغيل الفحص</button>
+                </div>
+
+                <div id="preflight-loading" class="hidden text-xs text-gray-500">جاري تحليل الملف والتحقق من المعاينات</div>
+                <div id="preflight-error" class="hidden rounded-xl bg-red-50 border border-red-100 p-3 text-xs text-red-700"></div>
+                <div id="preflight-results" class="hidden space-y-5">
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                        <% [['valid','صحيح'],['invalid','خاطئ'],['duplicate','مكرر'],['sentPreviously','مرسل سابقًا'],['remaining','متبقي'],['source','إجمالي']].forEach(function(metric) { %>
+                        <div class="min-w-0 rounded-xl bg-gray-50 border border-gray-100 p-3">
+                            <p id="preflight-<%= metric[0] %>" class="font-bold text-lg text-gray-900 tabular-nums">0</p>
+                            <p class="text-[10px] text-gray-500 leading-5"><%= metric[1] %></p>
+                        </div>
+                        <% }); %>
+                    </div>
+
+                    <div>
+                        <h4 class="text-xs font-semibold text-gray-800 mb-2">معاينة ثلاثة مستلمين</h4>
+                        <div id="preflight-previews" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+                    </div>
+
+                    <div class="min-w-0">
+                        <h4 class="text-xs font-semibold text-gray-800 mb-2">خطة الأيام بتوقيت الحملة</h4>
+                        <div class="overflow-x-auto border border-gray-100 rounded-xl">
+                            <table class="w-full min-w-[620px] text-xs text-right">
+                                <thead class="bg-gray-50 text-gray-500">
+                                    <tr><th class="p-3">اليوم</th><th class="p-3">الوقت</th><th class="p-3">العدد</th><th class="p-3">المطلوب</th><th class="p-3">سبب التخفيض</th></tr>
+                                </thead>
+                                <tbody id="preflight-plan" class="divide-y divide-gray-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-gray-100">
+                        <p id="plan-hash-summary" class="text-[10px] text-gray-400 break-all"></p>
+                        <button type="button" id="approve-plan" disabled class="shrink-0 bg-brand-dark text-white px-6 py-2.5 rounded-xl text-xs font-bold disabled:opacity-40">اعتماد الخطة</button>
+                    </div>
+                </div>
+            </section>
+            <% } %>
 
             <!-- Action Footer -->
             <div class="flex items-center justify-between pt-4">
@@ -606,15 +659,18 @@ function setScheduleMode(mode) {
     window.CAMPAIGN_SCHEDULE_MODE = mode;
     const isLater = mode === 'later';
     const isSmart = mode === 'smart';
+    const isFixed = mode === 'fixed';
+    const isBatchSchedule = isSmart || isFixed;
     document.getElementById('schedule-datetime-wrap').classList.toggle('hidden', !isLater);
     document.getElementById('schedule-datetime-wrap').classList.toggle('grid', isLater);
     document.getElementById('schedule-hint').classList.toggle('hidden', !isLater);
-    document.getElementById('smart-schedule-wrap').classList.toggle('hidden', !isSmart);
+    document.getElementById('smart-schedule-wrap').classList.toggle('hidden', !isBatchSchedule);
 
     const btnImm = document.getElementById('schedule-immediate');
     const btnLater = document.getElementById('schedule-later');
+    const btnFixed = document.getElementById('schedule-fixed');
     const btnSmart = document.getElementById('schedule-smart');
-    [btnImm, btnLater, btnSmart].forEach(btn => {
+    [btnImm, btnLater, btnFixed, btnSmart].forEach(btn => {
         if (!btn) return;
         btn.classList.remove('bg-white', 'text-brand-dark', 'shadow-sm');
         btn.classList.add('text-gray-500', 'hover:text-gray-700');
@@ -622,6 +678,9 @@ function setScheduleMode(mode) {
     if (isLater) {
         btnLater.classList.add('bg-white', 'text-brand-dark', 'shadow-sm');
         btnLater.classList.remove('text-gray-500', 'hover:text-gray-700');
+    } else if (isFixed) {
+        btnFixed.classList.add('bg-white', 'text-brand-dark', 'shadow-sm');
+        btnFixed.classList.remove('text-gray-500', 'hover:text-gray-700');
     } else if (isSmart) {
         btnSmart.classList.add('bg-white', 'text-brand-dark', 'shadow-sm');
         btnSmart.classList.remove('text-gray-500', 'hover:text-gray-700');
@@ -632,7 +691,9 @@ function setScheduleMode(mode) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    <% if (campaign && campaign.smart_schedule_enabled) { %>
+    <% if (campaign && campaign.schedule_mode === 'fixed') { %>
+    setScheduleMode('fixed');
+    <% } else if (campaign && campaign.smart_schedule_enabled) { %>
     setScheduleMode('smart');
     <% } else if (campaign && campaign.scheduled_at) { %>
     setScheduleMode('later');
@@ -652,9 +713,13 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 
 <script src="/js/campaign-editor.js"></script>
+<% if (campaign) { %><script src="/js/campaign-preflight.js"></script><% } %>
 <script>
     window.CAMPAIGN_DATA = <%- campaign ? JSON.stringify(campaign).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026') : 'null' %>;
     document.addEventListener('DOMContentLoaded', function () {
         initCampaignEditor();
+        if (window.initCampaignPreflight && window.CAMPAIGN_DATA) {
+            window.initCampaignPreflight(window.CAMPAIGN_DATA.id);
+        }
     });
 </script>

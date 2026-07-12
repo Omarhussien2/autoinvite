@@ -110,4 +110,15 @@ async function generateImage(name, phone, customTemplatePath = null, customCanva
     }
 }
 
-module.exports = { generateImage, ACTIVE_FONT };
+async function validateImageGeneration(name, customTemplatePath = null, customCanvasConfig = null) {
+    const validationPhone = `preflight_${require('crypto').randomUUID()}`;
+    const imagePath = await generateImage(name, validationPhone, customTemplatePath, customCanvasConfig);
+    try {
+        const imageStats = await fs.stat(imagePath);
+        return { possible: true, bytes: imageStats.size };
+    } finally {
+        await fs.remove(imagePath);
+    }
+}
+
+module.exports = { generateImage, validateImageGeneration, ACTIVE_FONT };

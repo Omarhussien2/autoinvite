@@ -1,118 +1,88 @@
-<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-6xl mx-auto">
-
-    <!-- Right: Status & Logs (8 cols) -->
-    <div class="lg:col-span-8 space-y-6">
-
-        <!-- Real-time Logs -->
-        <div class="bg-gray-950 rounded-2xl border border-gray-800 p-6 shadow-2xl">
-            <div class="flex items-center justify-between mb-4 border-b border-gray-900 pb-3">
-                <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                    <span class="w-1.5 h-1.5 rounded-full bg-brand-green animate-pulse"></span>
-                    سجل العمليات المباشر
-                </h3>
-                <div class="flex items-center gap-2">
-                    <span id="log-count"
-                        class="text-[10px] text-gray-500 bg-gray-900 px-2 py-0.5 rounded border border-gray-800">0
-                        سجل</span>
-                    <button id="clear-logs" class="text-[10px] text-gray-500 hover:text-white transition">مسح</button>
-                </div>
-            </div>
-
-            <div id="logs-area" class="h-96 overflow-y-auto pr-1">
-                <p class="text-gray-600 italic text-xs">في انتظار بدء الحملة...</p>
-            </div>
+<div class="max-w-6xl mx-auto space-y-6" dir="rtl">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+        <div class="min-w-0">
+            <h2 class="font-bold text-gray-900 truncate"><%= campaign.name %></h2>
+            <p class="text-xs text-gray-400 mt-1">البيانات المعروضة مؤكدة من الخادم</p>
         </div>
-
-        <!-- Stats summary during run -->
-        <div class="grid grid-cols-3 gap-4">
-            <div class="bg-white rounded-2xl border border-gray-100 p-4 text-center">
-                <p id="total-sent" class="text-2xl font-bold text-gray-900">0</p>
-                <p class="text-[10px] text-gray-400">تم الإرسال</p>
-            </div>
-            <div class="bg-white rounded-2xl border border-gray-100 p-4 text-center">
-                <p id="success-count" class="text-2xl font-bold text-brand-green">0</p>
-                <p class="text-[10px] text-gray-400">نجاح</p>
-            </div>
-            <div class="bg-white rounded-2xl border border-gray-100 p-4 text-center">
-                <p id="fail-count" class="text-2xl font-bold text-red-500">0</p>
-                <p class="text-[10px] text-gray-400">فشل</p>
-            </div>
+        <div id="wa-status-badge" class="inline-flex self-start sm:self-auto items-center gap-2 px-3 py-2 rounded-xl border bg-gray-50 border-gray-200 text-gray-600 text-xs">
+            <span id="wa-status-dot" class="w-2 h-2 rounded-full bg-gray-300"></span>
+            <span id="wa-status-text">جاري التحقق</span>
         </div>
     </div>
 
-    <!-- Left: Controls & Context (4 cols) -->
-    <div class="lg:col-span-4 space-y-6">
-        <div class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm sticky top-24">
-            <div class="text-center mb-6">
-                <div class="w-16 h-16 bg-brand-light rounded-2xl flex items-center justify-center mx-auto mb-3">
-                    <svg class="w-8 h-8 text-brand-dark" fill="none" stroke="currentColor" stroke-width="2"
-                        viewBox="0 0 24 24">
-                        <path d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
+    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3" aria-live="polite">
+        <% const cards = [
+            ['sent', 'تم الإرسال', 'text-brand-green'],
+            ['failed', 'فشل مؤكد', 'text-red-600'],
+            ['skipped', 'تم التجاوز', 'text-amber-600'],
+            ['pending', 'متبقي', 'text-blue-600'],
+            ['needs-review', 'يحتاج مراجعة', 'text-purple-600'],
+            ['current-row', 'الصف الحالي', 'text-gray-900']
+        ]; %>
+        <% cards.forEach(function(card) { %>
+            <div class="min-w-0 bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+                <p id="stat-<%= card[0] %>" class="text-2xl font-bold <%= card[2] %> tabular-nums">0</p>
+                <p class="text-[11px] text-gray-500 mt-1 leading-5"><%= card[1] %></p>
+            </div>
+        <% }); %>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <section class="lg:col-span-8 space-y-6 min-w-0">
+            <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-xs text-gray-500">آخر إرسال ناجح</p>
+                        <p id="last-success" class="text-sm font-medium text-gray-900 mt-1 break-words">لا يوجد بعد</p>
+                    </div>
+                    <p class="text-xs text-gray-500">حالة الحملة: <span id="run-status" class="font-semibold text-gray-800">جاري التحقق</span></p>
                 </div>
-                <h3 class="font-bold text-gray-900">
-                    <%= campaign.name %>
-                </h3>
-                <p class="text-xs text-gray-400 mt-1">الحالة: <span id="run-status"
-                        class="bg-gray-100 px-2 py-0.5 rounded text-xs">متوقفة</span></p>
             </div>
 
-            <% if (contactsCount > 0) { %>
-            <div class="bg-brand-light rounded-xl px-4 py-2.5 flex items-center justify-between text-xs mb-1">
-                <span class="text-brand-dark font-medium">إجمالي جهات الاتصال</span>
-                <span class="font-bold text-brand-green text-sm"><%= contactsCount %> جهة</span>
+            <div class="bg-gray-950 rounded-2xl border border-gray-800 p-5 shadow-xl min-w-0">
+                <div class="flex items-center justify-between gap-3 mb-4 border-b border-gray-800 pb-3">
+                    <h3 class="text-xs font-semibold text-gray-300">سجل التحديثات المباشرة</h3>
+                    <button id="clear-logs" class="text-xs text-gray-500 hover:text-white transition">مسح</button>
+                </div>
+                <div id="logs-area" class="h-72 overflow-y-auto overflow-x-hidden text-xs leading-6 break-words" aria-live="polite">
+                    <p class="text-gray-600">في انتظار تحديثات الحملة</p>
+                </div>
             </div>
-            <% } %>
-            <% if (contactsCount === 0) { %>
-            <div class="bg-red-50 rounded-xl px-4 py-2.5 text-xs text-red-600 text-center mb-1">
-                لم يتم رفع ملف الأرقام بعد
-            </div>
-            <% } %>
 
-            <div class="space-y-4">
+            <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                <h3 class="text-sm font-semibold text-gray-800 mb-4">تنزيل قوائم المتابعة</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <button type="button" data-export-status="pending" class="export-recipients border border-blue-100 bg-blue-50 text-blue-700 rounded-xl px-4 py-2.5 text-xs font-medium">تنزيل المتبقين CSV</button>
+                    <button type="button" data-export-status="failed" class="export-recipients border border-red-100 bg-red-50 text-red-700 rounded-xl px-4 py-2.5 text-xs font-medium">تنزيل الفاشلين CSV</button>
+                    <button type="button" data-export-status="needs_review" class="export-recipients border border-purple-100 bg-purple-50 text-purple-700 rounded-xl px-4 py-2.5 text-xs font-medium">تنزيل المراجعة CSV</button>
+                </div>
+            </div>
+        </section>
+
+        <aside class="lg:col-span-4 min-w-0">
+            <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm lg:sticky lg:top-24 space-y-5">
                 <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="text-[10px] text-gray-500">من صف #</label>
-                        <input type="number" id="startRow" value="<%= campaign.last_sent_row || 1 %>"
-                            class="w-full text-sm border border-gray-200 rounded-lg p-2 focus:border-brand-green outline-none">
-                    </div>
-                    <div>
-                        <label class="text-[10px] text-gray-500">إلى صف # <% if(contactsCount>0){%>(max <%= contactsCount %>)<%}%></label>
-                        <input type="number" id="endRow" value="<%= contactsCount || 100 %>"
-                            class="w-full text-sm border border-gray-200 rounded-lg p-2 focus:border-brand-green outline-none">
-                    </div>
+                    <label class="min-w-0 text-[11px] text-gray-500">من صف
+                        <input type="number" id="startRow" value="<%= campaign.last_sent_row || 1 %>" min="1" class="mt-1 w-full text-sm border border-gray-200 rounded-lg p-2 focus:border-brand-green outline-none">
+                    </label>
+                    <label class="min-w-0 text-[11px] text-gray-500">إلى صف
+                        <input type="number" id="endRow" value="<%= contactsCount || 100 %>" min="1" class="mt-1 w-full text-sm border border-gray-200 rounded-lg p-2 focus:border-brand-green outline-none">
+                    </label>
                 </div>
 
-                <button id="start-btn"
-                    class="w-full bg-brand-dark text-white py-3 rounded-xl font-bold shadow-lg hover:opacity-95 transition flex items-center justify-center gap-2">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
-                    </svg>
-                    أطلق الحملة الآن
-                </button>
+                <button id="start-btn" class="w-full bg-brand-dark text-white py-3 rounded-xl font-bold hover:opacity-95 transition">بدء الحملة</button>
+                <button id="stop-btn" class="hidden w-full bg-red-50 text-red-700 border border-red-100 py-3 rounded-xl font-bold hover:bg-red-100 transition">طلب الإيقاف</button>
 
-                <button id="stop-btn"
-                    class="hidden w-full bg-red-50 text-red-600 border border-red-100 py-3 rounded-xl font-bold hover:bg-red-100 transition flex items-center justify-center gap-2">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                    </svg>
-                    إيقاف مؤقت
-                </button>
-            </div>
-
-            <!-- Quick Test -->
-            <div class="mt-8 pt-6 border-t border-gray-100">
-                <p class="text-xs font-semibold text-gray-800 mb-3 text-center">تجربة سريعة</p>
-                <div class="flex gap-2">
-                    <input type="text" id="testPhone" placeholder="الرقم (مثلاً 2011xxxxx)"
-                        class="flex-1 text-xs border border-gray-200 rounded-lg p-2 outline-none">
-                    <button id="test-btn"
-                        class="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg text-xs hover:bg-gray-200 transition">تجربة</button>
+                <div class="pt-5 border-t border-gray-100">
+                    <p class="text-xs font-semibold text-gray-800 mb-3">رسالة اختبار</p>
+                    <div class="flex gap-2 min-w-0">
+                        <input type="text" id="testPhone" placeholder="رقم الهاتف" class="min-w-0 flex-1 text-xs border border-gray-200 rounded-lg p-2 outline-none">
+                        <button id="test-btn" class="shrink-0 bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-xs">اختبار</button>
+                    </div>
                 </div>
             </div>
-        </div>
+        </aside>
     </div>
-
 </div>
 
 <script src="/js/campaign-runner.js"></script>

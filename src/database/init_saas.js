@@ -1,4 +1,6 @@
 const db = require('./pg-client');
+const { ensureCampaignContinuitySchema } = require('./ensure_campaign_continuity_schema');
+const { ensureCampaignPreflightSchema } = require('./ensure_campaign_preflight_schema');
 
 async function initializeSaaS() {
     console.log('🚀 Initializing SaaS Schema (PostgreSQL)...');
@@ -92,6 +94,9 @@ async function initializeSaaS() {
       CREATE INDEX IF NOT EXISTS idx_messages_tenant_phone
       ON messages (tenant_id, remote_phone, created_at DESC)
     `);
+
+        await ensureCampaignContinuitySchema(db);
+        await ensureCampaignPreflightSchema(db);
 
         console.log('✅ SaaS PostgreSQL Schema is ready.');
     } catch (err) {

@@ -5,6 +5,7 @@ const {
     HARD_DAILY_LIMIT,
     normalizeSmartScheduleOptions,
     buildSmartBatches,
+    assignPlanToRecipientRows,
     estimateWindowCapacity,
 } = require('../src/utils/smartScheduler');
 
@@ -93,4 +94,19 @@ test('starts smart scheduling on the next day when the send window already ended
     }, new Date('2026-05-08T19:30:00.000Z'));
 
     assert.equal(batches[0].scheduledAt.toISOString(), '2026-05-09T07:00:00.000Z');
+});
+
+test('approved batches span the actual remaining recipient rows without dropping gaps', () => {
+    const batches = assignPlanToRecipientRows([
+        { batchNumber: 1, messageCount: 2 },
+        { batchNumber: 2, messageCount: 2 },
+    ], [
+        { phone: '111', sourceRow: 2 },
+        { phone: '222', sourceRow: 4 },
+        { phone: '333', sourceRow: 5 },
+        { phone: '444', sourceRow: 8 },
+    ]);
+
+    assert.deepEqual(batches.map(batch => [batch.startRow, batch.endRow]), [[2, 4], [5, 8]]);
+    assert.equal(batches.reduce((sum, batch) => sum + batch.messageCount, 0), 4);
 });

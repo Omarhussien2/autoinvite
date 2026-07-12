@@ -107,6 +107,48 @@ async function sendPersonalizedImageOrText({
 
 const { HARD_DAILY_LIMIT } = require('../utils/smartScheduler');
 
+async function executionGate(tenantId, campaignId) {
+    if (!campaignId) return { allowed: true };
+    const gateQuery = await db.query(`
+        SELECT tenant.messaging_enabled, campaign.stop_requested_at
+        FROM campaigns campaign
+        JOIN tenants tenant ON tenant.id = campaign.tenant_id
+        WHERE campaign.id = $1 AND campaign.tenant_id = $2
+    `, [campaignId, tenantId]);
+    const gate = gateQuery.rows[0];
+    return {
+        allowed: !!gate && gate.messaging_enabled === true && !gate.stop_requested_at,
+        reason: gate && gate.stop_requested_at ? 'stop_requested' : 'messaging_disabled',
+    };
+}
+
+async function claimRecipient({ tenantId, campaignId, phone, startRow, endRow, retryFailed }) {
+    const allowedStatuses = retryFailed ? "('pending', 'failed')" : "('pending')";
+    const claimQuery = await db.query(`
+        UPDATE campaign_recipients recipient
+        SET status = 'sending', attempt_count = attempt_count + 1,
+            claimed_at = NOW(), last_error = NULL, updated_at = NOW()
+        FROM campaigns campaign, tenants tenant
+        WHERE recipient.tenant_id = $1 AND recipient.campaign_id = $2 AND recipient.phone = $3
+          AND recipient.source_row BETWEEN $4 AND $5 AND recipient.status IN ${allowedStatuses}
+          AND campaign.id = recipient.campaign_id AND campaign.tenant_id = recipient.tenant_id
+          AND tenant.id = recipient.tenant_id AND tenant.messaging_enabled = TRUE
+          AND campaign.stop_requested_at IS NULL
+        RETURNING recipient.*
+    `, [tenantId, campaignId, phone, startRow, endRow]);
+    return claimQuery.rows[0] || null;
+}
+
+async function setRecipientStatus(tenantId, campaignId, phone, status, lastError = null) {
+    await db.query(`
+        UPDATE campaign_recipients
+        SET status = $4, last_error = $5,
+            sent_at = CASE WHEN $4 = 'sent' THEN NOW() ELSE sent_at END,
+            updated_at = NOW()
+        WHERE tenant_id = $1 AND campaign_id = $2 AND phone = $3 AND status = 'sending'
+    `, [tenantId, campaignId, phone, status, lastError]);
+}
+
 async function processBatch(contacts, startRow, endRow, messages, campaignId = null, hasTemplate = false, onLog = console.log, templatePath = null, canvasConfig = null, tenantId, voicenotePath = null, runOptions = {}) {
     const subset = contacts.slice(startRow - 1, endRow);
     const normalizedMessages = normalizeMessageTemplates(messages);
@@ -180,6 +222,14 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             break;
         }
 
+        const gate = await executionGate(tenantId, campaignId);
+        if (!gate.allowed) {
+            stoppedReason = gate.reason;
+            stoppedRow = startRow + index;
+            onLog(`Campaign paused before row ${stoppedRow}: ${gate.reason}.`, 'WARN');
+            break;
+        }
+
         try {
             const dailyRes = await db.query(
                 `SELECT COUNT(*) FROM sent_logs 
@@ -223,7 +273,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
         const rawName = contact.Name || contact['الإسم'] || contact['name'] || 'ضيف';
         const name = await processName(rawName);
         const rawPhone = contact.Phone || contact['رقم الجوال'] || contact['phone'];
-        const currentRow = startRow + index;
+        let currentRow = startRow + index;
 
         const normalizedPhone = normalizePhone(rawPhone);
 
@@ -233,16 +283,17 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             continue;
         }
 
-        if (campaignId) {
-            const alreadySentRes = await db.query(
-                "SELECT id FROM sent_logs WHERE campaign_id = $1 AND phone = $2 AND (status IS NULL OR status = 'success')",
-                [campaignId, normalizedPhone]
-            );
-            if (alreadySentRes.rows[0]) {
-                onLog(`Skipping ${name}: Already sent in this campaign (Deduplicated)`, 'WARN');
-                continue;
-            }
-        }
+        const claimedRecipient = campaignId ? await claimRecipient({
+            tenantId,
+            campaignId,
+            phone: normalizedPhone,
+            startRow,
+            endRow,
+            retryFailed: runOptions.retryFailed === true,
+        }) : { source_row: currentRow };
+        if (!claimedRecipient) continue;
+        currentRow = claimedRecipient.source_row || currentRow;
+        let sendAttempted = false;
 
         try {
             const message = pickWeightedMessage(normalizedMessages, name, currentRow - 1);
@@ -259,6 +310,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     onLog(`Skipping ${name}: ${saudiMsg}`, 'WARN');
                     WhatsAppProvider.emitToTenant(tenantId, 'log', { message: saudiMsg, type: 'WARN' });
                     if (campaignId) {
+                        await setRecipientStatus(tenantId, campaignId, normalizedPhone, 'skipped', 'not_on_whatsapp');
                         await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(err => log.error('Failed to update failed_count (skip):', err.message));
                         await db.query(
                             'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name, status, failed_at) VALUES ($1, $2, $3, $4, $5, NOW())',
@@ -268,6 +320,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                     continue;
                 }
             } catch (regErr) {
+                if (isWhatsAppSessionError(regErr)) throw regErr;
                 onLog(`تعذر التحقق من الرقم ${normalizedPhone}, سنحاول الإرسال مباشرة...`, 'WARN');
             }
 
@@ -283,6 +336,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             } catch (_) {}
 
             // ── Step 3: Send the message ────────────────────────────────────
+            sendAttempted = true;
             if (voicenotePath && pttBase64) {
                 // Send pre-converted OGG/Opus as base64 PTT
                 await client.sendPttFromBase64(chatId, pttBase64, 'voice.ogg');
@@ -331,7 +385,15 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                         'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name, status) VALUES ($1, $2, $3, $4, $5)',
                         [campaignId, tenantId, normalizedPhone, name, 'success']
                     );
-                    await txClient.query('UPDATE campaigns SET last_sent_row = $1 WHERE id = $2', [currentRow, campaignId]);
+                    await txClient.query(`
+                        UPDATE campaign_recipients
+                        SET status = 'sent', sent_at = NOW(), last_error = NULL, updated_at = NOW()
+                        WHERE tenant_id = $1 AND campaign_id = $2 AND phone = $3 AND status = 'sending'
+                    `, [tenantId, campaignId, normalizedPhone]);
+                    await txClient.query(
+                        'UPDATE campaigns SET last_sent_row = GREATEST(COALESCE(last_sent_row, 0), $1) WHERE id = $2 AND tenant_id = $3',
+                        [currentRow, campaignId, tenantId]
+                    );
                     await txClient.query('COMMIT');
                 } catch (txErr) {
                     await txClient.query('ROLLBACK').catch(err => log.error('Rollback failed:', err.message));
@@ -381,9 +443,16 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                 });
 
                 if (campaignId) {
+                    await setRecipientStatus(
+                        tenantId,
+                        campaignId,
+                        normalizedPhone,
+                        sendAttempted ? 'needs_review' : 'pending',
+                        errMsg
+                    );
                     await db.query(
-                        'UPDATE campaigns SET last_sent_row = $1, status = $2 WHERE id = $3',
-                        [currentRow, 'paused', campaignId]
+                        'UPDATE campaigns SET status = $1, paused_reason = $2 WHERE id = $3 AND tenant_id = $4',
+                        ['paused', 'whatsapp_session_lost', campaignId, tenantId]
                     ).catch(err => log.error('Failed to pause campaign after session error:', err.message));
                 }
 
@@ -396,6 +465,19 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
                 throw new WhatsAppSessionError(errMsg, { currentRow, originalError: error });
             }
 
+            if (campaignId && sendAttempted) {
+                await setRecipientStatus(tenantId, campaignId, normalizedPhone, 'needs_review', errMsg);
+                await db.query(`
+                    UPDATE campaigns
+                    SET status = 'paused', paused_reason = 'needs_review'
+                    WHERE id = $1 AND tenant_id = $2
+                `, [campaignId, tenantId]);
+                onLog(`توقفت الحملة عند ${name}: نتيجة محاولة الإرسال غير مؤكدة وتحتاج مراجعة.`, 'WARN');
+                stoppedReason = 'needs_review';
+                stoppedRow = currentRow;
+                break;
+            }
+
             await logResult(normalizedPhone, name, 'FAIL', errMsg);
             const saudiMsg = getSaudiErrorMessage(name, errMsg);
             onLog(`Failed: ${name} - ${saudiMsg}`, 'ERROR');
@@ -405,6 +487,7 @@ async function processBatch(contacts, startRow, endRow, messages, campaignId = n
             failCount++;
 
             if (campaignId) {
+                await setRecipientStatus(tenantId, campaignId, normalizedPhone, 'failed', errMsg);
                 await db.query('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1', [campaignId]).catch(err => log.error('Failed to update failed_count (error):', err.message));
                 await db.query(
                     'INSERT INTO sent_logs (campaign_id, tenant_id, phone, name, status, failed_at) VALUES ($1, $2, $3, $4, $5, NOW())',

@@ -5,8 +5,11 @@ const { quotaGuard } = require('../middleware/quotaGuard');
 const BackgroundQueue = require('../core/BackgroundQueue');
 const { WhatsAppProviders, loadContacts } = require('../core');
 const db = require('../database/pg-client');
+const ScheduleManager = require('../core/ScheduleManager');
 const { createLogger } = require('../utils/logger');
+const { CampaignPreflightService } = require('../services/CampaignPreflightService');
 const log = createLogger('WhatsAppAPI');
+const campaignPreflight = new CampaignPreflightService();
 
 const router = express.Router();
 
@@ -61,9 +64,21 @@ router.post('/start', quotaGuard, async (req, res) => {
         let voicenotePath = null;
 
         if (campaignId) {
-            const result = await db.query('SELECT message_templates, template_path, canvas_config, contacts_path, voicenote_path FROM campaigns WHERE id = $1 AND tenant_id = $2', [campaignId, tenantId]);
+            const result = await db.query(`
+                SELECT campaign.message_templates, campaign.template_path, campaign.canvas_config,
+                       campaign.contacts_path, campaign.voicenote_path, tenant.messaging_enabled
+                FROM campaigns campaign
+                JOIN tenants tenant ON tenant.id = campaign.tenant_id
+                WHERE campaign.id = $1 AND campaign.tenant_id = $2
+            `, [campaignId, tenantId]);
             const campaign = result.rows[0];
             if (campaign) {
+                if (!campaign.messaging_enabled) {
+                    return res.status(423).json({ success: false, message: 'الإرسال متوقف من إعدادات الأمان' });
+                }
+                if (!await campaignPreflight.verifyApproval(tenantId, campaignId)) {
+                    return res.status(409).json({ success: false, message: 'يجب تشغيل الفحص المسبق واعتماد الخطة قبل بدء الحملة' });
+                }
                 if (campaign.message_templates) messages = campaign.message_templates;
                 if (campaign.template_path) {
                     const fs = require('fs-extra');
@@ -91,6 +106,12 @@ router.post('/start', quotaGuard, async (req, res) => {
             }
         }
 
+        const client = await provider.getClient(tenantId);
+        const readyState = provider.getTenantState(tenantId);
+        if (!client || !['READY', 'CONNECTED'].includes(String(readyState.status).toUpperCase())) {
+            return res.status(409).json({ success: false, message: 'واتساب غير جاهز. افتح صفحة الاتصال وأكمل الربط أولا' });
+        }
+
         if (!messages || !Array.isArray(messages) || messages.length === 0) {
             const config = require('../config/settings');
             messages = config.messages;
@@ -109,14 +130,22 @@ router.post('/start', quotaGuard, async (req, res) => {
             return res.status(400).json({ success: false, message: 'صف البداية أكبر من صف النهاية' });
         }
 
+        await db.query(
+            'UPDATE campaigns SET stop_requested_at = NULL, paused_reason = NULL WHERE id = $1 AND tenant_id = $2',
+            [campaignId, tenantId]
+        );
+
         if (!global.stopBatchRequested) global.stopBatchRequested = {};
         global.stopBatchRequested[tenantId] = false;
 
         provider.setTenantState(tenantId, { status: 'WORKING', lastQr: null, lastActive: Date.now(), phone: null });
         provider.emitToTenant(tenantId, 'working_state', true);
 
-        BackgroundQueue.addJob(tenantId, campaignId, contacts, start, end, messages, hasTemplate, templatePath, canvasConfig, voicenotePath)
-            .catch(console.error);
+        await BackgroundQueue.addJob(
+            tenantId, campaignId, contacts, start, end, messages, hasTemplate,
+            templatePath, canvasConfig, voicenotePath,
+            { retryFailed: req.body.retryFailed === true }
+        );
 
         res.json({ success: true, message: 'Started successfully' });
 
@@ -127,9 +156,20 @@ router.post('/start', quotaGuard, async (req, res) => {
 });
 
 // Stop Campaign Batch
-router.post('/stop', (req, res) => {
-    BackgroundQueue.stopJob(req.tenantId);
-    res.json({ success: true, message: 'Stop Requested' });
+router.post('/stop', async (req, res) => {
+    try {
+        const activeJob = BackgroundQueue.jobs && BackgroundQueue.jobs.get(req.tenantId);
+        const campaignId = req.body.campaignId || (activeJob && activeJob.campaignId);
+        if (!campaignId) {
+            return res.status(400).json({ success: false, message: 'campaignId is required' });
+        }
+        await BackgroundQueue.stopJob(req.tenantId);
+        await ScheduleManager.requestStop(campaignId, req.tenantId);
+        res.json({ success: true, message: 'Stop Requested' });
+    } catch (error) {
+        log.error('Stop campaign error:', error.message);
+        res.status(500).json({ success: false, message: 'Failed to stop campaign' });
+    }
 });
 
 // Quick Test Send — quota guard applies here too
@@ -137,6 +177,17 @@ router.post('/test', quotaGuard, async (req, res) => {
     try {
         const { phone } = req.body;
         const tenantId = req.tenantId;
+
+        const messagingGate = await db.query(
+            'SELECT messaging_enabled FROM tenants WHERE id = $1',
+            [tenantId]
+        );
+        if (!messagingGate.rows[0] || !messagingGate.rows[0].messaging_enabled) {
+            return res.status(423).json({ success: false, message: 'الإرسال متوقف من إعدادات الأمان' });
+        }
+        if (typeof phone !== 'string' || !phone.trim()) {
+            return res.status(400).json({ success: false, message: 'رقم الهاتف مطلوب' });
+        }
 
         let targetPhone = phone.replace(/\D/g, '');
         // Strip leading 00 or + if present (already stripped by \D)

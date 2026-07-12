@@ -71,7 +71,7 @@
                     const ext = fileName.split('.').pop().toLowerCase();
 
                     // Basic feedback
-                    contactsLabel.textContent = '✅ ' + fileName + ' (' + fileSize + ' KB)';
+                    contactsLabel.textContent = fileName + ' (' + fileSize + ' KB)';
                     contactsLabel.classList.remove('text-gray-500', 'border-gray-300');
                     contactsLabel.classList.add('text-brand-green', 'border-brand-green');
 
@@ -84,8 +84,8 @@
                             const hasPhone = /phone|mobile|رقم|جوال|هاتف|telephone|number/.test(firstLine);
 
                             if (!hasName || !hasPhone) {
-                                showToast('⚠️ الملف لا يحتوي على الأعمدة المطلوبة (الاسم، الجوال)!', 'error');
-                                contactsLabel.textContent = '❌ تنسيق غير صالح';
+                                showToast('error', 'الملف لا يحتوي على الأعمدة المطلوبة (الاسم، الجوال)');
+                                contactsLabel.textContent = 'تنسيق غير صالح';
                                 contactsLabel.classList.remove('text-brand-green', 'border-brand-green');
                                 contactsLabel.classList.add('text-red-500', 'border-red-300');
                                 contactsInput.value = '';
@@ -325,9 +325,9 @@
         box.innerHTML = `
             <div class="flex items-center justify-between mb-2">
                 <select class="msg-weight text-[10px] bg-white border border-gray-200 rounded px-2 py-1 outline-none">
-                    <option value="3">🌟 عالي (50%)</option>
-                    <option value="2">⚖️ متوسط (30%)</option>
-                    <option value="1">🔽 منخفض (20%)</option>
+                    <option value="3">عالي (50%)</option>
+                    <option value="2">متوسط (30%)</option>
+                    <option value="1">منخفض (20%)</option>
                 </select>
                 <button type="button" class="remove-msg text-gray-300 hover:text-red-500 transition">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -465,7 +465,7 @@
                     const scheduledLocal = dateVal + 'T' + timeVal;
                     const localDate = new Date(scheduledLocal);
                     if (isNaN(localDate.getTime())) {
-                        showToast('تاريخ أو وقت غير صالح', 'error');
+                        showToast('error', 'تاريخ أو وقت غير صالح');
                         btn.textContent = origText;
                         btn.disabled = false;
                         return;
@@ -473,12 +473,12 @@
                     formData.append('scheduled_at_local', scheduledLocal);
                     formData.append('scheduled_at', localDate.toISOString());
                 } else {
-                    showToast('يرجى اختيار التاريخ والوقت', 'error');
+                    showToast('error', 'يرجى اختيار التاريخ والوقت');
                     btn.textContent = origText;
                     btn.disabled = false;
                     return;
                 }
-            } else if (scheduleMode === 'smart') {
+            } else if (scheduleMode === 'smart' || scheduleMode === 'fixed') {
                 formData.append('smart_schedule_enabled', 'true');
                 formData.append('daily_limit', document.getElementById('dailyLimit').value || '100');
                 formData.append('safety_mode', document.getElementById('safetyMode').value || 'balanced');
@@ -491,7 +491,7 @@
             // Validate: voice mode requires an audio file (create only)
             const campaignData = window.CAMPAIGN_DATA;
             if (isVoiceMode && !voicenoteFile && !campaignData) {
-                showToast('يرجى رفع ملف صوتي للحملة الصوتية', 'error');
+                showToast('error', 'يرجى رفع ملف صوتي للحملة الصوتية');
                 btn.textContent = origText;
                 btn.disabled = false;
                 return;
@@ -513,7 +513,10 @@
                     }));
                 }
                 showToast('success', 'تم حفظ الحملة بنجاح');
-                setTimeout(() => { window.location.href = '/campaigns'; }, 1000);
+                const savedCampaignId = result.campaignId || (campaignData && campaignData.id);
+                setTimeout(() => {
+                    window.location.href = savedCampaignId ? `/campaigns/${savedCampaignId}/edit` : '/campaigns';
+                }, 1000);
             } else {
                 const repairMessage = getContactRepairMessage(result.contactRepair);
                 showToast('error', (result.message || 'فشل الحفظ') + (repairMessage ? ' ' + repairMessage : ''));
@@ -521,7 +524,7 @@
                 btn.disabled = false;
             }
         } catch (err) {
-            showToast('فشل الاتصال بالسيرفر', 'error');
+            showToast('error', 'فشل الاتصال بالسيرفر');
             btn.textContent = origText;
             btn.disabled = false;
         }

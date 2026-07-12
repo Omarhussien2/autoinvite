@@ -38,6 +38,14 @@ router.post('/:phone/reply', isAuthenticated, async (req, res) => {
             return res.status(400).json({ success: false, message: 'الرسالة فارغة' });
         }
 
+        const messagingGate = await db.query(
+            'SELECT messaging_enabled FROM tenants WHERE id = $1',
+            [tenantId]
+        );
+        if (!messagingGate.rows[0] || !messagingGate.rows[0].messaging_enabled) {
+            return res.status(423).json({ success: false, message: 'الإرسال متوقف من إعدادات الأمان' });
+        }
+
         const provider = await WhatsAppProviders.getProviderForTenant(tenantId);
         const client = await provider.getClient(tenantId);
         const chatId = `${phone}@c.us`;

@@ -1,4 +1,6 @@
 const db = require('./pg-client');
+const { ensureCampaignContinuitySchema } = require('./ensure_campaign_continuity_schema');
+const { ensureCampaignPreflightSchema } = require('./ensure_campaign_preflight_schema');
 
 async function migrate() {
     console.log('🔄 Running SaaS migration (adding quota + role columns)...');
@@ -153,6 +155,9 @@ async function migrate() {
         await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS subscription_status TEXT DEFAULT 'trialing'`);
         await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP DEFAULT NULL`);
         await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMP DEFAULT NULL`);
+
+        await ensureCampaignContinuitySchema(db);
+        await ensureCampaignPreflightSchema(db);
 
         console.log('✅ Migration complete: role, quota, messages, failed_at, failed_count, messages table, whatsapp_status/phone, scheduled_at/timezone, indexes, Stripe billing columns');
     } catch (err) {
