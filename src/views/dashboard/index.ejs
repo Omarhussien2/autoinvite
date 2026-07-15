@@ -190,7 +190,7 @@
                 </button>
                 <button onclick="resetWhatsappSession()"
                     class="inline-flex items-center justify-center text-xs text-red-600 border border-red-200 hover:bg-red-50 px-4 py-2 rounded-xl font-medium transition w-full">
-                    توليد QR جديد
+                    حذف الجلسة المحفوظة
                 </button>
             </div>
             <!-- Connected State -->
@@ -363,7 +363,10 @@
             const res = await fetch('/api/whatsapp/init', { method: 'POST' });
             const data = await res.json();
             if (data.success) applyWhatsappState(data);
-            else setWaStatus('disconnected');
+            else {
+                setWaStatus('disconnected');
+                showToast('error', data.message || 'تعذر بدء ربط واتساب');
+            }
         } catch (e) {
             console.error(e);
             setWaStatus('disconnected');
@@ -371,14 +374,17 @@
     }
 
     async function resetWhatsappSession() {
-        if (!confirm('سيتم حذف جلسة واتساب الحالية وتوليد QR جديد. هل تريد المتابعة؟')) return;
+        if (!confirm('سيتم فصل واتساب وحذف الجلسة المحفوظة. لن يُنشأ QR جديد تلقائيًا. هل تريد المتابعة؟')) return;
         setWaStatus('loading');
         try {
             const res = await fetch('/api/whatsapp/logout', { method: 'POST' });
             const data = await res.json();
             if (!data.success) {
                 setWaStatus('disconnected');
-                showToast('error', data.message || 'تعذر توليد QR جديد');
+                showToast('error', data.message || 'تعذر حذف جلسة واتساب');
+            } else {
+                setWaStatus('disconnected');
+                showToast('success', 'تم حذف الجلسة. لن يتم إنشاء QR إلا عند طلب الربط صراحة.');
             }
         } catch (e) {
             console.error(e);
@@ -412,7 +418,7 @@
             const res = await fetch('/api/whatsapp/logout', { method: 'POST' });
             const data = await res.json();
             if (data.success) {
-                showToast('success', 'تم قطع الاتصال، امسح QR الجديد');
+                showToast('success', 'تم قطع الاتصال. لن يُنشأ QR جديد تلقائيًا.');
             } else {
                 showToast('error', data.message || 'حدث خطأ');
             }

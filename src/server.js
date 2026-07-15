@@ -529,13 +529,7 @@ io.on('connection', async (socket) => {
 
     try {
         const provider = await WhatsAppProviders.getProviderForTenant(tenantId);
-        provider.getClient(tenantId).catch((err) => {
-            log.error(`WhatsApp socket init failed for tenant ${tenantId}:`, err.message);
-        });
-
-        const state = typeof provider.refreshClientState === 'function'
-            ? await provider.refreshClientState(tenantId, { emit: false })
-            : provider.getTenantState(tenantId);
+        const state = provider.getTenantState(tenantId);
         if (state.status === 'QUERY_QR' && state.lastQr) {
         // WPPConnect catchQR already provides base64 data URI — emit directly
             socket.emit('qr', state.lastQr);

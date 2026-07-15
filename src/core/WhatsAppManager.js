@@ -48,7 +48,7 @@ class WhatsAppManager {
     async getClient(tenantId) {
         if (this.clients.has(tenantId)) {
             const refreshedState = await this.refreshClientState(tenantId, { emit: true });
-            if (refreshedState.status === 'READY' && this.clients.has(tenantId)) {
+            if (['READY', 'WORKING', 'DEGRADED'].includes(refreshedState.status) && this.clients.has(tenantId)) {
                 return this.clients.get(tenantId);
             }
         }
@@ -102,32 +102,21 @@ class WhatsAppManager {
 
             return state;
         } catch (err) {
+            const previousState = this.getTenantState(tenantId);
             const state = {
-                ...this.getTenantState(tenantId),
-                status: 'DISCONNECTED',
+                ...previousState,
+                status: ['READY', 'WORKING'].includes(previousState.status) ? 'DEGRADED' : previousState.status,
                 lastQr: null,
-                phone: null,
                 lastActive: Date.now(),
+                probeError: err.message,
             };
             this.states.set(tenantId, state);
-            try {
-                if (typeof client.close === 'function') await client.close();
-            } catch (closeErr) {
-                log.warn(`Failed to close stale WhatsApp client for tenant ${tenantId}:`, closeErr.message);
-            }
-            this.clients.delete(tenantId);
 
             if (emit) {
-                this.emitToTenant(tenantId, 'disconnected');
-                this.emitToTenant(tenantId, 'status', 'تعذر تأكيد اتصال واتساب. أعد الربط من جديد.');
+                this.emitToTenant(tenantId, 'status', 'تعذر التحقق من حالة واتساب. لن يعيد النظام الربط تلقائيًا.');
             }
 
-            await db.query(
-                'UPDATE tenants SET whatsapp_status = $1, whatsapp_phone = NULL WHERE id = $2',
-                ['disconnected', tenantId]
-            ).catch(dbErr => log.error('Failed to mark tenant disconnected after refresh:', dbErr.message));
-
-            log.warn(`Failed to refresh WhatsApp client state for tenant ${tenantId}:`, err.message);
+            log.warn(`WhatsApp state probe failed for tenant ${tenantId}; keeping the existing session closed to new sends:`, err.message);
             return state;
         }
     }
@@ -226,15 +215,6 @@ class WhatsAppManager {
         this.states.set(tenantId, { status: 'INITIALIZING', lastQr: null, lastActive: Date.now(), phone: null });
         this.emitToTenant(tenantId, 'status', 'جاري تهيئة جلسة الواتساب...');
 
-        // Clean orphaned locks left by PM2 crashes
-        const sessionPath = path.join(tokenDir, `tenant_${tenantId}`);
-        const lockPaths = [path.join(sessionPath, 'SingletonLock'), path.join(sessionPath, 'SingletonCookie')];
-        for (const lock of lockPaths) {
-            if (fs.existsSync(lock)) {
-                try { fs.unlinkSync(lock); } catch (e) {}
-            }
-        }
-
         try {
             let client;
             try {
@@ -319,7 +299,7 @@ class WhatsAppManager {
             // Listen for disconnect
             client.onStateChange((state) => {
                 log.info(`State changed: ${state}`);
-                if (state === 'CONFLICT' || state === 'UNPAIRED' || state === 'UNLAUNCHED') {
+                if (state === 'CONFLICT' || state === 'UNPAIRED') {
                     this.stopClient(tenantId);
                 }
             });
@@ -353,9 +333,6 @@ class WhatsAppManager {
                         timestamp,
                         direction: 'inbound',
                     });
-
-                    // Mark as read on WhatsApp
-                    await client.sendSeen(from).catch(err => log.error('Failed to mark as seen:', err.message));
 
                     log.info(`Inbox: ${senderName} (${senderPhone}): ${body.substring(0, 50)}`);
                 } catch (err) {
@@ -478,10 +455,7 @@ class WhatsAppManager {
             ['disconnected', tenantId]
         ).catch(err => log.error('Failed to update tenant status (logout):', err.message));
 
-        log.info(`Re-initializing client for tenant ${tenantId} (fresh QR)`);
-        this.getClient(tenantId).catch((err) => {
-            log.error(`Re-init after logout failed for tenant ${tenantId}:`, err.message);
-        });
+        log.info(`WhatsApp session removed for tenant ${tenantId}; explicit initialization is required for a new QR.`);
     }
 
     async stopClient(tenantId) {

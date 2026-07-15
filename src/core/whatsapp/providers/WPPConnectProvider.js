@@ -60,7 +60,10 @@ class WPPConnectProvider {
     }
 
     getActiveTenantIds() {
-        return Array.from(this.manager.clients.keys());
+        return Array.from(new Set([
+            ...this.manager.clients.keys(),
+            ...((this.manager.initializing && this.manager.initializing.keys()) || []),
+        ]));
     }
 
     getMaxClientCount() {

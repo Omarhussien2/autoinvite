@@ -9,6 +9,7 @@ test('WPPConnect provider delegates tenant lifecycle calls to the manager', asyn
     const calls = [];
     const fakeManager = {
         clients: new Map([['tenant-1', { id: 'client-1' }]]),
+        initializing: new Map([['tenant-2', Promise.resolve()]]),
         MAX_TOTAL_CLIENTS: '7',
         states: new Map(),
         setIo: (io) => calls.push(['setIo', io]),
@@ -33,7 +34,7 @@ test('WPPConnect provider delegates tenant lifecycle calls to the manager', asyn
     assert.equal(provider.hasStoredSession('tenant-2'), false);
     assert.equal(provider.getActiveClientCount(), 1);
     assert.equal(provider.getMaxClientCount(), 7);
-    assert.deepEqual(provider.getActiveTenantIds(), ['tenant-1']);
+    assert.deepEqual(provider.getActiveTenantIds(), ['tenant-1', 'tenant-2']);
 
     provider.setTenantState('tenant-2', { status: 'WORKING' });
     assert.equal(fakeManager.states.get('tenant-2').status, 'WORKING');

@@ -43,7 +43,11 @@ router.post('/:phone/reply', isAuthenticated, async (req, res) => {
             [tenantId]
         );
         if (!messagingGate.rows[0] || !messagingGate.rows[0].messaging_enabled) {
-            return res.status(423).json({ success: false, message: 'الإرسال متوقف من إعدادات الأمان' });
+            return res.status(423).json({
+                success: false,
+                code: 'MESSAGING_DISABLED',
+                message: 'الإرسال مغلق لهذا الحساب. تأكد من اتصال واتساب، ثم اطلب من مسؤول النظام تفعيل مفتاح الإرسال.'
+            });
         }
 
         const provider = await WhatsAppProviders.getProviderForTenant(tenantId);

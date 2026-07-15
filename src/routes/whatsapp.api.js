@@ -19,10 +19,23 @@ router.use(tenantScope);
 // WhatsApp Initialization Trigger
 router.post('/init', async (req, res) => {
     try {
+        const messagingGate = await db.query(
+            'SELECT messaging_enabled FROM tenants WHERE id = $1',
+            [req.tenantId]
+        );
+        if (!messagingGate.rows[0]?.messaging_enabled) {
+            return res.status(423).json({
+                success: false,
+                code: 'MESSAGING_DISABLED',
+                message: 'لن يتم ربط واتساب ما دام مفتاح الأمان مغلقًا. لا تعد مسح QR قبل مراجعة مسؤول النظام.'
+            });
+        }
+
         const provider = await WhatsAppProviders.getProviderForTenant(req.tenantId);
         let state = provider.getTenantState(req.tenantId);
 
-        if (typeof provider.refreshClientState === 'function') {
+        if (typeof provider.hasClient === 'function' && provider.hasClient(req.tenantId)
+            && typeof provider.refreshClientState === 'function') {
             state = await provider.refreshClientState(req.tenantId, { emit: true });
         }
 
@@ -74,7 +87,11 @@ router.post('/start', quotaGuard, async (req, res) => {
             const campaign = result.rows[0];
             if (campaign) {
                 if (!campaign.messaging_enabled) {
-                    return res.status(423).json({ success: false, message: 'الإرسال متوقف من إعدادات الأمان' });
+                    return res.status(423).json({
+                        success: false,
+                        code: 'MESSAGING_DISABLED',
+                        message: 'الإرسال مغلق لهذا الحساب. تغيير حجم الدفعة لا يفعّله. تأكد من اتصال واتساب واعتماد خطة الحملة، ثم اطلب من مسؤول النظام تفعيل مفتاح الإرسال.'
+                    });
                 }
                 if (!await campaignPreflight.verifyApproval(tenantId, campaignId)) {
                     return res.status(409).json({ success: false, message: 'يجب تشغيل الفحص المسبق واعتماد الخطة قبل بدء الحملة' });
@@ -183,7 +200,11 @@ router.post('/test', quotaGuard, async (req, res) => {
             [tenantId]
         );
         if (!messagingGate.rows[0] || !messagingGate.rows[0].messaging_enabled) {
-            return res.status(423).json({ success: false, message: 'الإرسال متوقف من إعدادات الأمان' });
+            return res.status(423).json({
+                success: false,
+                code: 'MESSAGING_DISABLED',
+                message: 'الإرسال مغلق لهذا الحساب. تغيير حجم الدفعة لا يفعّله. تأكد من اتصال واتساب، ثم اطلب من مسؤول النظام تفعيل مفتاح الإرسال.'
+            });
         }
         if (typeof phone !== 'string' || !phone.trim()) {
             return res.status(400).json({ success: false, message: 'رقم الهاتف مطلوب' });
@@ -218,7 +239,8 @@ router.post('/test', quotaGuard, async (req, res) => {
 router.get('/status', async (req, res) => {
     try {
         const provider = await WhatsAppProviders.getProviderForTenant(req.tenantId);
-        const state = typeof provider.refreshClientState === 'function'
+        const state = typeof provider.hasClient === 'function' && provider.hasClient(req.tenantId)
+            && typeof provider.refreshClientState === 'function'
             ? await provider.refreshClientState(req.tenantId, { emit: true })
             : provider.getTenantState(req.tenantId);
 
@@ -251,7 +273,7 @@ router.post('/logout', async (req, res) => {
     try {
         const provider = await WhatsAppProviders.getProviderForTenant(req.tenantId);
         await provider.logoutClient(req.tenantId);
-        res.json({ success: true, message: 'تم قطع الاتصال وجاري توليد باركود جديد' });
+        res.json({ success: true, message: 'تم قطع الاتصال وحذف الجلسة. لن يتم إنشاء QR جديد تلقائيًا.' });
     } catch (err) {
         log.error('Logout error:', err.message);
         res.status(500).json({ success: false, message: 'خطأ داخلي في السيرفر' });
